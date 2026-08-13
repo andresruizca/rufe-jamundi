@@ -1,0 +1,196 @@
+/* ============================================================================
+   Tema institucional — Alcaldía de Jamundí
+   Tokens de color, tipografía y radios tomados directamente de la hoja de
+   estilos en producción de INNOLAB (Oficina TIC):
+   https://oticjamundi.com/innolab/assets/css/variables.css
+   El bloque de modo oscuro es una extensión propia (INNOLAB no define uno),
+   manteniendo la misma familia de tonos (azul Jamundí / teal / coral / oro).
+   ============================================================================ */
+
+:root {
+	color-scheme: light;
+
+	/* Colores institucionales Jamundí (INNOLAB, verbatim) */
+	--color-primary: #1577d6; /* Azul Jamundí vivo (campaña) */
+	--color-primary-dark: #0e5aae;
+	--color-primary-light: #3691e8;
+	--color-primary-deep: #0a3d7a; /* Azul profundo (degradados/header) */
+	--color-secondary: #22b6c6; /* Teal / cian */
+	--color-secondary-light: #4ecbd8;
+	--color-secondary-dark: #1b95a3;
+	--color-accent: #f07a3f; /* Coral */
+	--color-accent-dark: #d5602a;
+	--color-highlight: #ffc42e; /* Amarillo dorado Jamundí */
+	--color-highlight-dark: #e0a400;
+
+	/* Degradado de marca (campaña 2026: azul vivo → azul profundo) */
+	--gradient-brand: linear-gradient(135deg, #2e9bef 0%, #1577d6 55%, #0e5aae 100%);
+
+	/* Superficies y fondos */
+	--color-bg: #f1f5fc;
+	--color-surface: #ffffff;
+	--color-surface-alt: #eef3fb;
+
+	/* Texto */
+	--color-text: #16243f;
+	--color-muted: #647189;
+	--color-border: #e1e8f2;
+	--color-border-strong: #c9d5ea;
+
+	/* Estados */
+	--color-success: #1e8c5e;
+	--color-success-bg: #e2f4ec;
+	--color-warning: #c77700;
+	--color-warning-bg: #fcefd9;
+	--color-danger: #d23b2c;
+	--color-danger-bg: #fbe7e4;
+	--color-info: #1577d6;
+	--color-info-bg: #e5f0fc;
+
+	/* Series de datos (independientes del acento de marca, ver dataviz) */
+	--series-mujeres: #1577d6;
+	--series-hombres: #f07a3f;
+	--seq-ninos: #a9cdf5;
+	--seq-jovenes: #5aa3ea;
+	--seq-adultos: #1577d6;
+	--seq-mayores: #0a3d7a;
+
+	/* Tipografía */
+	--font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--fs-xs: 0.75rem;
+	--fs-sm: 0.875rem;
+	--fs-base: 1rem;
+	--fs-lg: 1.125rem;
+	--fs-xl: 1.375rem;
+	--fs-2xl: 1.75rem;
+	--fs-3xl: 2.25rem;
+
+	/* Radios y sombras */
+	--radius-sm: 8px;
+	--radius: 12px;
+	--radius-lg: 18px;
+	--radius-xl: 24px;
+	--radius-full: 999px;
+	--shadow-sm: 0 1px 2px rgba(14, 76, 154, 0.06);
+	--shadow: 0 2px 6px rgba(14, 76, 154, 0.06), 0 8px 24px rgba(14, 76, 154, 0.08);
+	--shadow-lg: 0 6px 16px rgba(14, 76, 154, 0.1), 0 20px 44px rgba(14, 76, 154, 0.16);
+	--ring: 0 0 0 3px rgba(21, 119, 214, 0.22);
+
+	/* Espaciado */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-8: 3rem;
+
+	--transition: 0.2s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		color-scheme: dark;
+
+		--color-primary: #3691e8;
+		--color-primary-dark: #1577d6;
+		--color-primary-light: #63aeee;
+		--color-primary-deep: #0a3d7a;
+		--color-secondary: #4ecbd8;
+		--color-secondary-light: #7ddce6;
+		--color-secondary-dark: #22b6c6;
+		--color-accent: #f4915e;
+		--color-accent-dark: #f07a3f;
+		--color-highlight: #ffc42e;
+		--color-highlight-dark: #e0a400;
+
+		--gradient-brand: linear-gradient(135deg, #2e6fb0 0%, #17518f 55%, #0a3d7a 100%);
+
+		--color-bg: #0b1526;
+		--color-surface: #101e33;
+		--color-surface-alt: #16273f;
+
+		--color-text: #eef3fb;
+		--color-muted: #93a1bc;
+		--color-border: rgba(255, 255, 255, 0.12);
+		--color-border-strong: rgba(255, 255, 255, 0.2);
+
+		--color-success: #34c48a;
+		--color-success-bg: rgba(52, 196, 138, 0.14);
+		--color-warning: #e3a93b;
+		--color-warning-bg: rgba(227, 169, 59, 0.14);
+		--color-danger: #e8695a;
+		--color-danger-bg: rgba(232, 105, 90, 0.14);
+		--color-info: #3691e8;
+		--color-info-bg: rgba(54, 145, 232, 0.14);
+
+		--series-mujeres: #3987e5;
+		--series-hombres: #f4915e;
+		--seq-ninos: #2c4870;
+		--seq-jovenes: #3987e5;
+		--seq-adultos: #63aeee;
+		--seq-mayores: #a9cdf5;
+
+		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+		--shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+		--shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.35), 0 20px 44px rgba(0, 0, 0, 0.45);
+	}
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--color-primary: #3691e8;
+	--color-primary-dark: #1577d6;
+	--color-primary-light: #63aeee;
+	--color-primary-deep: #0a3d7a;
+	--color-secondary: #4ecbd8;
+	--color-secondary-light: #7ddce6;
+	--color-secondary-dark: #22b6c6;
+	--color-accent: #f4915e;
+	--color-accent-dark: #f07a3f;
+	--color-highlight: #ffc42e;
+	--color-highlight-dark: #e0a400;
+
+	--gradient-brand: linear-gradient(135deg, #2e6fb0 0%, #17518f 55%, #0a3d7a 100%);
+
+	--color-bg: #0b1526;
+	--color-surface: #101e33;
+	--color-surface-alt: #16273f;
+
+	--color-text: #eef3fb;
+	--color-muted: #93a1bc;
+	--color-border: rgba(255, 255, 255, 0.12);
+	--color-border-strong: rgba(255, 255, 255, 0.2);
+
+	--color-success: #34c48a;
+	--color-success-bg: rgba(52, 196, 138, 0.14);
+	--color-warning: #e3a93b;
+	--color-warning-bg: rgba(227, 169, 59, 0.14);
+	--color-danger: #e8695a;
+	--color-danger-bg: rgba(232, 105, 90, 0.14);
+	--color-info: #3691e8;
+	--color-info-bg: rgba(54, 145, 232, 0.14);
+
+	--series-mujeres: #3987e5;
+	--series-hombres: #f4915e;
+	--seq-ninos: #2c4870;
+	--seq-jovenes: #3987e5;
+	--seq-adultos: #63aeee;
+	--seq-mayores: #a9cdf5;
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+	--shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+	--shadow-lg: 0 6px 16px rgba(0, 0, 0, 0.35), 0 20px 44px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

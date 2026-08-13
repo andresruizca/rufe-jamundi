@@ -1,0 +1,28 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# CSV crudo del RUFE: contiene nombres, cédulas y teléfonos de personas
+# afectadas. Nunca debe ir a un repositorio público — se conserva solo en
+# copias locales/privadas del equipo. Ver data/raw/README.md.
+data/raw/*.csv
