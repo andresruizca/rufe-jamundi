@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { Barrio, Dataset, Zona } from './types';
+import type { Barrio, Dataset, Hogar, Zona } from './types';
 
 /**
  * Parser único del CSV del RUFE — corre igual en el navegador (fetch en
@@ -30,9 +30,40 @@ const COL = {
 	apellido: 6,
 	documento: 8,
 	genero: 10,
-	edad: 14
+	edad: 14,
+	tenencia: 17,
+	estadoBien: 18,
+	tipoBien: 19,
+	visita: 21,
+	quienVisita: 22,
+	observacion: 23
 } as const;
 const MIN_COLS = 25;
+
+/** Estado/tipo de bien son de la vivienda, no de la persona: solo el primer
+ * integrante del hogar suele traerlos diligenciados (a veces un par más, a
+ * veces ninguno), así que se toma el primer valor no vacío visto para ese
+ * hogar — igual que corregimiento/barrio. */
+const CANON_ESTADO_BIEN: Record<string, string> = {
+	AVERIADA: 'Averiado',
+	AVERIDO: 'Averiado',
+	AVERIADO: 'Averiado',
+	HABITABLE: 'Habitable',
+	'NO HABITABLE': 'No habitable',
+	'NO HABITABE': 'No habitable',
+	DESTRUIDO: 'Destruido',
+	'NO INFORMA': 'No informa',
+	'SIN DATOS': 'No informa'
+};
+
+const CANON_TIPO_BIEN: Record<string, string> = {
+	VIVIENDA: 'Vivienda',
+	VIVENDA: 'Vivienda',
+	'LOCAL COMERCIAL': 'Local comercial',
+	FINCA: 'Finca',
+	'CENTRO DE BIENESTAR': 'Centro de bienestar',
+	'CENTRO EDUCATIVO / ESCUELA': 'Centro educativo'
+};
 
 /** Corregimientos rurales conocidos de Jamundí (Valle del Cauca). Cualquier
  * corregimiento fuera de esta lista (incluido vacío, o "JAMUNDI"/"TERRANOVA",
@@ -130,6 +161,12 @@ interface PersonRecord {
 	barrio: string;
 	genero: 'M' | 'F' | null;
 	edad: number | null;
+	tenencia: string;
+	estadoBien: string;
+	tipoBien: string;
+	visita: 'SI' | 'NO' | '';
+	quienVisita: string;
+	observacion: string;
 }
 
 function parseRows(rows: string[][]): PersonRecord[] {
@@ -149,6 +186,12 @@ function parseRows(rows: string[][]): PersonRecord[] {
 		const documento = clean(r[COL.documento]);
 		const generoRaw = clean(r[COL.genero]).toUpperCase();
 		const edadRaw = clean(r[COL.edad]);
+		const tenencia = clean(r[COL.tenencia]);
+		const estadoBien = clean(r[COL.estadoBien]);
+		const tipoBien = clean(r[COL.tipoBien]);
+		const visitaRaw = clean(r[COL.visita]).toUpperCase();
+		const quienVisita = clean(r[COL.quienVisita]);
+		const observacion = clean(r[COL.observacion]);
 
 		if (hogar) {
 			if (corregimiento) coreByHogar.set(hogar, corregimiento);
@@ -166,7 +209,21 @@ function parseRows(rows: string[][]): PersonRecord[] {
 		const parsed = Number.parseInt(edadRaw, 10);
 		if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 115) edad = parsed;
 
-		records.push({ hogar, corregimiento, barrio, genero, edad });
+		const visita: 'SI' | 'NO' | '' = visitaRaw === 'SI' ? 'SI' : visitaRaw === 'NO' ? 'NO' : '';
+
+		records.push({
+			hogar,
+			corregimiento,
+			barrio,
+			genero,
+			edad,
+			tenencia,
+			estadoBien,
+			tipoBien,
+			visita,
+			quienVisita,
+			observacion
+		});
 	}
 
 	return records;
@@ -187,6 +244,7 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 		}
 	>();
 	const warnings: string[] = [];
+	const hogaresMap = new Map<string, Hogar>();
 
 	for (const rec of records) {
 		let coreU =
@@ -235,13 +293,53 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 		else if (bucket === 'Jovenes') b.Jovenes += 1;
 		else if (bucket === 'Adultos') b.Adultos += 1;
 		else if (bucket === 'AdultosMayores') b.AdultosMayores += 1;
+
+		if (rec.hogar) {
+			let h = hogaresMap.get(rec.hogar);
+			if (!h) {
+				h = {
+					hogar: rec.hogar,
+					barrio: label,
+					zona,
+					estadoBien: '',
+					tipoBien: '',
+					tenencia: '',
+					visita: 'Sin dato',
+					quienVisita: '',
+					observacion: ''
+				};
+				hogaresMap.set(rec.hogar, h);
+			}
+			// Estado/tipo de bien, tenencia, visita y observación quedan
+			// diligenciados de forma pareja entre los integrantes de un mismo
+			// hogar en la práctica (a veces solo el primero, a veces varios,
+			// a veces ninguno) — se toma el primer valor no vacío visto.
+			if (!h.estadoBien && rec.estadoBien) {
+				h.estadoBien = CANON_ESTADO_BIEN[rec.estadoBien.toUpperCase()] ?? titleCase(rec.estadoBien);
+			}
+			if (!h.tipoBien && rec.tipoBien) {
+				h.tipoBien = CANON_TIPO_BIEN[rec.tipoBien.toUpperCase()] ?? titleCase(rec.tipoBien);
+			}
+			if (!h.tenencia && rec.tenencia) h.tenencia = titleCase(rec.tenencia);
+			if (h.visita === 'Sin dato' && rec.visita) h.visita = rec.visita;
+			if (!h.quienVisita && rec.quienVisita) h.quienVisita = rec.quienVisita;
+			if (!h.observacion && rec.observacion) h.observacion = rec.observacion;
+		}
 	}
 
 	const barrios: Barrio[] = [...barrioAgg.entries()]
 		.map(([name, b]) => ({ ...b, name, zona: b.zona as Zona }))
 		.sort((a, b) => b.total - a.total);
 
-	return { total: records.length, asOf, barrios, ...(warnings.length ? { warnings } : {}) };
+	const hogares = [...hogaresMap.values()];
+
+	return {
+		total: records.length,
+		asOf,
+		barrios,
+		hogares,
+		...(warnings.length ? { warnings } : {})
+	};
 }
 
 /**

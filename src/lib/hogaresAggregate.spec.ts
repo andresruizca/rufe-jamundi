@@ -1,0 +1,125 @@
+import { describe, it, expect } from 'vitest';
+import {
+	aggregateHogares,
+	filterHogares,
+	tagObservaciones,
+	listObservaciones
+} from './hogaresAggregate';
+import type { Hogar } from './data';
+
+function hogar(overrides: Partial<Hogar>): Hogar {
+	return {
+		hogar: '1',
+		barrio: 'Terranova',
+		zona: 'Urbana',
+		estadoBien: '',
+		tipoBien: '',
+		tenencia: '',
+		visita: 'Sin dato',
+		quienVisita: '',
+		observacion: '',
+		...overrides
+	};
+}
+
+describe('aggregateHogares()', () => {
+	it('counts hogares and tallies estado/tipo de bien, defaulting blanks to "Sin dato"', () => {
+		const agg = aggregateHogares([
+			hogar({ estadoBien: 'Averiado', tipoBien: 'Vivienda' }),
+			hogar({ estadoBien: 'Averiado', tipoBien: 'Vivienda' }),
+			hogar({ estadoBien: '', tipoBien: '' })
+		]);
+		expect(agg.count).toBe(3);
+		expect(agg.estadoBien).toEqual({ Averiado: 2, 'Sin dato': 1 });
+		expect(agg.tipoBien).toEqual({ Vivienda: 2, 'Sin dato': 1 });
+	});
+
+	it('tallies visita SI/NO/Sin dato', () => {
+		const agg = aggregateHogares([
+			hogar({ visita: 'SI' }),
+			hogar({ visita: 'SI' }),
+			hogar({ visita: 'NO' }),
+			hogar({ visita: 'Sin dato' })
+		]);
+		expect(agg.visitaSi).toBe(2);
+		expect(agg.visitaNo).toBe(1);
+		expect(agg.visitaSinDato).toBe(1);
+	});
+
+	it('counts hogares with a non-empty observación', () => {
+		const agg = aggregateHogares([
+			hogar({ observacion: 'Grietas en la pared' }),
+			hogar({ observacion: '' })
+		]);
+		expect(agg.conObservacion).toBe(1);
+	});
+
+	it('ranks visitantes by how many hogares each one visited, dropping blanks', () => {
+		const agg = aggregateHogares([
+			hogar({ quienVisita: 'Cruz Roja' }),
+			hogar({ quienVisita: 'Cruz Roja' }),
+			hogar({ quienVisita: 'Defensa Civil' }),
+			hogar({ quienVisita: '' })
+		]);
+		expect(agg.visitantes).toEqual([
+			{ nombre: 'Cruz Roja', count: 2 },
+			{ nombre: 'Defensa Civil', count: 1 }
+		]);
+	});
+
+	it('drops "quién realizó la visita" values that are really a mistyped observación, not a name', () => {
+		// Regression: algunos registros del RUFE traen una frase larga (la
+		// observación, pegada en la columna equivocada) en vez de un nombre
+		// de persona o entidad como "Cruz Roja" o "Pilar Patiño".
+		const agg = aggregateHogares([
+			hogar({ quienVisita: 'Cruz Roja' }),
+			hogar({
+				quienVisita: 'Grietas en las paredes edificacion en malas condiciones que requiere revision'
+			})
+		]);
+		expect(agg.visitantes).toEqual([{ nombre: 'Cruz Roja', count: 1 }]);
+	});
+});
+
+describe('filterHogares()', () => {
+	const sample: Hogar[] = [
+		hogar({ hogar: '1', barrio: 'Terranova', zona: 'Urbana' }),
+		hogar({ hogar: '2', barrio: 'Quinamayo', zona: 'Rural' })
+	];
+
+	it('filters by zona and by barrio name (case-insensitive)', () => {
+		expect(filterHogares(sample, 'Urbana', '')).toHaveLength(1);
+		expect(filterHogares(sample, 'todas', 'quina')).toEqual([sample[1]]);
+		expect(filterHogares(sample, 'Rural', 'terra')).toHaveLength(0);
+	});
+});
+
+describe('tagObservaciones()', () => {
+	it('tags known damage keywords and skips tags with zero matches', () => {
+		const tags = tagObservaciones([
+			hogar({ observacion: 'SE EVIDENCIAN GRIETAS EN LA PARED' }),
+			hogar({ observacion: 'VIVIENDA COLAPSADA, REQUIERE EVACUACION' }),
+			hogar({ observacion: '' })
+		]);
+		const byLabel = Object.fromEntries(tags.map((t) => [t.label, t.count]));
+		expect(byLabel['Grietas']).toBe(1);
+		expect(byLabel['Colapso']).toBe(1);
+		expect(byLabel['Evacuación']).toBe(1);
+		expect(byLabel['Fuga agua/gas']).toBeUndefined();
+	});
+
+	it('returns an empty list when no observación matches any keyword', () => {
+		expect(tagObservaciones([hogar({ observacion: 'sin novedad' })])).toEqual([]);
+	});
+});
+
+describe('listObservaciones()', () => {
+	it('lists only hogares with a non-empty observación, sorted by barrio', () => {
+		const list = listObservaciones([
+			hogar({ hogar: '2', barrio: 'Quinamayo', observacion: 'B' }),
+			hogar({ hogar: '1', barrio: 'Bonanza', observacion: 'A' }),
+			hogar({ hogar: '3', barrio: 'Robles', observacion: '' })
+		]);
+		expect(list.map((o) => o.barrio)).toEqual(['Bonanza', 'Quinamayo']);
+	});
+});

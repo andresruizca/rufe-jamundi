@@ -5,6 +5,12 @@
 	import { fetchLiveDataset } from '$lib/rufe/live';
 	import { aggregate, filterBarrios, sortBarrios, fmt, pct } from '$lib/aggregate';
 	import type { SortKey } from '$lib/aggregate';
+	import {
+		aggregateHogares,
+		filterHogares,
+		tagObservaciones,
+		listObservaciones
+	} from '$lib/hogaresAggregate';
 	import Header from '$lib/components/Header.svelte';
 	import ZonaFilter from '$lib/components/ZonaFilter.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
@@ -12,6 +18,7 @@
 	import BarRow from '$lib/components/BarRow.svelte';
 	import BarrioTable from '$lib/components/BarrioTable.svelte';
 	import LiveStatus from '$lib/components/LiveStatus.svelte';
+	import ObservacionesList from '$lib/components/ObservacionesList.svelte';
 
 	const REFRESH_MS = 3 * 60 * 1000;
 
@@ -76,6 +83,41 @@
 	);
 	const generoTitle = $derived(zona === 'todas' ? 'Género por zona' : `Género — zona ${zona}`);
 
+	const filteredHogares = $derived(filterHogares(DATA.hogares, zona, query));
+	const hogaresAgg = $derived(aggregateHogares(filteredHogares));
+	const obsTags = $derived(tagObservaciones(filteredHogares));
+	const obsList = $derived(listObservaciones(filteredHogares));
+
+	const ESTADO_ORDER = ['Habitable', 'Averiado', 'No habitable', 'Destruido'];
+	const ESTADO_COLOR: Record<string, string> = {
+		Habitable: 'var(--status-good)',
+		Averiado: 'var(--status-warning)',
+		'No habitable': 'var(--status-serious)',
+		Destruido: 'var(--status-critical)'
+	};
+	const estadoRows = $derived(
+		ESTADO_ORDER.map((name) => ({ name, value: hogaresAgg.estadoBien[name] ?? 0 })).filter(
+			(r) => r.value > 0
+		)
+	);
+	// "No informa" (alguien revisó y no pudo determinar el estado) y "Sin
+	// dato" (nunca se diligenció) se muestran juntos, atenuados, aparte de
+	// las 4 categorías de severidad real — mezclarlas ahí distorsionaría la
+	// escala de las barras con color de estado.
+	const estadoSinDato = $derived(
+		(hogaresAgg.estadoBien['No informa'] ?? 0) + (hogaresAgg.estadoBien['Sin dato'] ?? 0)
+	);
+	const maxEstado = $derived(Math.max(...estadoRows.map((r) => r.value), estadoSinDato, 1));
+
+	const tipoRows = $derived(
+		Object.entries(hogaresAgg.tipoBien)
+			.map(([name, value]) => ({ name, value }))
+			.sort((a, b) => b.value - a.value)
+	);
+	const maxTipo = $derived(Math.max(...tipoRows.map((r) => r.value), 1));
+	const maxVisita = $derived(Math.max(hogaresAgg.visitaSi, hogaresAgg.visitaNo, 1));
+	const maxObsTag = $derived(Math.max(...obsTags.map((t) => t.count), 1));
+
 	const TEXT_COLUMNS = new Set<SortKey>(['name', 'zona']);
 	function toggleSort(key: SortKey) {
 		if (sortKey === key) {
@@ -96,7 +138,7 @@
 </svelte:head>
 
 <div class="wrap">
-	<Header asOf={DATA.asOf} total={DATA.total} />
+	<Header asOf={DATA.asOf} total={DATA.total} hogares={DATA.hogares.length} />
 
 	<LiveStatus
 		status={liveStatus}
@@ -319,6 +361,105 @@
 				</div>
 			{/if}
 		</div>
+
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<h2>Estado del bien</h2>
+					<p class="card-note">
+						{fmt(hogaresAgg.count)} hogares con predio identificado, dentro del filtro activo
+					</p>
+				</div>
+			</div>
+			{#if estadoRows.length === 0}
+				<p class="card-note">Sin datos de estado del bien para este filtro.</p>
+			{:else}
+				<div class="bars">
+					{#each estadoRows as r (r.name)}
+						<BarRow label={r.name} value={r.value} max={maxEstado} color={ESTADO_COLOR[r.name]} />
+					{/each}
+					{#if estadoSinDato > 0}
+						<BarRow label="Sin dato" value={estadoSinDato} max={maxEstado} color="" dim />
+					{/if}
+				</div>
+			{/if}
+		</div>
+
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<h2>Tipo de bien</h2>
+					<p class="card-note">Vivienda, local comercial, finca, etc.</p>
+				</div>
+			</div>
+			<div class="bars">
+				{#each tipoRows as r (r.name)}
+					<BarRow
+						label={r.name}
+						value={r.value}
+						max={maxTipo}
+						color={r.name === 'Sin dato' ? '' : 'var(--seq-adultos)'}
+						dim={r.name === 'Sin dato'}
+					/>
+				{/each}
+			</div>
+		</div>
+
+		<div class="card span-2">
+			<div class="card-head">
+				<div>
+					<h2>Visitas técnicas</h2>
+					<p class="card-note">Si ya se realizó la visita de verificación al predio</p>
+				</div>
+			</div>
+			<div class="bars">
+				<BarRow
+					label="Realizada"
+					value={hogaresAgg.visitaSi}
+					max={maxVisita}
+					color="var(--status-good)"
+				/>
+				<BarRow
+					label="Pendiente"
+					value={hogaresAgg.visitaNo}
+					max={maxVisita}
+					color="var(--status-warning)"
+				/>
+				{#if hogaresAgg.visitaSinDato > 0}
+					<BarRow label="Sin dato" value={hogaresAgg.visitaSinDato} max={maxVisita} color="" dim />
+				{/if}
+			</div>
+			{#if hogaresAgg.visitantes.length > 0}
+				<div class="visitantes">
+					<p class="card-note visitantes-label">Quién realizó la visita</p>
+					<div class="visitantes-tags">
+						{#each hogaresAgg.visitantes.slice(0, 12) as v (v.nombre)}
+							<span class="visitante-tag">{v.nombre} <b>{v.count}</b></span>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<div class="card span-2">
+			<div class="card-head">
+				<div>
+					<h2>Observaciones</h2>
+					<p class="card-note">
+						{fmt(hogaresAgg.conObservacion)} de {fmt(hogaresAgg.count)} hogares tienen una observación
+						registrada
+					</p>
+				</div>
+			</div>
+			{#if obsTags.length > 0}
+				<div class="bars obs-tags">
+					{#each obsTags as t (t.label)}
+						<BarRow label={t.label} value={t.count} max={maxObsTag} color="var(--seq-jovenes)" />
+					{/each}
+				</div>
+			{/if}
+			<ObservacionesList items={obsList} />
+		</div>
 	</div>
 
 	<div class="card">
@@ -538,6 +679,50 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
+	}
+
+	.visitantes {
+		margin-top: 14px;
+		padding-top: 12px;
+		border-top: 1px dashed var(--color-border);
+	}
+	.visitantes-label {
+		margin: 0 0 8px;
+	}
+	.visitantes-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.visitante-tag {
+		font-size: 11.5px;
+		font-weight: 600;
+		color: var(--color-text);
+		background: var(--color-surface-alt);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-full);
+		padding: 3px 9px;
+	}
+	.visitante-tag b {
+		color: var(--color-primary-dark);
+		font-weight: 800;
+	}
+
+	.obs-tags {
+		margin-bottom: 14px;
+		padding-bottom: 14px;
+		border-bottom: 1px dashed var(--color-border);
+	}
+	/* Las etiquetas de esta tarjeta ("Riesgo colapso", "Fuga agua/gas") son
+	   más largas que un nombre de barrio típico — la columna angosta por
+	   defecto de BarRow las corta demasiado. */
+	.obs-tags :global(.bar-row) {
+		grid-template-columns: 118px 1fr 34px;
+	}
+	@media (min-width: 520px) {
+		.obs-tags :global(.bar-row) {
+			grid-template-columns: 148px 1fr 38px;
+		}
 	}
 
 	footer {

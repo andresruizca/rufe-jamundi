@@ -1,7 +1,7 @@
 <script lang="ts">
 	import logo from '$lib/assets/logo-jamundi.svg';
 
-	let { asOf, total }: { asOf: string; total: number } = $props();
+	let { asOf, total, hogares }: { asOf: string; total: number; hogares: number } = $props();
 </script>
 
 <header class="masthead">
@@ -16,6 +16,7 @@
 		<span>Evento: <b>Sismo, 10 de agosto de 2026</b></span>
 		<span>Corte del registro: <b>{asOf}</b></span>
 		<span>Personas registradas: <b>{total.toLocaleString('es-CO')}</b></span>
+		<span>Hogares registrados: <b>{hogares.toLocaleString('es-CO')}</b></span>
 	</div>
 </header>
 

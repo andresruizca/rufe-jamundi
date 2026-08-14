@@ -12,10 +12,26 @@ export interface Barrio {
 	zona: Zona;
 }
 
+/** Una fila por hogar (no por persona) — estado/tipo de bien, visita y
+ * observación son datos de la vivienda, no de cada integrante, así que
+ * contarlos por persona los infla según el tamaño del hogar. */
+export interface Hogar {
+	hogar: string;
+	barrio: string;
+	zona: Zona;
+	estadoBien: string;
+	tipoBien: string;
+	tenencia: string;
+	visita: 'SI' | 'NO' | 'Sin dato';
+	quienVisita: string;
+	observacion: string;
+}
+
 export interface Dataset {
 	total: number;
 	asOf: string;
 	barrios: Barrio[];
+	hogares: Hogar[];
 	/** Inconsistencias de zona detectadas al agregar (no detienen el parseo,
 	 * pero conviene revisarlas en el CSV fuente cuando haya tiempo). */
 	warnings?: string[];

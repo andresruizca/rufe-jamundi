@@ -1,7 +1,7 @@
 import raw from './data/rufe-fallback.json';
 import type { Dataset } from './rufe/types';
 
-export type { Zona, Barrio, Dataset } from './rufe/types';
+export type { Zona, Barrio, Hogar, Dataset } from './rufe/types';
 
 /**
  * Snapshot de respaldo, generado por `scripts/refresh-snapshot.ts` a partir

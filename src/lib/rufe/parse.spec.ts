@@ -149,4 +149,105 @@ describe('parseRufeCsv', () => {
 		);
 		expect(out.asOf).toBe('2026-08-14 10:00');
 	});
+
+	it('extracts estado/tipo de bien, tenencia, visita and observación as one row per hogar', () => {
+		const out = parseRufeCsv(
+			csv([
+				'1,1,,Terranova,,Javier,Aguilar,3,111,1,M,2,1,1957,69,6,,PROPIETARIO,HABITABLE,VIVIENDA,NO,SI,Pilar Patiño,Grietas en la fachada',
+				'1,1,,,,Maria,Aguilar,3,222,2,F,1,1,1960,66,6,,,,,,,,'
+			]),
+			'2026-01-01'
+		);
+		expect(out.hogares).toHaveLength(1);
+		expect(out.hogares[0]).toMatchObject({
+			hogar: '1',
+			barrio: 'Terranova',
+			zona: 'Urbana',
+			estadoBien: 'Habitable',
+			tipoBien: 'Vivienda',
+			tenencia: 'Propietario',
+			visita: 'SI',
+			quienVisita: 'Pilar Patiño',
+			observacion: 'Grietas en la fachada'
+		});
+	});
+
+	it('takes the first non-empty value seen per hogar when later members repeat it blank', () => {
+		// 24 columns, built positionally to avoid off-by-one comma counting:
+		// items,hogar,core,barrio,dir,nombre,apellido,tipodoc,numdoc,parentesco,
+		// genero,dia,mes,anio,edad,etnia,tel,tenencia,estado,tipobien,evacuada,
+		// visita,quien,obs
+		const row1 = [
+			'',
+			'9',
+			'',
+			'Bonanza',
+			'',
+			'A',
+			'B',
+			'3',
+			'1',
+			'1',
+			'M',
+			'1',
+			'1',
+			'1990',
+			'36',
+			'6',
+			'',
+			'',
+			'',
+			'',
+			'',
+			'NO',
+			'',
+			''
+		].join(',');
+		const row2 = [
+			'',
+			'9',
+			'',
+			'',
+			'',
+			'C',
+			'D',
+			'3',
+			'2',
+			'2',
+			'F',
+			'1',
+			'1',
+			'1990',
+			'36',
+			'6',
+			'',
+			'',
+			'DESTRUIDO',
+			'VIVIENDA',
+			'',
+			'SI',
+			'',
+			'Vivienda colapsada'
+		].join(',');
+		const out = parseRufeCsv(csv([row1, row2]), '2026-01-01');
+		expect(out.hogares).toHaveLength(1);
+		// El primer valor NO EN BLANCO de "visita" fue NO (de la primera
+		// fila); no se sobrescribe con el SI de la segunda.
+		expect(out.hogares[0]).toMatchObject({
+			estadoBien: 'Destruido',
+			tipoBien: 'Vivienda',
+			visita: 'NO',
+			observacion: 'Vivienda colapsada'
+		});
+	});
+
+	it('defaults hogares with nothing filled in to "Sin dato" visita and empty estado/tipo', () => {
+		const out = parseRufeCsv(csv(['1,1,,A,,x,y,3,1,1,M,1,1,1990,36,6,,,,,,,,']), '2026-01-01');
+		expect(out.hogares[0]).toMatchObject({
+			estadoBien: '',
+			tipoBien: '',
+			visita: 'Sin dato',
+			observacion: ''
+		});
+	});
 });
