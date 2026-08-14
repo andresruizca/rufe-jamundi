@@ -58,13 +58,15 @@ export function pct(n: number, d: number): number {
 	return d > 0 ? Math.round((n / d) * 100) : 0;
 }
 
-export type SortKey = 'name' | 'zona' | 'total' | 'F' | 'M' | 'Ninos' | 'Jovenes' | 'Adultos' | 'AdultosMayores';
+export type SortKey =
+	'name' | 'zona' | 'total' | 'F' | 'M' | 'Ninos' | 'Jovenes' | 'Adultos' | 'AdultosMayores';
 
 export function sortBarrios(barrios: Barrio[], key: SortKey, dir: 1 | -1): Barrio[] {
 	return [...barrios].sort((a, b) => {
 		const av = a[key];
 		const bv = b[key];
-		const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+		const cmp =
+			typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
 		return cmp * dir;
 	});
 }

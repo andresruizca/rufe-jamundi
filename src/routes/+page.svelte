@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { DATA } from '$lib/data';
-	import type { Zona } from '$lib/data';
+	import { onMount } from 'svelte';
+	import { FALLBACK_DATA } from '$lib/data';
+	import type { Zona, Dataset } from '$lib/data';
+	import { fetchLiveDataset } from '$lib/rufe/live';
 	import { aggregate, filterBarrios, sortBarrios, fmt, pct } from '$lib/aggregate';
 	import type { SortKey } from '$lib/aggregate';
 	import Header from '$lib/components/Header.svelte';
@@ -9,6 +11,38 @@
 	import KpiTile from '$lib/components/KpiTile.svelte';
 	import BarRow from '$lib/components/BarRow.svelte';
 	import BarrioTable from '$lib/components/BarrioTable.svelte';
+	import LiveStatus from '$lib/components/LiveStatus.svelte';
+
+	const REFRESH_MS = 3 * 60 * 1000;
+
+	let liveDataset = $state<Dataset | null>(null);
+	let liveStatus = $state<'loading' | 'live' | 'stale'>('loading');
+	let liveError = $state<string | undefined>(undefined);
+	let refreshing = $state(false);
+
+	const DATA = $derived(liveDataset ?? FALLBACK_DATA);
+
+	async function refresh() {
+		refreshing = true;
+		try {
+			liveDataset = await fetchLiveDataset();
+			liveStatus = 'live';
+			liveError = undefined;
+		} catch (e) {
+			liveStatus = liveDataset ? 'live' : 'stale';
+			liveError = e instanceof Error ? e.message : 'No se pudo conectar con la hoja en vivo.';
+		} finally {
+			refreshing = false;
+		}
+	}
+
+	onMount(() => {
+		refresh();
+		const interval = setInterval(() => {
+			if (document.visibilityState === 'visible') refresh();
+		}, REFRESH_MS);
+		return () => clearInterval(interval);
+	});
 
 	let zona = $state<Zona | 'todas'>('todas');
 	let query = $state('');
@@ -64,6 +98,14 @@
 <div class="wrap">
 	<Header asOf={DATA.asOf} total={DATA.total} />
 
+	<LiveStatus
+		status={liveStatus}
+		asOf={DATA.asOf}
+		error={liveError}
+		{refreshing}
+		onRefresh={refresh}
+	/>
+
 	<div class="advisory">
 		<svg
 			width="16"
@@ -80,11 +122,11 @@
 			/><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg
 		>
 		<div>
-			<strong>Versión de trabajo — carga manual.</strong> Estos datos se digitaron a mano desde el
-			consolidado RUFE (FR-1703-SMD-69) hasta el corte indicado; aún no hay conexión en vivo con
-			Google Sheets. El género se infiere de la marca "X" registrada en el formulario físico y
-			puede contener inconsistencias de diligenciamiento; la zona (rural/urbana) se infiere del
-			corregimiento reportado. Cifras de apoyo operativo, no un censo certificado.
+			<strong>Datos en vivo desde el RUFE (FR-1703-SMD-69).</strong> El tablero se conecta directo a la
+			hoja de Google del consolidado y se refresca solo cada 3 minutos. El género se toma directo de la
+			columna "Identidad de género" del formulario y puede contener registros sin diligenciar; la zona
+			(rural/urbana) se infiere del corregimiento reportado. Cifras de apoyo operativo para la respuesta
+			a la emergencia, no un censo certificado.
 		</div>
 	</div>
 
@@ -180,7 +222,12 @@
 					max={maxEdad}
 					color="var(--seq-jovenes)"
 				/>
-				<BarRow label="Adultos 29–59" value={agg.Adultos} max={maxEdad} color="var(--seq-adultos)" />
+				<BarRow
+					label="Adultos 29–59"
+					value={agg.Adultos}
+					max={maxEdad}
+					color="var(--seq-adultos)"
+				/>
 				<BarRow
 					label="Ad. mayores 60+"
 					value={agg.AdultosMayores}
@@ -279,8 +326,8 @@
 			<div>
 				<h2>Detalle por barrio / vereda</h2>
 				<p class="card-note">
-					{fmt(sortedRows.length)} barrios/veredas · toca un encabezado para ordenar · desliza para
-					ver todas las columnas
+					{fmt(sortedRows.length)} barrios/veredas · toca un encabezado para ordenar · desliza para ver
+					todas las columnas
 				</p>
 			</div>
 		</div>
@@ -289,18 +336,18 @@
 
 	<footer>
 		<p>
-			<strong>RUFE</strong> — Registro consolidado de familias/personas afectadas, código
-			FR-1703-SMD-69 (SMD-ERE), Alcaldía Municipal de Jamundí.
+			<strong>RUFE</strong> — Registro consolidado de familias/personas afectadas, código FR-1703-SMD-69
+			(SMD-ERE), Alcaldía Municipal de Jamundí.
 		</p>
 		<p>
-			Grupos de edad: Niños 0–11 años · Jóvenes 12–28 años · Adultos 29–59 años · Adultos mayores
-			60 años o más. "Sin dato" agrupa registros sin fecha de nacimiento o sin marca de género
-			legible en el formulario físico.
+			Grupos de edad: Niños 0–11 años · Jóvenes 12–28 años · Adultos 29–59 años · Adultos mayores 60
+			años o más. "Sin dato" agrupa registros sin fecha de nacimiento o sin identidad de género
+			diligenciada en el formulario.
 		</p>
 		<p>
-			Tablero generado a partir de una exportación puntual del archivo — pendiente habilitar
-			actualización automática desde Google Sheets en cuanto se conceda acceso de lectura al
-			documento.
+			El tablero lee la hoja de Google directamente desde el navegador de quien lo visita — no pasa
+			por ningún servidor propio. Si la hoja deja de estar compartida como "Cualquiera con el
+			enlace", el tablero sigue mostrando el último snapshot descargado (ver aviso arriba).
 		</p>
 	</footer>
 </div>

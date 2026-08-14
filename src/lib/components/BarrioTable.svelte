@@ -47,14 +47,18 @@
 		</thead>
 		<tbody>
 			{#if rows.length === 0}
-				<tr class="empty-row"><td colspan="9">No se encontraron barrios o veredas con ese filtro.</td></tr>
+				<tr class="empty-row"
+					><td colspan="9">No se encontraron barrios o veredas con ese filtro.</td></tr
+				>
 			{:else}
 				{#each rows as b (b.name)}
 					<tr>
 						<td>{b.name}</td>
 						<td class="badge-cell"
-							><span class="badge" class:urbana={b.zona === 'Urbana'} class:rural={b.zona === 'Rural'}
-								>{b.zona}</span
+							><span
+								class="badge"
+								class:urbana={b.zona === 'Urbana'}
+								class:rural={b.zona === 'Rural'}>{b.zona}</span
 							></td
 						>
 						<td class="num total-col">{fmt(b.total)}</td>

@@ -1,32 +1,36 @@
 import { describe, it, expect } from 'vitest';
 import { aggregate, filterBarrios, fmt, pct, sortBarrios } from './aggregate';
-import { DATA } from './data';
+import { FALLBACK_DATA } from './data';
 import type { Barrio } from './data';
 
-describe('DATA integrity', () => {
-	it('sums to the documented total', () => {
-		const agg = aggregate(DATA.barrios);
-		expect(agg.total).toBe(DATA.total);
-		expect(agg.total).toBe(540);
+// El snapshot de respaldo se refresca desde la hoja en vivo (npm run
+// data:refresh) y su total real crece con el tiempo, así que estas pruebas
+// verifican invariantes estructurales — no números exactos que se
+// volverían obsoletos en el próximo refresco.
+describe('FALLBACK_DATA integrity', () => {
+	it('barrio totals sum to the documented total', () => {
+		const agg = aggregate(FALLBACK_DATA.barrios);
+		expect(agg.total).toBe(FALLBACK_DATA.total);
+		expect(agg.total).toBeGreaterThan(0);
 	});
 
 	it('every barrio bucket has a single consistent zona (no mixed-zona bug)', () => {
 		// Regression test for the hogar 91/117 bug found while building the
 		// original artifact: a barrio bucket must never mix Urbana/Rural people.
-		for (const b of DATA.barrios) {
+		for (const b of FALLBACK_DATA.barrios) {
 			expect(['Urbana', 'Rural']).toContain(b.zona);
 		}
 	});
 
-	it('urbana + rural splits match the corrected totals', () => {
-		const agg = aggregate(DATA.barrios);
-		expect(agg.Urbana).toBe(391);
-		expect(agg.Rural).toBe(149);
+	it('urbana + rural splits add up to the total', () => {
+		const agg = aggregate(FALLBACK_DATA.barrios);
+		expect(agg.Urbana).toBeGreaterThan(0);
+		expect(agg.Rural).toBeGreaterThan(0);
 		expect(agg.Urbana + agg.Rural).toBe(agg.total);
 	});
 
 	it('gender and age columns never exceed the row total', () => {
-		for (const b of DATA.barrios) {
+		for (const b of FALLBACK_DATA.barrios) {
 			expect(b.M + b.F).toBeLessThanOrEqual(b.total);
 			expect(b.Ninos + b.Jovenes + b.Adultos + b.AdultosMayores).toBeLessThanOrEqual(b.total);
 		}
@@ -42,8 +46,28 @@ describe('aggregate()', () => {
 	});
 
 	const sample: Barrio[] = [
-		{ name: 'A', total: 10, M: 4, F: 5, Ninos: 2, Jovenes: 2, Adultos: 5, AdultosMayores: 0, zona: 'Urbana' },
-		{ name: 'B', total: 5, M: 2, F: 2, Ninos: 0, Jovenes: 1, Adultos: 3, AdultosMayores: 1, zona: 'Rural' }
+		{
+			name: 'A',
+			total: 10,
+			M: 4,
+			F: 5,
+			Ninos: 2,
+			Jovenes: 2,
+			Adultos: 5,
+			AdultosMayores: 0,
+			zona: 'Urbana'
+		},
+		{
+			name: 'B',
+			total: 5,
+			M: 2,
+			F: 2,
+			Ninos: 0,
+			Jovenes: 1,
+			Adultos: 3,
+			AdultosMayores: 1,
+			zona: 'Rural'
+		}
 	];
 
 	it('sums fields across barrios and derives sin dato counts', () => {
@@ -59,8 +83,28 @@ describe('aggregate()', () => {
 
 describe('filterBarrios()', () => {
 	const sample: Barrio[] = [
-		{ name: 'Terranova', total: 10, M: 5, F: 5, Ninos: 0, Jovenes: 0, Adultos: 10, AdultosMayores: 0, zona: 'Urbana' },
-		{ name: 'Quinamayo', total: 5, M: 2, F: 3, Ninos: 0, Jovenes: 0, Adultos: 5, AdultosMayores: 0, zona: 'Rural' }
+		{
+			name: 'Terranova',
+			total: 10,
+			M: 5,
+			F: 5,
+			Ninos: 0,
+			Jovenes: 0,
+			Adultos: 10,
+			AdultosMayores: 0,
+			zona: 'Urbana'
+		},
+		{
+			name: 'Quinamayo',
+			total: 5,
+			M: 2,
+			F: 3,
+			Ninos: 0,
+			Jovenes: 0,
+			Adultos: 5,
+			AdultosMayores: 0,
+			zona: 'Rural'
+		}
 	];
 
 	it('filters by zona', () => {
@@ -98,8 +142,28 @@ describe('fmt() / pct()', () => {
 
 describe('sortBarrios()', () => {
 	const sample: Barrio[] = [
-		{ name: 'B', total: 5, M: 1, F: 1, Ninos: 0, Jovenes: 0, Adultos: 0, AdultosMayores: 0, zona: 'Urbana' },
-		{ name: 'A', total: 10, M: 2, F: 2, Ninos: 0, Jovenes: 0, Adultos: 0, AdultosMayores: 0, zona: 'Rural' }
+		{
+			name: 'B',
+			total: 5,
+			M: 1,
+			F: 1,
+			Ninos: 0,
+			Jovenes: 0,
+			Adultos: 0,
+			AdultosMayores: 0,
+			zona: 'Urbana'
+		},
+		{
+			name: 'A',
+			total: 10,
+			M: 2,
+			F: 2,
+			Ninos: 0,
+			Jovenes: 0,
+			Adultos: 0,
+			AdultosMayores: 0,
+			zona: 'Rural'
+		}
 	];
 
 	it('sorts numerically descending', () => {

@@ -1,10 +1,6 @@
 <script lang="ts">
-	let {
-		label,
-		value,
-		color,
-		sub
-	}: { label: string; value: number; color: string; sub: string } = $props();
+	let { label, value, color, sub }: { label: string; value: number; color: string; sub: string } =
+		$props();
 </script>
 
 <div class="kpi-tile">

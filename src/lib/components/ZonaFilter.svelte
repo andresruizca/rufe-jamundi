@@ -37,7 +37,9 @@
 		padding: 8px 10px;
 		border-radius: 7px;
 		cursor: pointer;
-		transition: background var(--transition), color var(--transition);
+		transition:
+			background var(--transition),
+			color var(--transition);
 	}
 	button[aria-pressed='true'] {
 		background: var(--color-primary);
