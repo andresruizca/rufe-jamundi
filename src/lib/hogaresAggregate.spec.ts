@@ -146,12 +146,16 @@ describe('listObservaciones()', () => {
 		expect(byHogar['2']).toBe(true);
 	});
 
-	it('sorts critical observaciones first, then alphabetically by barrio', () => {
+	it('sorts alphabetically by barrio regardless of critical, so the "solo críticas" toggle visibly changes what is shown', () => {
+		// Si las críticas siempre aparecieran primero, activar/desactivar el
+		// filtro no cambiaría lo que ya se ve en pantalla (mismo top de la
+		// lista en ambos casos) y parecería que el botón no hace nada.
 		const list = listObservaciones([
 			hogar({ hogar: '1', barrio: 'Zeta', observacion: 'Grietas leves' }),
 			hogar({ hogar: '2', barrio: 'Alfa', observacion: 'Colapso total, evacuación urgente' }),
 			hogar({ hogar: '3', barrio: 'Beta', observacion: 'Fisuras menores' })
 		]);
 		expect(list.map((o) => o.hogar)).toEqual(['2', '3', '1']);
+		expect(list.map((o) => o.critical)).toEqual([true, false, false]);
 	});
 });

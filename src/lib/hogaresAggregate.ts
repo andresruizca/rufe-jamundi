@@ -116,6 +116,12 @@ export interface ObservacionItem {
 }
 
 export function listObservaciones(hogares: Hogar[]): ObservacionItem[] {
+	// Orden alfabético por barrio siempre, sin importar si el filtro "solo
+	// críticas" está activo o no: si las críticas siempre aparecieran
+	// primero, activar/desactivar el filtro no cambiaba lo que se veía en
+	// pantalla (ambas vistas mostraban las mismas primeras filas) y parecía
+	// que el botón no hacía nada. El filtrado real ocurre en
+	// ObservacionesList.svelte según el estado del checkbox.
 	return hogares
 		.filter((h) => h.observacion)
 		.map((h) => ({
@@ -125,8 +131,5 @@ export function listObservaciones(hogares: Hogar[]): ObservacionItem[] {
 			texto: h.observacion,
 			critical: CRITICAL_PATTERN.test(h.observacion)
 		}))
-		.sort((a, b) => {
-			if (a.critical !== b.critical) return a.critical ? -1 : 1;
-			return a.barrio.localeCompare(b.barrio);
-		});
+		.sort((a, b) => a.barrio.localeCompare(b.barrio));
 }
