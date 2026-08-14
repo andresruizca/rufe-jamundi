@@ -12,12 +12,14 @@ function hogar(overrides: Partial<Hogar>): Hogar {
 		hogar: '1',
 		barrio: 'Terranova',
 		zona: 'Urbana',
+		personas: 1,
 		estadoBien: '',
 		tipoBien: '',
 		tenencia: '',
 		visita: 'Sin dato',
 		quienVisita: '',
 		observacion: '',
+		evacuada: 'Sin dato',
 		...overrides
 	};
 }
@@ -32,6 +34,44 @@ describe('aggregateHogares()', () => {
 		expect(agg.count).toBe(3);
 		expect(agg.estadoBien).toEqual({ Averiado: 2, 'Sin dato': 1 });
 		expect(agg.tipoBien).toEqual({ Vivienda: 2, 'Sin dato': 1 });
+	});
+
+	it('tallies forma de tenencia, defaulting blanks to "Sin dato"', () => {
+		const agg = aggregateHogares([
+			hogar({ tenencia: 'Propietario' }),
+			hogar({ tenencia: 'Propietario' }),
+			hogar({ tenencia: 'Arrendatario' }),
+			hogar({ tenencia: '' })
+		]);
+		expect(agg.tenencia).toEqual({ Propietario: 2, Arrendatario: 1, 'Sin dato': 1 });
+	});
+
+	it('tallies personal evacuado SI/NO/Sin dato, counting both hogares and personas', () => {
+		// Un hogar de 4 integrantes evacuado no debe contar igual que uno de 1
+		// — "cuánto personal ha sido evacuado" es una pregunta sobre personas.
+		const agg = aggregateHogares([
+			hogar({ evacuada: 'SI', personas: 4 }),
+			hogar({ evacuada: 'SI', personas: 1 }),
+			hogar({ evacuada: 'NO', personas: 3 }),
+			hogar({ evacuada: 'Sin dato', personas: 2 })
+		]);
+		expect(agg.evacuadaSi).toBe(2);
+		expect(agg.evacuadaNo).toBe(1);
+		expect(agg.evacuadaSinDato).toBe(1);
+		expect(agg.personasEvacuadas).toBe(5);
+		expect(agg.personasNoEvacuadas).toBe(3);
+		expect(agg.personasSinDatoEvacuacion).toBe(2);
+	});
+
+	it('tallies hogares by zona (grouped by hogar, not by persona)', () => {
+		const agg = aggregateHogares([
+			hogar({ hogar: '1', zona: 'Urbana' }),
+			hogar({ hogar: '2', zona: 'Urbana' }),
+			hogar({ hogar: '3', zona: 'Rural' })
+		]);
+		expect(agg.count).toBe(3);
+		expect(agg.urbana).toBe(2);
+		expect(agg.rural).toBe(1);
 	});
 
 	it('tallies visita SI/NO/Sin dato', () => {

@@ -19,12 +19,17 @@ export interface Hogar {
 	hogar: string;
 	barrio: string;
 	zona: Zona;
+	/** Cuántas personas de `barrios[].total` pertenecen a este hogar — para
+	 * poder responder "cuántas PERSONAS fueron evacuadas", no solo cuántos
+	 * hogares. */
+	personas: number;
 	estadoBien: string;
 	tipoBien: string;
 	tenencia: string;
 	visita: 'SI' | 'NO' | 'Sin dato';
 	quienVisita: string;
 	observacion: string;
+	evacuada: 'SI' | 'NO' | 'Sin dato';
 }
 
 export interface Dataset {

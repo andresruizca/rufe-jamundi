@@ -34,6 +34,7 @@ const COL = {
 	tenencia: 17,
 	estadoBien: 18,
 	tipoBien: 19,
+	evacuada: 20,
 	visita: 21,
 	quienVisita: 22,
 	observacion: 23
@@ -63,6 +64,15 @@ const CANON_TIPO_BIEN: Record<string, string> = {
 	FINCA: 'Finca',
 	'CENTRO DE BIENESTAR': 'Centro de bienestar',
 	'CENTRO EDUCATIVO / ESCUELA': 'Centro educativo'
+};
+
+const CANON_TENENCIA: Record<string, string> = {
+	PROPIETARIO: 'Propietario',
+	ARRENDATARIO: 'Arrendatario',
+	POSEEDOR: 'Poseedor',
+	OCUPANTE: 'Ocupante',
+	'NO INFORMA': 'No informa',
+	'SIN DATOS': 'No informa'
 };
 
 /** Corregimientos rurales conocidos de Jamundí (Valle del Cauca). Cualquier
@@ -167,6 +177,7 @@ interface PersonRecord {
 	visita: 'SI' | 'NO' | '';
 	quienVisita: string;
 	observacion: string;
+	evacuada: 'SI' | 'NO' | '';
 }
 
 function parseRows(rows: string[][]): PersonRecord[] {
@@ -192,6 +203,7 @@ function parseRows(rows: string[][]): PersonRecord[] {
 		const visitaRaw = clean(r[COL.visita]).toUpperCase();
 		const quienVisita = clean(r[COL.quienVisita]);
 		const observacion = clean(r[COL.observacion]);
+		const evacuadaRaw = clean(r[COL.evacuada]).toUpperCase();
 
 		if (hogar) {
 			if (corregimiento) coreByHogar.set(hogar, corregimiento);
@@ -210,6 +222,8 @@ function parseRows(rows: string[][]): PersonRecord[] {
 		if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 115) edad = parsed;
 
 		const visita: 'SI' | 'NO' | '' = visitaRaw === 'SI' ? 'SI' : visitaRaw === 'NO' ? 'NO' : '';
+		const evacuada: 'SI' | 'NO' | '' =
+			evacuadaRaw === 'SI' ? 'SI' : evacuadaRaw === 'NO' ? 'NO' : '';
 
 		records.push({
 			hogar,
@@ -222,7 +236,8 @@ function parseRows(rows: string[][]): PersonRecord[] {
 			tipoBien,
 			visita,
 			quienVisita,
-			observacion
+			observacion,
+			evacuada
 		});
 	}
 
@@ -301,27 +316,33 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 					hogar: rec.hogar,
 					barrio: label,
 					zona,
+					personas: 0,
 					estadoBien: '',
 					tipoBien: '',
 					tenencia: '',
 					visita: 'Sin dato',
 					quienVisita: '',
-					observacion: ''
+					observacion: '',
+					evacuada: 'Sin dato'
 				};
 				hogaresMap.set(rec.hogar, h);
 			}
-			// Estado/tipo de bien, tenencia, visita y observación quedan
-			// diligenciados de forma pareja entre los integrantes de un mismo
-			// hogar en la práctica (a veces solo el primero, a veces varios,
-			// a veces ninguno) — se toma el primer valor no vacío visto.
+			h.personas += 1;
+			// Estado/tipo de bien, tenencia, visita, evacuación y observación
+			// quedan diligenciados de forma pareja entre los integrantes de un
+			// mismo hogar en la práctica (a veces solo el primero, a veces
+			// varios, a veces ninguno) — se toma el primer valor no vacío visto.
 			if (!h.estadoBien && rec.estadoBien) {
 				h.estadoBien = CANON_ESTADO_BIEN[rec.estadoBien.toUpperCase()] ?? titleCase(rec.estadoBien);
 			}
 			if (!h.tipoBien && rec.tipoBien) {
 				h.tipoBien = CANON_TIPO_BIEN[rec.tipoBien.toUpperCase()] ?? titleCase(rec.tipoBien);
 			}
-			if (!h.tenencia && rec.tenencia) h.tenencia = titleCase(rec.tenencia);
+			if (!h.tenencia && rec.tenencia) {
+				h.tenencia = CANON_TENENCIA[rec.tenencia.toUpperCase()] ?? titleCase(rec.tenencia);
+			}
 			if (h.visita === 'Sin dato' && rec.visita) h.visita = rec.visita;
+			if (h.evacuada === 'Sin dato' && rec.evacuada) h.evacuada = rec.evacuada;
 			if (!h.quienVisita && rec.quienVisita) h.quienVisita = rec.quienVisita;
 			if (!h.observacion && rec.observacion) h.observacion = rec.observacion;
 		}

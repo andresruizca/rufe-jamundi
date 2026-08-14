@@ -150,7 +150,7 @@ describe('parseRufeCsv', () => {
 		expect(out.asOf).toBe('2026-08-14 10:00');
 	});
 
-	it('extracts estado/tipo de bien, tenencia, visita and observación as one row per hogar', () => {
+	it('extracts estado/tipo de bien, tenencia, visita, evacuación and observación as one row per hogar', () => {
 		const out = parseRufeCsv(
 			csv([
 				'1,1,,Terranova,,Javier,Aguilar,3,111,1,M,2,1,1957,69,6,,PROPIETARIO,HABITABLE,VIVIENDA,NO,SI,Pilar Patiño,Grietas en la fachada',
@@ -167,9 +167,34 @@ describe('parseRufeCsv', () => {
 			tipoBien: 'Vivienda',
 			tenencia: 'Propietario',
 			visita: 'SI',
+			evacuada: 'NO',
 			quienVisita: 'Pilar Patiño',
 			observacion: 'Grietas en la fachada'
 		});
+	});
+
+	it('extracts "personal evacuado: SI" and canonicalizes forma de tenencia', () => {
+		const out = parseRufeCsv(
+			csv([
+				'1,1,,Terranova,,Ana,Lopez,3,111,1,F,2,1,1990,36,6,,arrendatario,DESTRUIDO,VIVIENDA,SI,SI,,'
+			]),
+			'2026-01-01'
+		);
+		expect(out.hogares[0]).toMatchObject({ tenencia: 'Arrendatario', evacuada: 'SI' });
+	});
+
+	it('counts how many personas belong to each hogar, for "cuánto personal evacuado" by people', () => {
+		const out = parseRufeCsv(
+			csv([
+				'1,1,,Terranova,,Javier,Aguilar,3,111,1,M,2,1,1957,69,6,,,,,SI,,,',
+				'1,1,,,,Maria,Aguilar,3,222,2,F,1,1,1960,66,6,,,,,,,,',
+				'1,1,,,,Luis,Aguilar,3,333,3,M,1,1,1990,36,6,,,,,,,,'
+			]),
+			'2026-01-01'
+		);
+		expect(out.hogares).toHaveLength(1);
+		expect(out.hogares[0].personas).toBe(3);
+		expect(out.hogares[0].evacuada).toBe('SI');
 	});
 
 	it('takes the first non-empty value seen per hogar when later members repeat it blank', () => {

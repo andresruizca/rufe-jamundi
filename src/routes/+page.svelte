@@ -19,6 +19,20 @@
 	import BarrioTable from '$lib/components/BarrioTable.svelte';
 	import LiveStatus from '$lib/components/LiveStatus.svelte';
 	import ObservacionesList from '$lib/components/ObservacionesList.svelte';
+	import {
+		House,
+		MapPin,
+		CalendarDays,
+		VenusAndMars,
+		BarChart3,
+		ShieldAlert,
+		Building2,
+		KeyRound,
+		ClipboardCheck,
+		Siren,
+		MessageSquareText,
+		Table2
+	} from '@lucide/svelte';
 
 	const REFRESH_MS = 3 * 60 * 1000;
 
@@ -88,6 +102,11 @@
 	const obsTags = $derived(tagObservaciones(filteredHogares));
 	const obsList = $derived(listObservaciones(filteredHogares));
 
+	const maxHogaresZona = $derived(Math.max(hogaresAgg.urbana, hogaresAgg.rural, 1));
+	const promedioPersonasPorHogar = $derived(
+		hogaresAgg.count > 0 ? (agg.total / hogaresAgg.count).toFixed(1) : '0'
+	);
+
 	const ESTADO_ORDER = ['Habitable', 'Averiado', 'No habitable', 'Destruido'];
 	const ESTADO_COLOR: Record<string, string> = {
 		Habitable: 'var(--status-good)',
@@ -117,6 +136,38 @@
 	const maxTipo = $derived(Math.max(...tipoRows.map((r) => r.value), 1));
 	const maxVisita = $derived(Math.max(hogaresAgg.visitaSi, hogaresAgg.visitaNo, 1));
 	const maxObsTag = $derived(Math.max(...obsTags.map((t) => t.count), 1));
+
+	// Colores distintivos de la paleta de INNOLAB (más allá del azul/naranja
+	// ya usado en zona y género), para que esta tarjeta resalte de un
+	// vistazo: teal → dorado → coral → azul claro, en ese orden fijo.
+	const TENENCIA_COLORS = [
+		'var(--color-secondary)',
+		'var(--color-highlight)',
+		'var(--color-accent)',
+		'var(--color-primary-light)'
+	];
+	// "No informa" (se preguntó y no se pudo determinar) se agrupa con "Sin
+	// dato" (nunca se preguntó) — son la misma idea de fondo ("no sabemos"),
+	// y así los 4 colores distintivos alcanzan sin repetirse entre categorías
+	// que sí tienen significado propio.
+	const tenenciaRows = $derived(
+		Object.entries(hogaresAgg.tenencia)
+			.filter(([name]) => name !== 'Sin dato' && name !== 'No informa')
+			.sort((a, b) => b[1] - a[1])
+			.map(([name, value], i) => ({
+				name,
+				value,
+				color: TENENCIA_COLORS[i % TENENCIA_COLORS.length]
+			}))
+	);
+	const tenenciaSinDato = $derived(
+		(hogaresAgg.tenencia['Sin dato'] ?? 0) + (hogaresAgg.tenencia['No informa'] ?? 0)
+	);
+	const maxTenencia = $derived(Math.max(...tenenciaRows.map((r) => r.value), tenenciaSinDato, 1));
+
+	const maxPersonasEvac = $derived(
+		Math.max(hogaresAgg.personasEvacuadas, hogaresAgg.personasNoEvacuadas, 1)
+	);
 
 	const TEXT_COLUMNS = new Set<SortKey>(['name', 'zona']);
 	function toggleSort(key: SortKey) {
@@ -224,11 +275,46 @@
 	</div>
 
 	<div class="chart-grid">
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<h2><House size={16} strokeWidth={2.25} aria-hidden="true" /> Hogares registrados</h2>
+					<p class="card-note">
+						Personas agrupadas por número de hogar (código de familia del RUFE) — un hogar puede
+						tener varios integrantes
+					</p>
+				</div>
+			</div>
+			<div class="hogares-total">
+				<span class="hogares-total-value">{fmt(hogaresAgg.count)}</span>
+				<span class="hogares-total-label">hogares</span>
+			</div>
+			{#if zona === 'todas'}
+				<div class="bars">
+					<BarRow
+						label="Urbana"
+						value={hogaresAgg.urbana}
+						max={maxHogaresZona}
+						color="var(--series-mujeres)"
+					/>
+					<BarRow
+						label="Rural"
+						value={hogaresAgg.rural}
+						max={maxHogaresZona}
+						color="var(--series-hombres)"
+					/>
+				</div>
+			{/if}
+			<p class="card-note hogares-promedio">
+				Promedio de <b>{promedioPersonasPorHogar}</b> personas por hogar, dentro del filtro activo
+			</p>
+		</div>
+
 		{#if zona === 'todas'}
 			<div class="card">
 				<div class="card-head">
 					<div>
-						<h2>Zona rural / urbana</h2>
+						<h2><MapPin size={16} strokeWidth={2.25} aria-hidden="true" /> Zona rural / urbana</h2>
 						<p class="card-note">Personas por zona, según el corregimiento reportado</p>
 					</div>
 				</div>
@@ -252,7 +338,7 @@
 		<div class="card">
 			<div class="card-head">
 				<div>
-					<h2>Grupo de edad</h2>
+					<h2><CalendarDays size={16} strokeWidth={2.25} aria-hidden="true" /> Grupo de edad</h2>
 					<p class="card-note">Niños 0–11 · Jóvenes 12–28 · Adultos 29–59 · Adultos mayores 60+</p>
 				</div>
 			</div>
@@ -285,7 +371,7 @@
 		<div class="card span-2">
 			<div class="card-head">
 				<div>
-					<h2>{generoTitle}</h2>
+					<h2><VenusAndMars size={16} strokeWidth={2.25} aria-hidden="true" /> {generoTitle}</h2>
 					<p class="card-note">Personas con género identificado en el formulario (M/F)</p>
 				</div>
 				<div class="legend">
@@ -347,7 +433,7 @@
 		<div class="card span-2">
 			<div class="card-head">
 				<div>
-					<h2>{rankingTitle}</h2>
+					<h2><BarChart3 size={16} strokeWidth={2.25} aria-hidden="true" /> {rankingTitle}</h2>
 					<p class="card-note">Los 12 con mayor número de personas, dentro del filtro activo</p>
 				</div>
 			</div>
@@ -365,7 +451,7 @@
 		<div class="card">
 			<div class="card-head">
 				<div>
-					<h2>Estado del bien</h2>
+					<h2><ShieldAlert size={16} strokeWidth={2.25} aria-hidden="true" /> Estado del bien</h2>
 					<p class="card-note">
 						{fmt(hogaresAgg.count)} hogares con predio identificado, dentro del filtro activo
 					</p>
@@ -388,7 +474,7 @@
 		<div class="card">
 			<div class="card-head">
 				<div>
-					<h2>Tipo de bien</h2>
+					<h2><Building2 size={16} strokeWidth={2.25} aria-hidden="true" /> Tipo de bien</h2>
 					<p class="card-note">Vivienda, local comercial, finca, etc.</p>
 				</div>
 			</div>
@@ -405,10 +491,29 @@
 			</div>
 		</div>
 
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<h2><KeyRound size={16} strokeWidth={2.25} aria-hidden="true" /> Forma de tenencia</h2>
+					<p class="card-note">Propietario, arrendatario, poseedor u ocupante del predio</p>
+				</div>
+			</div>
+			<div class="bars">
+				{#each tenenciaRows as r (r.name)}
+					<BarRow label={r.name} value={r.value} max={maxTenencia} color={r.color} />
+				{/each}
+				{#if tenenciaSinDato > 0}
+					<BarRow label="Sin dato" value={tenenciaSinDato} max={maxTenencia} color="" dim />
+				{/if}
+			</div>
+		</div>
+
 		<div class="card span-2">
 			<div class="card-head">
 				<div>
-					<h2>Visitas técnicas</h2>
+					<h2>
+						<ClipboardCheck size={16} strokeWidth={2.25} aria-hidden="true" /> Visitas técnicas
+					</h2>
 					<p class="card-note">Si ya se realizó la visita de verificación al predio</p>
 				</div>
 			</div>
@@ -444,7 +549,49 @@
 		<div class="card span-2">
 			<div class="card-head">
 				<div>
-					<h2>Observaciones</h2>
+					<h2><Siren size={16} strokeWidth={2.25} aria-hidden="true" /> Personal evacuado</h2>
+					<p class="card-note">
+						Personas cuyo hogar fue evacuado tras el sismo, dentro del filtro activo
+					</p>
+				</div>
+			</div>
+			<div class="evac-total">
+				<span class="evac-total-value critical">{fmt(hogaresAgg.personasEvacuadas)}</span>
+				<span class="evac-total-label"
+					>personas evacuadas · {fmt(hogaresAgg.evacuadaSi)} hogares</span
+				>
+			</div>
+			<div class="bars">
+				<BarRow
+					label="Evacuadas"
+					value={hogaresAgg.personasEvacuadas}
+					max={maxPersonasEvac}
+					color="var(--color-accent)"
+				/>
+				<BarRow
+					label="No evacuadas"
+					value={hogaresAgg.personasNoEvacuadas}
+					max={maxPersonasEvac}
+					color="var(--color-secondary)"
+				/>
+				{#if hogaresAgg.personasSinDatoEvacuacion > 0}
+					<BarRow
+						label="Sin dato"
+						value={hogaresAgg.personasSinDatoEvacuacion}
+						max={maxPersonasEvac}
+						color=""
+						dim
+					/>
+				{/if}
+			</div>
+		</div>
+
+		<div class="card span-2">
+			<div class="card-head">
+				<div>
+					<h2>
+						<MessageSquareText size={16} strokeWidth={2.25} aria-hidden="true" /> Observaciones
+					</h2>
 					<p class="card-note">
 						{fmt(hogaresAgg.conObservacion)} de {fmt(hogaresAgg.count)} hogares tienen una observación
 						registrada
@@ -465,7 +612,9 @@
 	<div class="card">
 		<div class="card-head">
 			<div>
-				<h2>Detalle por barrio / vereda</h2>
+				<h2>
+					<Table2 size={16} strokeWidth={2.25} aria-hidden="true" /> Detalle por barrio / vereda
+				</h2>
 				<p class="card-note">
 					{fmt(sortedRows.length)} barrios/veredas · toca un encabezado para ordenar · desliza para ver
 					todas las columnas
@@ -619,10 +768,17 @@
 		box-shadow: var(--shadow);
 	}
 	.card h2 {
+		display: flex;
+		align-items: center;
+		gap: 7px;
 		font-size: 14.5px;
 		font-weight: 700;
 		margin: 0;
 		color: var(--color-text);
+	}
+	.card h2 :global(svg) {
+		flex: none;
+		color: var(--color-primary);
 	}
 	.card-note {
 		font-size: 11.5px;
@@ -679,6 +835,56 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
+	}
+
+	.hogares-total {
+		display: flex;
+		align-items: baseline;
+		gap: 7px;
+		margin-bottom: 12px;
+	}
+	.hogares-total-value {
+		font-size: clamp(26px, 7vw, 32px);
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+	}
+	.hogares-total-label {
+		font-size: 12.5px;
+		font-weight: 600;
+		color: var(--color-muted);
+	}
+	.hogares-promedio {
+		margin-top: 12px;
+		padding-top: 12px;
+		border-top: 1px dashed var(--color-border);
+	}
+	.hogares-promedio b {
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.evac-total {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 7px;
+		margin-bottom: 12px;
+	}
+	.evac-total-value {
+		font-size: clamp(26px, 7vw, 32px);
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		font-variant-numeric: tabular-nums;
+	}
+	.evac-total-value.critical {
+		color: var(--color-accent);
+	}
+	.evac-total-label {
+		font-size: 12.5px;
+		font-weight: 600;
+		color: var(--color-muted);
 	}
 
 	.visitantes {
