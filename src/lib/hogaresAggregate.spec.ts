@@ -111,15 +111,47 @@ describe('tagObservaciones()', () => {
 	it('returns an empty list when no observación matches any keyword', () => {
 		expect(tagObservaciones([hogar({ observacion: 'sin novedad' })])).toEqual([]);
 	});
+
+	it('flags danger-related tags as critical and cosmetic ones as not', () => {
+		const tags = tagObservaciones([
+			hogar({ observacion: 'GRIETAS EN LA PARED' }),
+			hogar({ observacion: 'VIVIENDA COLAPSADA' }),
+			hogar({ observacion: 'REQUIERE ALOJAMIENTO' })
+		]);
+		const criticalByLabel = Object.fromEntries(tags.map((t) => [t.label, t.critical]));
+		expect(criticalByLabel['Grietas']).toBe(false);
+		expect(criticalByLabel['Alojamiento']).toBe(false);
+		expect(criticalByLabel['Colapso']).toBe(true);
+	});
 });
 
 describe('listObservaciones()', () => {
-	it('lists only hogares with a non-empty observación, sorted by barrio', () => {
+	it('lists only hogares with a non-empty observación and carries the código de hogar', () => {
 		const list = listObservaciones([
 			hogar({ hogar: '2', barrio: 'Quinamayo', observacion: 'B' }),
 			hogar({ hogar: '1', barrio: 'Bonanza', observacion: 'A' }),
 			hogar({ hogar: '3', barrio: 'Robles', observacion: '' })
 		]);
+		expect(list.map((o) => o.hogar)).toEqual(['1', '2']);
 		expect(list.map((o) => o.barrio)).toEqual(['Bonanza', 'Quinamayo']);
+	});
+
+	it('marks observaciones that mention imminent danger as critical', () => {
+		const list = listObservaciones([
+			hogar({ hogar: '1', observacion: 'Grietas leves en la fachada' }),
+			hogar({ hogar: '2', observacion: 'Riesgo de colapso, requiere evacuación urgente' })
+		]);
+		const byHogar = Object.fromEntries(list.map((o) => [o.hogar, o.critical]));
+		expect(byHogar['1']).toBe(false);
+		expect(byHogar['2']).toBe(true);
+	});
+
+	it('sorts critical observaciones first, then alphabetically by barrio', () => {
+		const list = listObservaciones([
+			hogar({ hogar: '1', barrio: 'Zeta', observacion: 'Grietas leves' }),
+			hogar({ hogar: '2', barrio: 'Alfa', observacion: 'Colapso total, evacuación urgente' }),
+			hogar({ hogar: '3', barrio: 'Beta', observacion: 'Fisuras menores' })
+		]);
+		expect(list.map((o) => o.hogar)).toEqual(['2', '3', '1']);
 	});
 });

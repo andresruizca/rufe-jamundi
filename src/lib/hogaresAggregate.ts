@@ -72,41 +72,61 @@ export function aggregateHogares(hogares: Hogar[]): HogaresAggregate {
  * comunes en las observaciones para dar un primer vistazo de qué se está
  * reportando, sin tener que leer cientos de notas una por una. La lista
  * completa siempre queda disponible debajo (ver `listObservaciones`). */
-const OBS_KEYWORDS: { label: string; pattern: RegExp }[] = [
-	{ label: 'Grietas', pattern: /GRIET|FISURA/i },
-	{ label: 'Colapso', pattern: /COLAPS|DERRUMB|CAY[OÓ]/i },
-	{ label: 'Destruida', pattern: /DESTRUI|DESTRUCCI/i },
-	{ label: 'Evacuación', pattern: /EVACU/i },
-	{ label: 'Alojamiento', pattern: /ALOJAMIENTO/i },
-	{ label: 'Riesgo colapso', pattern: /RIESGO/i },
-	{ label: 'Urgente', pattern: /URGENTE/i },
-	{ label: 'Fuga agua/gas', pattern: /FUGA/i }
+const OBS_KEYWORDS: { label: string; pattern: RegExp; critical: boolean }[] = [
+	{ label: 'Grietas', pattern: /GRIET|FISURA/i, critical: false },
+	{ label: 'Colapso', pattern: /COLAPS|DERRUMB|CAY[OÓ]/i, critical: true },
+	{ label: 'Destruida', pattern: /DESTRUI|DESTRUCCI/i, critical: true },
+	{ label: 'Evacuación', pattern: /EVACU/i, critical: true },
+	{ label: 'Alojamiento', pattern: /ALOJAMIENTO/i, critical: false },
+	{ label: 'Riesgo colapso', pattern: /RIESGO/i, critical: true },
+	{ label: 'Urgente', pattern: /URGENTE/i, critical: true },
+	{ label: 'Fuga agua/gas', pattern: /FUGA/i, critical: true }
 ];
 
 export interface ObsTag {
 	label: string;
 	count: number;
+	critical: boolean;
 }
 
 export function tagObservaciones(hogares: Hogar[]): ObsTag[] {
-	return OBS_KEYWORDS.map(({ label, pattern }) => ({
+	return OBS_KEYWORDS.map(({ label, pattern, critical }) => ({
 		label,
+		critical,
 		count: hogares.filter((h) => h.observacion && pattern.test(h.observacion)).length
 	}))
 		.filter((t) => t.count > 0)
 		.sort((a, b) => b.count - a.count);
 }
 
+/** Riesgo inminente para las personas (colapso, evacuación, urgencia, fuga
+ * de gas) — se muestran primero y marcadas en la lista, para que quien
+ * coordina la respuesta priorice esos hogares sin tener que leer las 500+
+ * observaciones. "Grietas" y "requiere alojamiento" solas no bastan para
+ * marcar un hogar como crítico (son comunes y no implican riesgo
+ * inmediato). */
+const CRITICAL_PATTERN = /COLAPS|DERRUMB|CAY[OÓ]|DESTRUI|DESTRUCCI|EVACU|RIESGO|URGENTE|FUGA/i;
+
 export interface ObservacionItem {
 	hogar: string;
 	barrio: string;
 	zona: Zona;
 	texto: string;
+	critical: boolean;
 }
 
 export function listObservaciones(hogares: Hogar[]): ObservacionItem[] {
 	return hogares
 		.filter((h) => h.observacion)
-		.map((h) => ({ hogar: h.hogar, barrio: h.barrio, zona: h.zona, texto: h.observacion }))
-		.sort((a, b) => a.barrio.localeCompare(b.barrio));
+		.map((h) => ({
+			hogar: h.hogar,
+			barrio: h.barrio,
+			zona: h.zona,
+			texto: h.observacion,
+			critical: CRITICAL_PATTERN.test(h.observacion)
+		}))
+		.sort((a, b) => {
+			if (a.critical !== b.critical) return a.critical ? -1 : 1;
+			return a.barrio.localeCompare(b.barrio);
+		});
 }
