@@ -1,5 +1,10 @@
 <script lang="ts">
-	let { query = $bindable(), placeholder }: { query: string; placeholder: string } = $props();
+	let {
+		query = $bindable(),
+		placeholder,
+		label = 'Buscar barrio o vereda',
+		id = 'search-box'
+	}: { query: string; placeholder: string; label?: string; id?: string } = $props();
 	let inputEl: HTMLInputElement;
 
 	function clear() {
@@ -23,9 +28,9 @@
 	>
 		<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
 	</svg>
-	<label for="barrio-search" class="sr-only">Buscar barrio o vereda</label>
+	<label for={id} class="sr-only">{label}</label>
 	<input
-		id="barrio-search"
+		{id}
 		bind:this={inputEl}
 		bind:value={query}
 		type="text"

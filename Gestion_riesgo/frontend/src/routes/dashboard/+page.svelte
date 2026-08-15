@@ -11,7 +11,12 @@
 		tagObservaciones,
 		listObservaciones
 	} from '$lib/hogaresAggregate';
+	import '$lib/dashboard.css';
 	import Header from '$lib/components/Header.svelte';
+	import DashboardTabs from '$lib/components/DashboardTabs.svelte';
+	import type { DashboardTab } from '$lib/dashboardTabs';
+	import InstEducativasView from '$lib/components/dashboard/InstEducativasView.svelte';
+	import EquipamientosView from '$lib/components/dashboard/EquipamientosView.svelte';
 	import ZonaFilter from '$lib/components/ZonaFilter.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import KpiTile from '$lib/components/KpiTile.svelte';
@@ -35,6 +40,8 @@
 	} from '@lucide/svelte';
 
 	const REFRESH_MS = 3 * 60 * 1000;
+
+	let activeTab = $state<DashboardTab>('personas');
 
 	let liveDataset = $state<Dataset | null>(null);
 	let liveStatus = $state<'loading' | 'live' | 'stale'>('loading');
@@ -191,6 +198,13 @@
 <div class="wrap">
 	<Header asOf={DATA.asOf} total={DATA.total} hogares={DATA.hogares.length} />
 
+	<DashboardTabs bind:active={activeTab} />
+
+	{#if activeTab === 'inst-educativas'}
+		<InstEducativasView />
+	{:else if activeTab === 'equipamientos'}
+		<EquipamientosView />
+	{:else}
 	<LiveStatus
 		status={liveStatus}
 		asOf={DATA.asOf}
@@ -640,6 +654,7 @@
 			enlace", el tablero sigue mostrando el último snapshot descargado (ver aviso arriba).
 		</p>
 	</footer>
+	{/if}
 </div>
 
 <style>

@@ -1,0 +1,210 @@
+{
+	"asOf": "15 de agosto de 2026, 8:42 a. m.",
+	"items": [
+		{
+			"categoria": "ALCALDIA MUNICIPAL",
+			"nombre": "ALCALDIA MUNICIPAL",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "CONCEJO MUNICIPAL",
+			"nombre": "CONCEJO MUNICIPAL",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "HOSPITAL MUNICIPAL",
+			"nombre": "HOSPITAL MUNICIPAL",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "PLAZA DE MERCADO",
+			"nombre": "PLAZA DE MERCADO",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "ESTACIÓN DE BOMBEROS SAN ANTONIO",
+			"nombre": "ESTACIÓN DE BOMBEROS SAN ANTONIO",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "Sí"
+		},
+		{
+			"categoria": "INSTALACIONES DE CULTURA",
+			"nombre": "BIBLIOTECA MUNICIPAL",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "INSTALACIONES DE CULTURA",
+			"nombre": "CASA DE LA CULTURA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "INSTALACIONES DE CULTURA",
+			"nombre": "CENTRO CULTURAS ANTIGUA ESTACION",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "No",
+			"informe": "No"
+		},
+		{
+			"categoria": "SECTOR RELIGIOSO",
+			"nombre": "ASAMBLEA DE DIOS - CRA 50",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Por confirmar",
+			"informe": "Sin dato"
+		},
+		{
+			"categoria": "SECTOR RELIGIOSO",
+			"nombre": "RESTAURACION OLAM",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Por confirmar",
+			"informe": "Sin dato"
+		},
+		{
+			"categoria": "SECTOR RELIGIOSO",
+			"nombre": "PENTECOSTAL UNIDA DE COLOMBIA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Por confirmar",
+			"informe": "Sin dato"
+		},
+		{
+			"categoria": "CENTROS DE DESARROLLO",
+			"nombre": "CDA TERRANOVA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "Sí"
+		},
+		{
+			"categoria": "CENTROS DE DESARROLLO",
+			"nombre": "CDA QUINAMAYO",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "No",
+			"informe": "No"
+		},
+		{
+			"categoria": "CENTROS DE DESARROLLO",
+			"nombre": "Sin detalle — 6 unidades",
+			"estado": "En verificación",
+			"cantidad": 6,
+			"sinDetalle": true,
+			"visita": "Sin dato",
+			"informe": "Sin dato"
+		},
+		{
+			"categoria": "CENTROS COMERCIALES",
+			"nombre": "ALGUARA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "Sí"
+		},
+		{
+			"categoria": "CENTROS COMERCIALES",
+			"nombre": "CAÑA DULCE",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "CENTROS COMERCIALES",
+			"nombre": "PRONTO PLAZA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		},
+		{
+			"categoria": "CENTROS COMERCIALES",
+			"nombre": "ANTURIAS PLAZA",
+			"estado": "Averiado",
+			"cantidad": 1,
+			"sinDetalle": false,
+			"visita": "Sí",
+			"informe": "No"
+		}
+	],
+	"categorias": [
+		{
+			"nombre": "ALCALDIA MUNICIPAL",
+			"totalReportado": 1
+		},
+		{
+			"nombre": "CONCEJO MUNICIPAL",
+			"totalReportado": 1
+		},
+		{
+			"nombre": "HOSPITAL MUNICIPAL",
+			"totalReportado": 1
+		},
+		{
+			"nombre": "PLAZA DE MERCADO",
+			"totalReportado": 1
+		},
+		{
+			"nombre": "ESTACIÓN DE BOMBEROS SAN ANTONIO",
+			"totalReportado": 1
+		},
+		{
+			"nombre": "INSTALACIONES DE CULTURA",
+			"totalReportado": 3
+		},
+		{
+			"nombre": "GERIATRICOS",
+			"totalReportado": null,
+			"nota": "EN VERIFICACIÓN POR PARTE DE SECRETARIA DE SALUD"
+		},
+		{
+			"nombre": "SECTOR RELIGIOSO",
+			"totalReportado": 3
+		},
+		{
+			"nombre": "CENTROS DE DESARROLLO",
+			"totalReportado": 8
+		},
+		{
+			"nombre": "CENTROS COMERCIALES",
+			"totalReportado": 4
+		}
+	]
+}
