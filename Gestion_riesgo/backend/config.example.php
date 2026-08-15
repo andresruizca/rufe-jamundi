@@ -15,11 +15,14 @@ return [
         'zona'     => 'America/Bogota',
     ],
 
+    // Los nombres reales de la base y del usuario van en config.php, que no se
+    // versiona: este archivo es público y no debe revelar a qué apunta el
+    // sistema en producción.
     'db' => [
         'host'     => 'localhost',
         'puerto'   => 3306,
-        'nombre'   => 'gilibert_sgr',
-        'usuario'  => 'gilibert_sgr',
+        'nombre'   => 'CUENTA_sgr',
+        'usuario'  => 'CUENTA_sgr',
         'password' => '',
         'charset'  => 'utf8mb4',
     ],
