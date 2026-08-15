@@ -10,6 +10,10 @@ actualizaciones del sistema.
 | Aplicación | <https://grj.oticjamundi.com> |
 | API | <https://grj.oticjamundi.com/api> |
 
+**Ninguna pantalla es pública.** Sin sesión, cualquier ruta redirige al login y
+el contenido protegido no se renderiza en ningún momento — ni siquiera durante
+la redirección.
+
 Todo el sistema vive en **una sola carpeta del hosting**
 (`/home1/gilibert/grj.oticjamundi.com`) y bajo **un solo subdominio**. La API se
 sirve como subcarpeta `/api` del mismo dominio, no en un subdominio aparte: así
@@ -22,8 +26,7 @@ sitio anterior quedó respaldado íntegro en
 `/home1/gilibert/_respaldo_tablero_rufe_20260815`; restaurarlo es copiar esa
 carpeta de vuelta al document root.
 
-`gr.oticjamundi.com` ya existía y comparte document root con `grj`, así que
-sirve exactamente lo mismo sin ocupar espacio adicional.
+
 
 ---
 

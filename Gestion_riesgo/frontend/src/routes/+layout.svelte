@@ -94,8 +94,21 @@
 		<LoaderCircle size={20} class="girando" aria-hidden="true" />
 		Cargando el sistema…
 	</div>
-{:else if esLogin || !sesion.autenticado}
+{:else if esLogin}
 	{@render children?.()}
+{:else if !sesion.autenticado}
+	<!--
+		Sin sesión NO se renderiza el contenido de la página, ni siquiera un
+		instante. La redirección al login la hace `goto` de forma asíncrona, así
+		que si aquí se pintaran los children, cualquiera que abriera /dashboard
+		vería el tablero con datos reales del RUFE durante esa ventana — y si la
+		navegación se demora o falla, indefinidamente. Fue exactamente lo que
+		ocurrió en producción el 15 de agosto de 2026.
+	-->
+	<div class="cargando" style="min-height:100vh">
+		<LoaderCircle size={20} class="girando" aria-hidden="true" />
+		Redirigiendo al inicio de sesión…
+	</div>
 {:else}
 	<div class="app">
 		<MenuLateral
