@@ -17,6 +17,10 @@ build/
 .env.*
 !.env.example
 
+# Configuración de producción del backend: contiene la contraseña de MySQL.
+# La plantilla versionada es backend/config.example.php.
+Gestion_riesgo/backend/config.php
+
 # Sistema operativo / editor
 .DS_Store
 Thumbs.db

@@ -1,0 +1,91 @@
+import type { Rol } from '$lib/navigation';
+
+export type Usuario = {
+	id: number;
+	nombre: string;
+	email: string;
+	rol: Rol;
+	rol_etiqueta: string;
+	activo: boolean;
+	ultimo_acceso: string | null;
+	creado_en: string;
+};
+
+export type UsuarioSesion = {
+	id: number;
+	nombre: string;
+	email: string;
+	rol: Rol;
+	capacidades: string[];
+};
+
+export type RolCatalogo = {
+	valor: Rol;
+	etiqueta: string;
+	descripcion: string;
+	capacidades: string[];
+};
+
+export type Modulo = {
+	nombre: string;
+	descripcion: string;
+	roles: string[];
+};
+
+export type InfoSistema = {
+	aplicacion: {
+		nombre: string;
+		version: string;
+		entorno: string;
+		entidad: string;
+		dependencia: string;
+		descripcion: string;
+	};
+	modulos: Modulo[];
+	roles: RolCatalogo[];
+	tecnologia: { capa: string; detalle: string }[];
+	estado: {
+		base_datos: { conectada: boolean; nombre: string };
+		php: string;
+		zona_horaria: string;
+		hora_servidor: string;
+		usuarios_activos: number;
+		sesiones_activas: number;
+	};
+	repositorio: { owner: string; repo: string; branch: string; url: string };
+};
+
+export type Commit = {
+	sha: string;
+	sha_corto: string;
+	titulo: string;
+	descripcion: string;
+	autor_nombre: string;
+	autor_login: string | null;
+	autor_avatar: string | null;
+	fecha: string;
+	url: string;
+	equipo_clave: string;
+	equipo_nombre: string;
+	equipo_rol: string;
+};
+
+export type ResumenAutor = {
+	clave: string;
+	nombre: string;
+	rol: string;
+	login: string | null;
+	avatar: string | null;
+	total: number;
+	ultima_fecha: string | null;
+};
+
+export type Actualizaciones = {
+	repositorio: { owner: string; repo: string; branch: string; url: string };
+	commits: Commit[];
+	autores: ResumenAutor[];
+	total: number;
+	desde_cache: boolean;
+	error: string | null;
+	consultado_en: string;
+};
