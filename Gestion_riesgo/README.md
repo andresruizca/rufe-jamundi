@@ -7,9 +7,18 @@ actualizaciones del sistema.
 
 | | |
 |---|---|
-| Aplicación | <https://sgr.oticjamundi.com> |
+| Aplicación | <https://grj.oticjamundi.com> |
+| Espejo | <https://gr.oticjamundi.com> y <https://sgr.oticjamundi.com> |
 | API | <https://api-sgr.oticjamundi.com> |
-| Tablero RUFE original | <https://grj.oticjamundi.com> (sigue publicado aparte) |
+
+Desde el 15 de agosto de 2026 el sistema **reemplaza** al tablero RUFE que se
+publicaba abierto en `grj.oticjamundi.com`: ahora todo, incluido el tablero,
+exige iniciar sesión. El sitio anterior quedó respaldado íntegro en el servidor,
+en `/home1/gilibert/_respaldo_tablero_rufe_20260815`, y restaurarlo es copiar esa
+carpeta de vuelta al document root.
+
+`gr.oticjamundi.com` comparte el mismo document root que `grj`, así que sirve
+exactamente lo mismo. `sgr.oticjamundi.com` tiene su propia copia del frontend.
 
 ---
 
@@ -194,7 +203,8 @@ Rutas en el servidor:
 
 | Qué | Dónde |
 |---|---|
-| Frontend | `/home1/gilibert/sgr.oticjamundi.com` |
+| Frontend (principal) | `/home1/gilibert/grj.oticjamundi.com` — lo sirven grj y gr |
+| Frontend (espejo) | `/home1/gilibert/sgr.oticjamundi.com` |
 | Backend | `/home1/gilibert/sgr_backend` (docroot: `public/`) |
 | Configuración | `/home1/gilibert/sgr_backend/config.php` — **fuera** del docroot |
 
