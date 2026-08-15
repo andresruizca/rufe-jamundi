@@ -1,0 +1,30 @@
+# INTRANET-JAMUNDI es un repositorio independiente, con su propio remoto
+# (oficina-tic-jamundi/intranet-jamundi). Se excluye a propósito: anidarlo aquí
+# rompería su historia y arrastraría su .env con credenciales.
+INTRANET-JAMUNDI/
+
+# Dependencias y artefactos de build
+node_modules/
+vendor/
+dist/
+build/
+.svelte-kit/
+.output/
+*.tsbuildinfo
+
+# Entorno y secretos — nunca versionar
+.env
+.env.*
+!.env.example
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+storage/logs/
+tmp/
