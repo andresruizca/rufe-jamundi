@@ -7,6 +7,45 @@
  * identidad de otros proyectos.
  */
 
+/* ── Base global ──────────────────────────────────────────────────────
+ * Estas reglas venían en el +layout.svelte del proyecto RUFE, que no forma
+ * parte de lo que se reutilizó aquí. Sin ellas el margen por defecto de
+ * `body` provocaba 17 px de desplazamiento horizontal en toda la aplicación
+ * y, sin `border-box`, cualquier elemento con `width: 100%` más relleno
+ * quedaba más ancho que su contenedor y descuadraba el diseño.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	background: var(--color-bg);
+}
+
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+	text-wrap: balance;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
+}
+
 .app {
 	display: grid;
 	grid-template-columns: var(--ancho-menu, 260px) 1fr;
@@ -226,18 +265,22 @@
 
 .barra__menu-btn {
 	display: none;
-	background: transparent;
-	border: 1px solid var(--color-border-strong);
+	align-items: center;
+	gap: 0.35rem;
+	background: var(--color-primary);
+	border: 1px solid var(--color-primary);
 	border-radius: 8px;
-	padding: 0.35rem;
+	padding: 0.42rem 0.7rem;
 	cursor: pointer;
-	color: var(--color-text);
+	color: #fff;
+	font: inherit;
+	font-size: 0.82rem;
+	font-weight: 600;
 }
 
 @media (max-width: 900px) {
 	.barra__menu-btn {
-		display: grid;
-		place-items: center;
+		display: inline-flex;
 	}
 }
 

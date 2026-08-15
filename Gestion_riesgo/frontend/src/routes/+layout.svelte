@@ -80,13 +80,18 @@
 
 		<div class="contenido">
 			<header class="barra">
+				<!-- Con el menú plegado este botón es la ÚNICA forma de llegar a las
+				     demás secciones, así que lleva la palabra "Menú" y no solo el
+				     icono: un icono suelto pasa desapercibido. -->
 				<button
 					class="barra__menu-btn"
 					type="button"
-					aria-label="Abrir el menú"
+					aria-label="Abrir el menú de navegación"
+					aria-expanded={menuAbierto}
 					onclick={() => (menuAbierto = true)}
 				>
-					<Menu size={20} aria-hidden="true" />
+					<Menu size={18} aria-hidden="true" />
+					<span>Menú</span>
 				</button>
 				<h1 class="barra__titulo">{titulo}</h1>
 			</header>
