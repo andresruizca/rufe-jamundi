@@ -48,10 +48,25 @@ return [
         // Token de solo lectura. Se usa desde el servidor para que nunca viaje
         // al navegador. Un repositorio público funciona sin token, pero con él
         // el límite de peticiones sube de 60 a 5000 por hora.
-        'token'  => '',
-        'owner'  => 'miltonf10',
-        'repo'   => 'rufe-jamundi',
-        'branch' => 'main',
+        'token' => '',
+
+        // El sistema se desarrolla en dos frentes y cada uno vive en su propia
+        // rama. Se leen ambas y se funden en una sola línea de tiempo: con una
+        // sola, media historia del sistema quedaría invisible.
+        'fuentes' => [
+            [
+                'owner' => 'miltonf10',
+                'repo' => 'rufe-jamundi',
+                'branch' => 'main',
+                'etiqueta' => 'Tablero RUFE',
+            ],
+            [
+                'owner' => 'miltonf10',
+                'repo' => 'rufe-jamundi',
+                'branch' => 'sistema-gestion-riesgo',
+                'etiqueta' => 'Plataforma',
+            ],
+        ],
     ],
 
     // Clave de un solo uso para ejecutar bin/install.php. Vaciar tras instalar.

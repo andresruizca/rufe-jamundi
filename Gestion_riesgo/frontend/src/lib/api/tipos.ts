@@ -65,9 +65,17 @@ export type Commit = {
 	autor_avatar: string | null;
 	fecha: string;
 	url: string;
+	/** Frente del que proviene: "Tablero RUFE" o "Plataforma". */
+	fuente: string;
 	equipo_clave: string;
 	equipo_nombre: string;
 	equipo_rol: string;
+};
+
+export type Fuente = {
+	etiqueta: string;
+	branch: string;
+	url: string;
 };
 
 export type ResumenAutor = {
@@ -82,6 +90,7 @@ export type ResumenAutor = {
 
 export type Actualizaciones = {
 	repositorio: { owner: string; repo: string; branch: string; url: string };
+	fuentes: Fuente[];
 	commits: Commit[];
 	autores: ResumenAutor[];
 	total: number;

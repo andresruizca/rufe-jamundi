@@ -120,6 +120,7 @@ final class AcercaController
 
         Response::ok([
             'repositorio'  => $github->repositorio(),
+            'fuentes'      => $github->fuentesPublicas(),
             'commits'      => $commits,
             'autores'      => $this->resumenPorAutor($commits),
             'total'        => count($commits),

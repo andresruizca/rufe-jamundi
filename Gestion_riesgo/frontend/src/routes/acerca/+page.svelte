@@ -280,7 +280,10 @@
 						<div class="hito__cuerpo">
 							<div class="hito__cabecera">
 								<span class="hito__autor">{c.equipo_nombre}</span>
-								<span class="hito__fecha" title={fechaHora(c.fecha)}>{haceCuanto(c.fecha)}</span>
+								<span class="hito__meta">
+									{#if c.fuente}<span class="hito__fuente">{c.fuente}</span>{/if}
+									<span class="hito__fecha" title={fechaHora(c.fecha)}>{haceCuanto(c.fecha)}</span>
+								</span>
 							</div>
 							<p class="hito__titulo">{c.titulo}</p>
 							{#if c.descripcion}<p class="hito__desc">{c.descripcion}</p>{/if}
@@ -543,9 +546,29 @@
 		color: var(--color-primary-dark);
 	}
 
+	.hito__meta {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
 	.hito__fecha {
 		font-size: 0.75rem;
 		color: var(--color-muted);
+	}
+
+	/* De qué frente viene el cambio: el tablero o la plataforma que lo envuelve. */
+	.hito__fuente {
+		font-size: 0.68rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted);
+		background: var(--color-surface-alt);
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		padding: 0.1rem 0.45rem;
+		white-space: nowrap;
 	}
 
 	.hito__titulo {
