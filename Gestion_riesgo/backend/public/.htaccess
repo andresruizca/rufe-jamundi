@@ -1,0 +1,32 @@
+# API del Sistema de Gestión del Riesgo — Jamundí
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+  # Apache de cPanel no propaga la cabecera Authorization a PHP por CGI/FastCGI.
+  # Sin esto, todas las peticiones autenticadas llegarían como anónimas.
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+  # Todo pasa por el front controller salvo los archivos que existan de verdad.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  # Las respuestas de la API dependen de la sesión: nunca deben quedar en caché.
+  Header set Cache-Control "no-store"
+</IfModule>
+
+Options -Indexes
+
+# El código y la configuración viven fuera de public/, pero si alguna vez se
+# copian aquí por error, no deben poder descargarse.
+<FilesMatch "\.(sql|md|json|lock|example\.php)$">
+  Require all denied
+</FilesMatch>
