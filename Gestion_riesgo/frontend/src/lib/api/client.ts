@@ -3,17 +3,20 @@ import { browser } from '$app/environment';
 /**
  * Cliente HTTP de la API.
  *
- * La URL base se resuelve por dominio y no por variable de entorno del build:
- * así el mismo artefacto compilado sirve en local y en producción, sin tener
- * que recompilar para cambiar de servidor.
+ * En producción la API se sirve bajo `/api` del MISMO dominio que la
+ * aplicación. Eso elimina el CORS de raíz: no hay petición entre orígenes
+ * distintos que el navegador tenga que autorizar, ni lista de dominios que
+ * mantener cuando el sitio cambia de dirección.
+ *
+ * En desarrollo el frontend corre en el puerto 5173 y la API en el 8000, que
+ * sí son orígenes distintos; ahí la URL es absoluta y el backend permite ese
+ * origen por configuración.
  */
 export const API_BASE = (() => {
-	if (!browser) return 'https://api-sgr.oticjamundi.com';
+	if (!browser) return '/api';
 	const host = window.location.hostname;
 
-	return host === 'localhost' || host === '127.0.0.1'
-		? 'http://localhost:8000'
-		: 'https://api-sgr.oticjamundi.com';
+	return host === 'localhost' || host === '127.0.0.1' ? 'http://localhost:8000' : '/api';
 })();
 
 const CLAVE_TOKEN = 'sgr_token';

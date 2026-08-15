@@ -27,13 +27,11 @@ return [
     // Orígenes autorizados para CORS. El frontend es estático y se sirve desde
     // otro host, así que sin esto el navegador bloquea toda llamada a la API.
     'cors' => [
-        // El frontend se sirve desde varios dominios (grj es el principal; gr
-        // comparte su carpeta y sgr se conserva como respaldo). Cada uno debe
-        // listarse: el navegador compara el origen exacto.
+        // En producción la API se sirve bajo /api del mismo dominio que la
+        // aplicación, así que no hay petición entre orígenes y esta lista no
+        // llega a usarse. Solo hace falta en desarrollo, donde el frontend
+        // (5173) y la API (8000) sí son orígenes distintos.
         'origenes' => [
-            'https://grj.oticjamundi.com',
-            'https://gr.oticjamundi.com',
-            'https://sgr.oticjamundi.com',
             'http://localhost:5173',
         ],
     ],

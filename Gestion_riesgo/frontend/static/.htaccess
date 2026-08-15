@@ -9,6 +9,12 @@ DirectoryIndex index.html
   RewriteCond %{HTTPS} !=on
   RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
 
+  # /api es el backend PHP y tiene su propio .htaccess. Debe excluirse aquí:
+  # sus rutas (/api/auth/login…) tampoco son archivos reales, así que sin esta
+  # condición la regla siguiente las convertiría en index.html y el navegador
+  # recibiría HTML donde espera JSON.
+  RewriteCond %{REQUEST_URI} !^/api(/|$)
+
   # Aplicación de una sola página: cualquier ruta que no sea un archivo real
   # (/dashboard, /acerca, /admin/usuarios) la resuelve el router en el
   # navegador. Sin esto, recargar dentro de la aplicación daría 404.

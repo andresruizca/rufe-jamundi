@@ -1,0 +1,4 @@
+# El esquema SQL no debe ser descargable: revela la estructura completa de la
+# base de datos. En producción este directorio vive dentro de la carpeta
+# pública (api/database), así que la denegación es imprescindible.
+Require all denied

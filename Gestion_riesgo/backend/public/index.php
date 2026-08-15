@@ -21,7 +21,17 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Router;
 
-$raiz = dirname(__DIR__);
+/*
+ * Raíz del backend. Admite dos disposiciones:
+ *   • Desarrollo: backend/{public/index.php, src/, config.php} → la raíz es el
+ *     directorio padre de public/.
+ *   • Producción: todo aplanado dentro de la carpeta pública en api/ → la raíz
+ *     es este mismo directorio.
+ * Se aplana en producción porque el hosting solo tiene una carpeta para el
+ * sitio y no se puede colocar código por encima del document root; src/,
+ * database/ y config.php quedan protegidos por .htaccess (ver esos archivos).
+ */
+$raiz = is_dir(__DIR__.'/src') ? __DIR__ : dirname(__DIR__);
 
 spl_autoload_register(static function (string $clase) use ($raiz): void {
     $prefijo = 'App\\';

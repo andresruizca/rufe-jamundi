@@ -1,10 +1,15 @@
 # API del Sistema de Gestión del Riesgo — Jamundí
+#
+# En producción este archivo queda en grj.oticjamundi.com/api/.htaccess, con
+# todo el backend aplanado en esa misma carpeta. Como el hosting solo ofrece
+# un directorio para el sitio, el código no puede vivir por encima del
+# document root y hay que negarle el acceso web explícitamente.
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
   RewriteCond %{HTTPS} !=on
-  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
   # Apache de cPanel no propaga la cabecera Authorization a PHP por CGI/FastCGI.
   # Sin esto, todas las peticiones autenticadas llegarían como anónimas.
@@ -25,8 +30,13 @@
 
 Options -Indexes
 
-# El código y la configuración viven fuera de public/, pero si alguna vez se
-# copian aquí por error, no deben poder descargarse.
-<FilesMatch "\.(sql|md|json|lock|example\.php)$">
+# config.php contiene la contraseña de MySQL. Si PHP dejara de interpretarse por
+# un error de configuración del servidor, sin esta regla el archivo se
+# descargaría en texto plano.
+<FilesMatch "^config.*\.php$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(sql|md|json|lock|ini|log)$">
   Require all denied
 </FilesMatch>

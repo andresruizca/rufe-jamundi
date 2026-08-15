@@ -1,0 +1,5 @@
+# En producción este directorio queda DENTRO de la carpeta pública del sitio
+# (grj.oticjamundi.com/api/src), porque el hosting no permite colocar código
+# por encima del document root. Nada de aquí debe poder pedirse por web: todo
+# entra por api/index.php.
+Require all denied

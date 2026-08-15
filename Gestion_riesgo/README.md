@@ -8,17 +8,22 @@ actualizaciones del sistema.
 | | |
 |---|---|
 | Aplicación | <https://grj.oticjamundi.com> |
-| Espejo | <https://gr.oticjamundi.com> y <https://sgr.oticjamundi.com> |
-| API | <https://api-sgr.oticjamundi.com> |
+| API | <https://grj.oticjamundi.com/api> |
+
+Todo el sistema vive en **una sola carpeta del hosting**
+(`/home1/gilibert/grj.oticjamundi.com`) y bajo **un solo subdominio**. La API se
+sirve como subcarpeta `/api` del mismo dominio, no en un subdominio aparte: así
+no hay peticiones entre orígenes distintos y el CORS deja de existir como
+problema.
 
 Desde el 15 de agosto de 2026 el sistema **reemplaza** al tablero RUFE que se
-publicaba abierto en `grj.oticjamundi.com`: ahora todo, incluido el tablero,
-exige iniciar sesión. El sitio anterior quedó respaldado íntegro en el servidor,
-en `/home1/gilibert/_respaldo_tablero_rufe_20260815`, y restaurarlo es copiar esa
+publicaba abierto: ahora todo, incluido el tablero, exige iniciar sesión. El
+sitio anterior quedó respaldado íntegro en
+`/home1/gilibert/_respaldo_tablero_rufe_20260815`; restaurarlo es copiar esa
 carpeta de vuelta al document root.
 
-`gr.oticjamundi.com` comparte el mismo document root que `grj`, así que sirve
-exactamente lo mismo. `sgr.oticjamundi.com` tiene su propia copia del frontend.
+`gr.oticjamundi.com` ya existía y comparte document root con `grj`, así que
+sirve exactamente lo mismo sin ocupar espacio adicional.
 
 ---
 
@@ -29,9 +34,27 @@ separado:
 
 ```
 Gestion_riesgo/
-├── backend/     API REST en PHP 8 + MySQL   → api-sgr.oticjamundi.com
-└── frontend/    SvelteKit 2 (build estático) → sgr.oticjamundi.com
+├── backend/     API REST en PHP 8 + MySQL    → se despliega en /api
+└── frontend/    SvelteKit 2 (build estático) → se despliega en la raíz
 ```
+
+En el servidor ambos conviven en la misma carpeta:
+
+```
+grj.oticjamundi.com/
+├── .htaccess          SPA + excluye /api del reenvío a index.html
+├── index.html  200.html  robots.txt  _app/
+└── api/
+    ├── .htaccess      front controller; niega config.php y archivos de datos
+    ├── index.php  config.php
+    ├── src/       + .htaccess  (Require all denied)
+    └── database/  + .htaccess  (Require all denied)
+```
+
+El hosting solo ofrece una carpeta por sitio, así que el código PHP no puede
+colocarse por encima del document root como sería deseable. Se compensa
+negando el acceso web a `src/`, `database/` y `config.php` desde `.htaccess`;
+está verificado que los tres responden 403.
 
 El navegador es el único que habla con las dos: descarga la aplicación del
 frontend y esta consume la API por HTTPS con un token de sesión.
@@ -117,7 +140,7 @@ registro para que no se desincronicen:
 
 ## API
 
-Base: `https://api-sgr.oticjamundi.com`. Autenticación con
+Base: `https://grj.oticjamundi.com/api`. Autenticación con
 `Authorization: Bearer <token>`.
 
 | Método | Ruta | Rol |
@@ -199,12 +222,21 @@ Luego, por cada destino:
    (la UAPI no expone extracción).
 4. Borrar el ZIP con el mismo `fileop` pero `op=unlink`.
 
+El paquete de la API va **aplanado**: `public/index.php` y `public/.htaccess`
+suben a la raíz de `api/`, junto a `src/`, `database/` y `config.php`. El
+front controller detecta esa disposición y resuelve su raíz en consecuencia.
+
+Varias funciones de subdominio solo existen en la API2, no en la UAPI:
+`SubDomain::addsubdomain` está en ambas, pero `delsubdomain` y
+`list_subdomains` solo responden por `/json-api/cpanel` con
+`cpanel_jsonapi_apiversion=2`.
+
 Rutas en el servidor:
 
 | Qué | Dónde |
 |---|---|
-| Frontend (principal) | `/home1/gilibert/grj.oticjamundi.com` — lo sirven grj y gr |
-| Frontend (espejo) | `/home1/gilibert/sgr.oticjamundi.com` |
+| Frontend | `/home1/gilibert/grj.oticjamundi.com` |
+| API | `/home1/gilibert/grj.oticjamundi.com/api` |
 | Backend | `/home1/gilibert/sgr_backend` (docroot: `public/`) |
 | Configuración | `/home1/gilibert/sgr_backend/config.php` — **fuera** del docroot |
 
