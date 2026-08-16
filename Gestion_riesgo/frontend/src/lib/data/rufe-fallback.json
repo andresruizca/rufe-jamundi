@@ -1,6 +1,6 @@
 {
-  "total": 1753,
-  "asOf": "16 de agosto de 2026, 10:41 a. m.",
+  "total": 1749,
+  "asOf": "16 de agosto de 2026 a las 12:34 p. m.",
   "barrios": [
     {
       "name": "San Antonio",
@@ -92,12 +92,12 @@
     },
     {
       "name": "Potrerito",
-      "total": 58,
-      "M": 25,
+      "total": 57,
+      "M": 24,
       "F": 33,
       "Ninos": 3,
       "Jovenes": 17,
-      "Adultos": 19,
+      "Adultos": 18,
       "AdultosMayores": 16,
       "zona": "Rural"
     },
@@ -135,17 +135,6 @@
       "zona": "Urbana"
     },
     {
-      "name": "La Liberia",
-      "total": 31,
-      "M": 14,
-      "F": 17,
-      "Ninos": 3,
-      "Jovenes": 8,
-      "Adultos": 16,
-      "AdultosMayores": 4,
-      "zona": "Rural"
-    },
-    {
       "name": "Mirador del Río - Pangola",
       "total": 30,
       "M": 12,
@@ -168,14 +157,25 @@
       "zona": "Rural"
     },
     {
+      "name": "La Liberia",
+      "total": 29,
+      "M": 12,
+      "F": 17,
+      "Ninos": 3,
+      "Jovenes": 8,
+      "Adultos": 13,
+      "AdultosMayores": 5,
+      "zona": "Rural"
+    },
+    {
       "name": "Chontaduro",
-      "total": 30,
+      "total": 29,
       "M": 10,
-      "F": 20,
-      "Ninos": 4,
-      "Jovenes": 2,
-      "Adultos": 16,
-      "AdultosMayores": 8,
+      "F": 19,
+      "Ninos": 3,
+      "Jovenes": 3,
+      "Adultos": 14,
+      "AdultosMayores": 9,
       "zona": "Rural"
     },
     {
@@ -2869,10 +2869,10 @@
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
-      "visita": "Sin dato",
+      "visita": "NO",
       "quienVisita": "",
       "observacion": "Afectaciones estructurales en vivienda.",
-      "evacuada": "Sin dato"
+      "evacuada": "NO"
     },
     {
       "hogar": "POTRERITO-10",
@@ -4000,10 +4000,10 @@
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
-      "visita": "Sin dato",
+      "visita": "SI",
       "quienVisita": "",
       "observacion": "Afectación de paredes, riesgo alto.",
-      "evacuada": "Sin dato"
+      "evacuada": "SI"
     },
     {
       "hogar": "PEON-CHONTADURO-19",
@@ -5296,7 +5296,7 @@
       "hogar": "93",
       "barrio": "Chontaduro",
       "zona": "Rural",
-      "personas": 2,
+      "personas": 1,
       "estadoBien": "Destruido",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
@@ -8881,19 +8881,6 @@
       "evacuada": "NO"
     },
     {
-      "hogar": "383",
-      "barrio": "Potrerito",
-      "zona": "Rural",
-      "personas": 1,
-      "estadoBien": "No habitable",
-      "tipoBien": "Vivienda",
-      "tenencia": "Propietario",
-      "visita": "NO",
-      "quienVisita": "",
-      "observacion": "REQUIERE VISITA",
-      "evacuada": "NO"
-    },
-    {
       "hogar": "384",
       "barrio": "Torres de Jamundi",
       "zona": "Urbana",
@@ -9066,7 +9053,7 @@
       "hogar": "398",
       "barrio": "La Liberia",
       "zona": "Rural",
-      "personas": 2,
+      "personas": 1,
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
       "tenencia": "",
@@ -10886,13 +10873,13 @@
       "hogar": "555",
       "barrio": "La Liberia",
       "zona": "Rural",
-      "personas": 2,
+      "personas": 1,
       "estadoBien": "No habitable",
       "tipoBien": "Vivienda",
       "tenencia": "Arrendatario",
       "visita": "NO",
       "quienVisita": "",
-      "observacion": "LA VIVIENDA PRESENTA DEMASIADAS GRIETAS, MUROS DESTRUIDOS, PEREDES CAIDAS, REQUIEREN ALOJAMIENTO.",
+      "observacion": "",
       "evacuada": "NO"
     },
     {
@@ -12470,6 +12457,6 @@
     }
   ],
   "warnings": [
-    "62 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
+    "66 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
   ]
 }
