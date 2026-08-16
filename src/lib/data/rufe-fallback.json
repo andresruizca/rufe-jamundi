@@ -1,6 +1,6 @@
 {
-  "total": 1750,
-  "asOf": "16 de agosto de 2026 a las 12:22 p. m.",
+  "total": 1758,
+  "asOf": "16 de agosto de 2026 a las 1:33 p. m.",
   "barrios": [
     {
       "name": "San Antonio",
@@ -80,17 +80,6 @@
       "zona": "Rural"
     },
     {
-      "name": "Quinamayo",
-      "total": 61,
-      "M": 23,
-      "F": 38,
-      "Ninos": 6,
-      "Jovenes": 16,
-      "Adultos": 26,
-      "AdultosMayores": 11,
-      "zona": "Rural"
-    },
-    {
       "name": "Potrerito",
       "total": 57,
       "M": 24,
@@ -99,6 +88,17 @@
       "Jovenes": 17,
       "Adultos": 18,
       "AdultosMayores": 16,
+      "zona": "Rural"
+    },
+    {
+      "name": "Quinamayo",
+      "total": 56,
+      "M": 20,
+      "F": 36,
+      "Ninos": 5,
+      "Jovenes": 14,
+      "Adultos": 24,
+      "AdultosMayores": 11,
       "zona": "Rural"
     },
     {
@@ -157,17 +157,6 @@
       "zona": "Rural"
     },
     {
-      "name": "Chontaduro",
-      "total": 30,
-      "M": 10,
-      "F": 20,
-      "Ninos": 4,
-      "Jovenes": 2,
-      "Adultos": 16,
-      "AdultosMayores": 8,
-      "zona": "Rural"
-    },
-    {
       "name": "La Liberia",
       "total": 29,
       "M": 12,
@@ -176,6 +165,17 @@
       "Jovenes": 8,
       "Adultos": 13,
       "AdultosMayores": 5,
+      "zona": "Rural"
+    },
+    {
+      "name": "Chontaduro",
+      "total": 29,
+      "M": 10,
+      "F": 19,
+      "Ninos": 3,
+      "Jovenes": 3,
+      "Adultos": 15,
+      "AdultosMayores": 8,
       "zona": "Rural"
     },
     {
@@ -223,17 +223,6 @@
       "zona": "Urbana"
     },
     {
-      "name": "Villa Paz",
-      "total": 15,
-      "M": 7,
-      "F": 6,
-      "Ninos": 2,
-      "Jovenes": 4,
-      "Adultos": 2,
-      "AdultosMayores": 5,
-      "zona": "Rural"
-    },
-    {
       "name": "Portal del Jordán",
       "total": 14,
       "M": 3,
@@ -245,14 +234,36 @@
       "zona": "Urbana"
     },
     {
+      "name": "Quinamayó",
+      "total": 14,
+      "M": 6,
+      "F": 8,
+      "Ninos": 1,
+      "Jovenes": 2,
+      "Adultos": 3,
+      "AdultosMayores": 8,
+      "zona": "Rural"
+    },
+    {
+      "name": "Villa Paz",
+      "total": 14,
+      "M": 6,
+      "F": 6,
+      "Ninos": 2,
+      "Jovenes": 4,
+      "Adultos": 1,
+      "AdultosMayores": 5,
+      "zona": "Rural"
+    },
+    {
       "name": "Puente Velez",
-      "total": 13,
-      "M": 7,
+      "total": 14,
+      "M": 8,
       "F": 6,
       "Ninos": 1,
       "Jovenes": 3,
       "Adultos": 5,
-      "AdultosMayores": 3,
+      "AdultosMayores": 4,
       "zona": "Rural"
     },
     {
@@ -4000,10 +4011,10 @@
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
-      "visita": "Sin dato",
+      "visita": "SI",
       "quienVisita": "",
       "observacion": "Afectación de paredes, riesgo alto.",
-      "evacuada": "Sin dato"
+      "evacuada": "SI"
     },
     {
       "hogar": "PEON-CHONTADURO-19",
@@ -4172,6 +4183,110 @@
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Fisura en el baño, se cayó la ducha.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-1",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Desplome total de vivienda de techo en teja.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-2",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Desplome importante del techo de vivienda en bahareque, tejas en el piso.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-3",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Es un lote que no pertenece a la vivienda (Dos paredes destruidas).",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-4",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "Habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "NO",
+      "quienVisita": "",
+      "observacion": "Piso roto segundo piso, riesgo alto.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-5",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Casa de bahareque, afectación principal en habitación, sala, ducha y barra de comedor. Todo en mal estado.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-6",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Pared del pasillo con 2 grietas.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-7",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Poseedor",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Toda la finca presenta grietas.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "QUINAMAYO-8",
+      "barrio": "Quinamayó",
+      "zona": "Rural",
+      "personas": 5,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Se observa ladrillo caído y el techo se ladeó en parte de atrás (patio).",
       "evacuada": "Sin dato"
     },
     {
@@ -5296,7 +5411,7 @@
       "hogar": "93",
       "barrio": "Chontaduro",
       "zona": "Rural",
-      "personas": 2,
+      "personas": 1,
       "estadoBien": "Destruido",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
@@ -6843,7 +6958,7 @@
       "hogar": "214",
       "barrio": "Quinamayo",
       "zona": "Rural",
-      "personas": 5,
+      "personas": 1,
       "estadoBien": "Habitable",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
@@ -9963,7 +10078,7 @@
       "hogar": "479",
       "barrio": "Quinamayo",
       "zona": "Rural",
-      "personas": 3,
+      "personas": 2,
       "estadoBien": "Habitable",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
@@ -10468,16 +10583,16 @@
     },
     {
       "hogar": "522",
-      "barrio": "Villa Paz",
+      "barrio": "Puente Velez",
       "zona": "Rural",
       "personas": 2,
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
-      "tenencia": "Propietario",
+      "tenencia": "Ocupante",
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "AVERIACIONES DENTRO DE LA CASA Y EN FACHADA",
-      "evacuada": "Sin dato"
+      "evacuada": "NO"
     },
     {
       "hogar": "523",
@@ -12457,6 +12572,6 @@
     }
   ],
   "warnings": [
-    "65 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
+    "71 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
   ]
 }
