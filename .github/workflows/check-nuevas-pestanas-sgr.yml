@@ -1,0 +1,120 @@
+name: Revisar pestañas nuevas de BASE-DATOS RUFE (Sistema de Gestión del Riesgo)
+
+# Igual que check-nuevas-pestanas.yml, pero para el otro despliegue: el
+# dashboard dentro del Sistema de Gestión del Riesgo (rama
+# sistema-gestion-riesgo, hosting propio en cPanel — grj.oticjamundi.com).
+# Ese dashboard no se sirve desde GitHub Pages, así que agregar una pestaña
+# no basta con comitear: hay que compilar el sitio y subirlo al hosting.
+#
+# Los cron de GitHub Actions solo se disparan desde la rama default
+# (main), por eso este workflow vive acá aunque opere sobre otra rama:
+# hace checkout de sistema-gestion-riesgo, revisa/actualiza su
+# barrioTabs.json, y si hubo cambios, comitea+empuja a esa rama, compila
+# el frontend y sube el resultado al hosting por la API de cPanel (mismos
+# pasos que se hicieron a mano la primera vez).
+
+on:
+  schedule:
+    - cron: '20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: check-nuevas-pestanas-sgr
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: Gestion_riesgo/frontend
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sistema-gestion-riesgo
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Gestion_riesgo/frontend/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run data:check-pestanas
+
+      - id: cambios
+        run: |
+          if git diff --quiet -- src/lib/baseDatosRufe/barrioTabs.json; then
+            echo "hay_cambios=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay_cambios=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refrescar el snapshot de respaldo con el barrio nuevo
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: npm run data:refresh
+
+      - name: Comitear y subir a sistema-gestion-riesgo
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/lib/baseDatosRufe/barrioTabs.json src/lib/data/rufe-fallback.json
+          git commit -m "Agregar pestaña(s) nueva(s) de BASE-DATOS RUFE detectada(s) automáticamente"
+          git push origin HEAD:sistema-gestion-riesgo
+
+      - name: Compilar el frontend
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: npm run build
+
+      - name: Empaquetar el build (con .htaccess incluido)
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: |
+          cd build
+          zip -r ../sgr-deploy.zip . -x ".DS_Store"
+          unzip -l ../sgr-deploy.zip | grep -q '\.htaccess' || {
+            echo "::error::.htaccess no quedó en el zip, aborto el despliegue."
+            exit 1
+          }
+
+      - name: Subir al hosting de cPanel
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+          CPANEL_DOCROOT: /home1/gilibert/grj.oticjamundi.com
+        run: |
+          AUTH="Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}"
+
+          curl -sf -H "$AUTH" \
+            -F "dir=${CPANEL_DOCROOT}" \
+            -F "overwrite=1" \
+            -F "file-1=@sgr-deploy.zip" \
+            "https://${CPANEL_HOST}/execute/Fileman/upload_files" -o upload.json
+          cat upload.json
+          python3 -c "import json,sys; d=json.load(open('upload.json')); sys.exit(0 if d.get('data',{}).get('succeeded')==1 else 1)"
+
+          curl -sf -H "$AUTH" -G \
+            --data-urlencode "cpanel_jsonapi_module=Fileman" \
+            --data-urlencode "cpanel_jsonapi_func=fileop" \
+            --data-urlencode "cpanel_jsonapi_apiversion=2" \
+            --data-urlencode "op=extract" \
+            --data-urlencode "sourcefiles=${CPANEL_DOCROOT}/sgr-deploy.zip" \
+            --data-urlencode "destfiles=${CPANEL_DOCROOT}" \
+            "https://${CPANEL_HOST}/json-api/cpanel" -o extract.json
+          cat extract.json
+          python3 -c "import json,sys; d=json.load(open('extract.json')); sys.exit(0 if d['cpanelresult']['event']['result']==1 else 1)"
+
+          curl -sf -H "$AUTH" -G \
+            --data-urlencode "cpanel_jsonapi_module=Fileman" \
+            --data-urlencode "cpanel_jsonapi_func=fileop" \
+            --data-urlencode "cpanel_jsonapi_apiversion=2" \
+            --data-urlencode "op=unlink" \
+            --data-urlencode "sourcefiles=${CPANEL_DOCROOT}/sgr-deploy.zip" \
+            "https://${CPANEL_HOST}/json-api/cpanel" -o /dev/null
