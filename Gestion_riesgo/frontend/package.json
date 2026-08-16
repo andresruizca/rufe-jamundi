@@ -13,7 +13,8 @@
     "test": "npm run test:unit -- --run",
     "data:refresh": "tsx scripts/refresh-snapshot.ts",
     "data:refresh:inst": "tsx scripts/refresh-inst-educativas-snapshot.ts",
-    "data:refresh:equip": "tsx scripts/refresh-equipamientos-snapshot.ts"
+    "data:refresh:equip": "tsx scripts/refresh-equipamientos-snapshot.ts",
+    "data:check-pestanas": "tsx scripts/check-nuevas-pestanas.ts"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
