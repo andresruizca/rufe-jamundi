@@ -51,7 +51,7 @@
 					><td colspan="9">No se encontraron barrios o veredas con ese filtro.</td></tr
 				>
 			{:else}
-				{#each rows as b (b.name)}
+				{#each rows as b (b.name + '::' + b.zona)}
 					<tr>
 						<td>{b.name}</td>
 						<td class="badge-cell"

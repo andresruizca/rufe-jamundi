@@ -82,6 +82,16 @@
 	const sortedRows = $derived(sortBarrios(filtered, sortKey, sortDir));
 	const ranked = $derived([...filtered].sort((a, b) => b.total - a.total).slice(0, 12));
 	const maxRanked = $derived(Math.max(...ranked.map((b) => b.total), 1));
+	// Un mismo nombre de barrio puede tener una entrada Urbana y otra Rural
+	// (predios puntuales de un corregimiento con cabecera urbana, ver
+	// BASE-DATOS RUFE) — cuando las dos caen en el top 12 a la vez, la
+	// etiqueta suma la zona entre paréntesis para no mostrar dos barras
+	// idénticas sin forma de distinguirlas.
+	const rankedNameCounts = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const b of ranked) counts[b.name] = (counts[b.name] ?? 0) + 1;
+		return counts;
+	});
 
 	const urbanaAgg = $derived(aggregate(filtered.filter((b) => b.zona === 'Urbana')));
 	const ruralAgg = $derived(aggregate(filtered.filter((b) => b.zona === 'Rural')));
@@ -455,8 +465,13 @@
 				<p class="card-note">Sin resultados para este filtro.</p>
 			{:else}
 				<div class="bars">
-					{#each ranked as b (b.name)}
-						<BarRow label={b.name} value={b.total} max={maxRanked} color="var(--seq-adultos)" />
+					{#each ranked as b (b.name + '::' + b.zona)}
+						<BarRow
+							label={rankedNameCounts[b.name] > 1 ? `${b.name} (${b.zona})` : b.name}
+							value={b.total}
+							max={maxRanked}
+							color="var(--seq-adultos)"
+						/>
 					{/each}
 				</div>
 			{/if}
