@@ -1,0 +1,64 @@
+name: Revisar pestañas nuevas de BASE-DATOS RUFE
+
+# Corre por hora: si alguien agrega una pestaña (barrio) nueva a la hoja
+# "BASE-DATOS RUFE", este workflow la detecta, actualiza
+# src/lib/baseDatosRufe/barrioTabs.json, refresca el snapshot de respaldo,
+# comitea y dispara el despliegue — sin que nadie tenga que avisar ni tocar
+# código a mano. Ver scripts/check-nuevas-pestanas.ts para el porqué (la
+# lista de pestañas de una hoja de Google no se puede leer con CORS desde
+# el navegador, así que el descubrimiento pasa por acá en vez de en vivo).
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: check-nuevas-pestanas
+  cancel-in-progress: false
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run data:check-pestanas
+
+      - id: cambios
+        run: |
+          if git diff --quiet -- src/lib/baseDatosRufe/barrioTabs.json; then
+            echo "hay_cambios=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay_cambios=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refrescar el snapshot de respaldo con el barrio nuevo
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: npm run data:refresh
+
+      - name: Comitear y subir
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/lib/baseDatosRufe/barrioTabs.json src/lib/data/rufe-fallback.json
+          git commit -m "Agregar pestaña(s) nueva(s) de BASE-DATOS RUFE detectada(s) automáticamente"
+          git push
+
+      - name: Disparar el despliegue
+        if: steps.cambios.outputs.hay_cambios == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main

@@ -13,8 +13,10 @@
  */
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { parseRufeCsv } from '../src/lib/rufe/parse';
+import { parseRufeRecords, buildDataset } from '../src/lib/rufe/parse';
 import { SHEET_CSV_URL } from '../src/lib/rufe/source';
+import { fetchLiveBaseDatosRufe } from '../src/lib/baseDatosRufe/live';
+import { mergeConBaseDatosRufe } from '../src/lib/baseDatosRufe/merge';
 
 const OUTPUT = fileURLToPath(new URL('../src/lib/data/rufe-fallback.json', import.meta.url));
 
@@ -27,6 +29,19 @@ async function main() {
 		);
 	}
 	const csvText = await res.text();
+	const originalRecords = parseRufeRecords(csvText);
+
+	console.log('Descargando BASE-DATOS RUFE (13 pestañas por barrio) ...');
+	const baseDatos = await fetchLiveBaseDatosRufe();
+	if (baseDatos.warnings?.length) {
+		console.warn(
+			`\n${baseDatos.warnings.length} pestaña(s) de BASE-DATOS RUFE no se pudieron leer:`
+		);
+		for (const w of baseDatos.warnings) console.warn(' -', w);
+	}
+
+	const merge = mergeConBaseDatosRufe(originalRecords, baseDatos.records);
+	console.log(`\nPersonas re-digitalizadas (en las dos hojas): ${merge.reDigitalizadas}`);
 
 	const asOf = new Date().toLocaleString('es-CO', {
 		day: 'numeric',
@@ -36,7 +51,9 @@ async function main() {
 		minute: '2-digit',
 		timeZone: 'America/Bogota'
 	});
-	const dataset = parseRufeCsv(csvText, asOf);
+	const built = buildDataset(merge.records, asOf);
+	const warnings = [...(built.warnings ?? []), ...(merge.warnings ?? [])];
+	const dataset = { ...built, ...(warnings.length ? { warnings } : {}) };
 
 	if (dataset.warnings?.length) {
 		console.warn(

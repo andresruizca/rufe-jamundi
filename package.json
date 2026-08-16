@@ -14,7 +14,10 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
-		"data:refresh": "tsx scripts/refresh-snapshot.ts"
+		"data:refresh": "tsx scripts/refresh-snapshot.ts",
+		"data:refresh:inst": "tsx scripts/refresh-inst-educativas-snapshot.ts",
+		"data:refresh:equip": "tsx scripts/refresh-equipamientos-snapshot.ts",
+		"data:check-pestanas": "tsx scripts/check-nuevas-pestanas.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -39,6 +42,7 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^1.31.0",
-		"papaparse": "^5.6.0"
+		"papaparse": "^5.6.0",
+		"phosphor-svelte": "^3.1.0"
 	}
 }

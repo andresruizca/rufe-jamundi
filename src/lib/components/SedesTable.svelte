@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Barrio } from '$lib/data';
-	import type { SortKey } from '$lib/aggregate';
+	import type { Sede } from '$lib/instEducativas/types';
+	import type { SedesSortKey } from '$lib/instEducativasAggregate';
 
 	let {
 		rows,
@@ -8,22 +8,20 @@
 		sortDir,
 		onSort
 	}: {
-		rows: Barrio[];
-		sortKey: SortKey;
+		rows: Sede[];
+		sortKey: SedesSortKey;
 		sortDir: 1 | -1;
-		onSort: (key: SortKey) => void;
+		onSort: (key: SedesSortKey) => void;
 	} = $props();
 
-	const columns: { key: SortKey; label: string; align: 'left' | 'right' }[] = [
-		{ key: 'name', label: 'Barrio / vereda', align: 'left' },
+	const columns: { key: SedesSortKey; label: string; align: 'left' | 'right' }[] = [
+		{ key: 'sede', label: 'Sede', align: 'left' },
+		{ key: 'establecimiento', label: 'Establecimiento', align: 'left' },
+		{ key: 'barrio', label: 'Barrio / vereda', align: 'left' },
 		{ key: 'zona', label: 'Zona', align: 'right' },
-		{ key: 'total', label: 'Total', align: 'right' },
-		{ key: 'F', label: 'Mujeres', align: 'right' },
-		{ key: 'M', label: 'Hombres', align: 'right' },
-		{ key: 'Ninos', label: 'Niños', align: 'right' },
-		{ key: 'Jovenes', label: 'Jóvenes', align: 'right' },
-		{ key: 'Adultos', label: 'Adultos', align: 'right' },
-		{ key: 'AdultosMayores', label: 'Ad. mayores', align: 'right' }
+		{ key: 'matricula', label: 'Matrícula', align: 'right' },
+		{ key: 'estadoFisico', label: 'Estado físico', align: 'right' },
+		{ key: 'prioridad', label: 'Prioridad', align: 'right' }
 	];
 
 	const fmt = (n: number) => n.toLocaleString('es-CO');
@@ -47,27 +45,23 @@
 		</thead>
 		<tbody>
 			{#if rows.length === 0}
-				<tr class="empty-row"
-					><td colspan="9">No se encontraron barrios o veredas con ese filtro.</td></tr
-				>
+				<tr class="empty-row"><td colspan="7">No se encontraron sedes con ese filtro.</td></tr>
 			{:else}
-				{#each rows as b (b.name + '::' + b.zona)}
+				{#each rows as s (s.sede + s.establecimiento)}
 					<tr>
-						<td>{b.name}</td>
+						<td>{s.sede}</td>
+						<td>{s.establecimiento}</td>
+						<td>{s.barrio || '—'}</td>
 						<td class="badge-cell"
 							><span
 								class="badge"
-								class:urbana={b.zona === 'Urbana'}
-								class:rural={b.zona === 'Rural'}>{b.zona}</span
+								class:urbana={s.zona === 'Urbana'}
+								class:rural={s.zona === 'Rural'}>{s.zona}</span
 							></td
 						>
-						<td class="num total-col">{fmt(b.total)}</td>
-						<td class="num">{fmt(b.F)}</td>
-						<td class="num">{fmt(b.M)}</td>
-						<td class="num">{fmt(b.Ninos)}</td>
-						<td class="num">{fmt(b.Jovenes)}</td>
-						<td class="num">{fmt(b.Adultos)}</td>
-						<td class="num">{fmt(b.AdultosMayores)}</td>
+						<td class="num">{fmt(s.matricula)}</td>
+						<td class="num">{s.estadoFisico || 'Sin dato'}</td>
+						<td class="num">{s.prioridad}</td>
 					</tr>
 				{/each}
 			{/if}
@@ -128,6 +122,10 @@
 		font-weight: 600;
 		box-shadow: 1px 0 0 var(--color-border);
 	}
+	tbody td:nth-child(2),
+	tbody td:nth-child(3) {
+		text-align: left;
+	}
 	tbody tr:hover td {
 		background: var(--color-info-bg);
 	}
@@ -136,9 +134,6 @@
 	}
 	tbody td.num {
 		font-variant-numeric: tabular-nums;
-	}
-	tbody td.total-col {
-		font-weight: 800;
 	}
 	.badge-cell {
 		text-align: right;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '$lib/theme.css';
+	import '$lib/dashboard.css';
 	import logo from '$lib/assets/logo-jamundi.svg';
 
 	let { children } = $props();

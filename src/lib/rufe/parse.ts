@@ -78,7 +78,13 @@ const CANON_TENENCIA: Record<string, string> = {
 /** Corregimientos rurales conocidos de Jamundí (Valle del Cauca). Cualquier
  * corregimiento fuera de esta lista (incluido vacío, o "JAMUNDI"/"TERRANOVA",
  * que en este formulario a veces aparecen por error en esa columna) se
- * clasifica como Urbana. */
+ * clasifica como Urbana.
+ *
+ * Sin acentos a propósito: la comparación contra esta lista siempre pasa
+ * primero por `stripAccents()`, así que un valor de origen como "Jordán" o
+ * "Puente Vélez" (frecuentes en BASE-DATOS RUFE, ver `baseDatosRufe/`)
+ * calzan igual que su versión sin tilde. Ampliada el 2026-08-15 con LA
+ * LIBERIA, JORDAN, LA VENTURA y LA MESETA al incorporar esa hoja. */
 const RURAL = new Set([
 	'QUINAMAYO',
 	'ROBLES',
@@ -96,12 +102,18 @@ const RURAL = new Set([
 	'CHONTADURO',
 	'PEON',
 	'CLAVELLINAS',
-	'GUACHINTE'
+	'GUACHINTE',
+	'LA LIBERIA',
+	'JORDAN',
+	'EL JORDAN',
+	'LA VENTURA',
+	'LA MESETA'
 ]);
 
 const CANON_CORE: Record<string, string> = {
 	VILLACOLOMBIA: 'VILLA COLOMBIA',
-	CLAVELLINA: 'CLAVELLINAS'
+	CLAVELLINA: 'CLAVELLINAS',
+	'EL JORDAN': 'JORDAN'
 };
 
 const CANON_BARRIO: Record<string, string> = {
@@ -116,7 +128,6 @@ const CANON_BARRIO: Record<string, string> = {
 	'CIUDADELA DE TERRANOVA': 'TERRANOVA',
 	'ALAMEDA DE RIO CLARO': 'ALAMEDA RIO CLARO',
 	'VILLA LAS PALMAS': 'LAS PALMAS',
-	'LA ESTACIÓN': 'LA ESTACION',
 	'BONANZA - TULIPANES': 'BONANZA TULIPANES'
 };
 
@@ -132,6 +143,23 @@ const SMALL_WORDS = new Set(['de', 'la', 'las', 'los', 'del', 'el', 'y']);
 
 function clean(s: string | undefined | null): string {
 	return (s ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Para comparar contra RURAL/CANON_CORE/CANON_BARRIO sin que un acento
+ * (frecuente en BASE-DATOS RUFE: "Vélez", "Jordán") haga fallar una
+ * coincidencia que en el fondo es la misma palabra. Nunca se usa para lo que
+ * se muestra en pantalla — eso sigue pasando por `titleCase`/`fixAccents`. */
+// Unicode "Combining Diacritical Marks" block is U+0300–U+036F. Filtrado por
+// código de carácter (no por rango literal en una clase de regex) para que
+// el archivo fuente no dependa de tener esos caracteres combinantes escritos
+// tal cual — son casi invisibles y frágiles de editar a mano.
+function stripAccents(s: string): string {
+	return Array.from(s.normalize('NFD'))
+		.filter((ch) => {
+			const code = ch.codePointAt(0) ?? 0;
+			return code < 0x0300 || code > 0x036f;
+		})
+		.join('');
 }
 
 function fixAccents(s: string): string {
@@ -165,10 +193,25 @@ function ageBucket(
 	return 'AdultosMayores';
 }
 
-interface PersonRecord {
+/**
+ * `documento` viaja en este tipo interno para que `baseDatosRufe/merge.ts`
+ * pueda cruzar personas entre las dos hojas del RUFE — pero `buildDataset()`
+ * nunca lo lee, así que ningún identificador de persona sale jamás de este
+ * módulo hacia el `Dataset` público (ver "Privacidad" en el README).
+ */
+export interface PersonRecord {
 	hogar: string;
 	corregimiento: string;
 	barrio: string;
+	documento: string;
+	/** Cuando la fuente trae la zona directa por predio (BASE-DATOS RUFE:
+	 * "Ubicación del Bien") en vez de haber que inferirla del corregimiento.
+	 * Un mismo corregimiento puede tener su cabecera urbana y veredas
+	 * rurales alrededor, así que un predio puntual puede no coincidir con la
+	 * clasificación general de su corregimiento — cuando se conoce el dato
+	 * exacto del predio, gana sobre la inferencia. La hoja original nunca la
+	 * trae (queda `undefined`), así que su comportamiento no cambia. */
+	zonaDirecta?: Zona;
 	genero: 'M' | 'F' | null;
 	edad: number | null;
 	tenencia: string;
@@ -229,6 +272,7 @@ function parseRows(rows: string[][]): PersonRecord[] {
 			hogar,
 			corregimiento,
 			barrio,
+			documento,
 			genero,
 			edad,
 			tenencia,
@@ -244,10 +288,39 @@ function parseRows(rows: string[][]): PersonRecord[] {
 	return records;
 }
 
+/** A qué grupo de barrio pertenece un registro, y con qué zona — separado de
+ * `buildDataset` porque hace falta calcularlo dos veces: una vez para saber
+ * de antemano qué nombres de barrio tienen algún dato de zona directa por
+ * predio (ver `labelsConZonaDirecta` más abajo), y otra vez para agregar de
+ * verdad. Calcularlo una sola vez y cachearlo no alcanza, porque la
+ * clasificación de UN registro no depende solo de sí mismo. */
+function clasificar(rec: PersonRecord): { label: string; zona: Zona } {
+	const coreClean = clean(rec.corregimiento).toUpperCase();
+	const barrioClean = clean(rec.barrio).toUpperCase();
+	let coreU = CANON_CORE[stripAccents(coreClean)] ?? coreClean;
+	const barrioU = CANON_BARRIO[stripAccents(barrioClean)] ?? barrioClean;
+
+	// Corregimiento vacío pero el nombre de un corregimiento rural quedó
+	// escrito en el campo de barrio (ver hogares 91/117 del sismo de agosto
+	// 2026: "SAN ISIDRO"/"CHAGRES" en barrio, corregimiento vacío). Sin
+	// esto, esas personas quedan mal clasificadas como Urbana y corrompen
+	// la zona de todo el grupo de barrio al que se terminan uniendo.
+	if (!coreU && RURAL.has(stripAccents(barrioU))) coreU = barrioU;
+
+	const zona = rec.zonaDirecta ?? zonaDe(stripAccents(coreU));
+	const labelRaw =
+		zona === 'Rural'
+			? coreU || barrioU || 'SIN ESPECIFICAR'
+			: barrioU || coreU || 'SIN ESPECIFICAR';
+	const label = labelRaw === 'SIN ESPECIFICAR' ? 'Sin especificar' : titleCase(labelRaw);
+	return { label, zona };
+}
+
 function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 	const barrioAgg = new Map<
 		string,
 		{
+			name: string;
 			total: number;
 			M: number;
 			F: number;
@@ -261,31 +334,50 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 	const warnings: string[] = [];
 	const hogaresMap = new Map<string, Hogar>();
 
+	// Nombres de barrio que en ALGÚN registro (de cualquier hogar, en
+	// cualquier posición del arreglo) tienen zona directa por predio — no
+	// solo "el registro que se está procesando ahora mismo la tiene". Sin
+	// este pre-cálculo, el resultado dependería del orden de `records`: un
+	// registro de zona inferida procesado ANTES que el primer registro de
+	// zona directa de su mismo barrio terminaría en un grupo sin partir por
+	// zona, y uno procesado DESPUÉS en uno partido — dos grupos que se ven
+	// idénticos en pantalla para lo que en el fondo es un solo barrio+zona.
+	const labelsConZonaDirecta = new Set<string>();
 	for (const rec of records) {
-		let coreU =
-			CANON_CORE[clean(rec.corregimiento).toUpperCase()] ?? clean(rec.corregimiento).toUpperCase();
-		const barrioU =
-			CANON_BARRIO[clean(rec.barrio).toUpperCase()] ?? clean(rec.barrio).toUpperCase();
+		if (rec.zonaDirecta) labelsConZonaDirecta.add(clasificar(rec).label);
+	}
 
-		// Corregimiento vacío pero el nombre de un corregimiento rural quedó
-		// escrito en el campo de barrio (ver hogares 91/117 del sismo de
-		// agosto 2026: "SAN ISIDRO"/"CHAGRES" en barrio, corregimiento
-		// vacío). Sin esto, esas personas quedan mal clasificadas como
-		// Urbana y corrompen la zona de todo el grupo de barrio al que se
-		// terminan uniendo.
-		if (!coreU && RURAL.has(barrioU)) coreU = barrioU;
+	for (const rec of records) {
+		const { label, zona } = clasificar(rec);
 
-		const zona = zonaDe(coreU);
-		const labelRaw =
-			zona === 'Rural'
-				? coreU || barrioU || 'SIN ESPECIFICAR'
-				: barrioU || coreU || 'SIN ESPECIFICAR';
-		const label = labelRaw === 'SIN ESPECIFICAR' ? 'Sin especificar' : titleCase(labelRaw);
+		// Cuando la zona viene directa por predio en ALGÚN registro de este
+		// barrio (BASE-DATOS RUFE), un mismo nombre de barrio puede tener
+		// personas en las dos zonas de verdad (un corregimiento suele tener
+		// cabecera urbana y veredas rurales alrededor) — no es un error de
+		// digitación que haya que aplanar a una sola, así que esas dos
+		// mitades se agrupan aparte, y CUALQUIER registro de ese barrio
+		// (tenga o no su propia zona directa) usa la llave partida por zona
+		// para que los dos orígenes de dato se junten en el mismo grupo.
+		// Cuando ningún registro del barrio trae zona directa (hoja
+		// original sola), se mantiene el criterio de siempre: un solo grupo
+		// por nombre, con advertencia si la zona inferida no calza entre
+		// integrantes de un mismo hogar.
+		const groupKey = labelsConZonaDirecta.has(label) ? `${zona}::${label}` : label;
 
-		let b = barrioAgg.get(label);
+		let b = barrioAgg.get(groupKey);
 		if (!b) {
-			b = { total: 0, M: 0, F: 0, Ninos: 0, Jovenes: 0, Adultos: 0, AdultosMayores: 0, zona: null };
-			barrioAgg.set(label, b);
+			b = {
+				name: label,
+				total: 0,
+				M: 0,
+				F: 0,
+				Ninos: 0,
+				Jovenes: 0,
+				Adultos: 0,
+				AdultosMayores: 0,
+				zona: null
+			};
+			barrioAgg.set(groupKey, b);
 		}
 		b.total += 1;
 		if (b.zona !== null && b.zona !== zona) {
@@ -348,8 +440,8 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
 		}
 	}
 
-	const barrios: Barrio[] = [...barrioAgg.entries()]
-		.map(([name, b]) => ({ ...b, name, zona: b.zona as Zona }))
+	const barrios: Barrio[] = [...barrioAgg.values()]
+		.map((b) => ({ ...b, zona: b.zona as Zona }))
 		.sort((a, b) => b.total - a.total);
 
 	const hogares = [...hogaresMap.values()];
@@ -369,11 +461,23 @@ function buildDataset(records: PersonRecord[], asOf: string): Dataset {
  * personales — ningún nombre, cédula ni teléfono sale de esta función).
  */
 export function parseRufeCsv(csvText: string, asOf: string): Dataset {
+	const records = parseRufeRecords(csvText);
+	return buildDataset(records, asOf);
+}
+
+/**
+ * Igual que `parseRufeCsv`, pero devuelve los registros por persona antes de
+ * agregarlos — incluido `documento`. Uso exclusivo de
+ * `baseDatosRufe/merge.ts` para cruzar personas entre las dos hojas del
+ * RUFE; el resto de la aplicación sigue usando `parseRufeCsv`.
+ */
+export function parseRufeRecords(csvText: string): PersonRecord[] {
 	const { data, errors } = Papa.parse<string[]>(csvText, { skipEmptyLines: false });
 	const blockingErrors = errors.filter((e) => e.type !== 'FieldMismatch');
 	if (blockingErrors.length > 0) {
 		throw new Error(`Error al leer el CSV del RUFE: ${blockingErrors[0].message}`);
 	}
-	const records = parseRows(data);
-	return buildDataset(records, asOf);
+	return parseRows(data);
 }
+
+export { buildDataset, CANON_ESTADO_BIEN, CANON_TENENCIA, CANON_TIPO_BIEN, titleCase, ageBucket };

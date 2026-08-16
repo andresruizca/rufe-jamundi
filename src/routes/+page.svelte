@@ -75,6 +75,16 @@
 	const sortedRows = $derived(sortBarrios(filtered, sortKey, sortDir));
 	const ranked = $derived([...filtered].sort((a, b) => b.total - a.total).slice(0, 12));
 	const maxRanked = $derived(Math.max(...ranked.map((b) => b.total), 1));
+	// Un mismo nombre de barrio puede tener una entrada Urbana y otra Rural
+	// (predios puntuales de un corregimiento con cabecera urbana, ver
+	// BASE-DATOS RUFE) — cuando las dos caen en el top 12 a la vez, la
+	// etiqueta suma la zona entre paréntesis para no mostrar dos barras
+	// idénticas sin forma de distinguirlas.
+	const rankedNameCounts = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const b of ranked) counts[b.name] = (counts[b.name] ?? 0) + 1;
+		return counts;
+	});
 
 	const urbanaAgg = $derived(aggregate(filtered.filter((b) => b.zona === 'Urbana')));
 	const ruralAgg = $derived(aggregate(filtered.filter((b) => b.zona === 'Rural')));
@@ -189,7 +199,7 @@
 </svelte:head>
 
 <div class="wrap">
-	<Header asOf={DATA.asOf} total={DATA.total} hogares={DATA.hogares.length} />
+	<Header />
 
 	<LiveStatus
 		status={liveStatus}
@@ -441,8 +451,13 @@
 				<p class="card-note">Sin resultados para este filtro.</p>
 			{:else}
 				<div class="bars">
-					{#each ranked as b (b.name)}
-						<BarRow label={b.name} value={b.total} max={maxRanked} color="var(--seq-adultos)" />
+					{#each ranked as b (b.name + '::' + b.zona)}
+						<BarRow
+							label={rankedNameCounts[b.name] > 1 ? `${b.name} (${b.zona})` : b.name}
+							value={b.total}
+							max={maxRanked}
+							color="var(--seq-adultos)"
+						/>
 					{/each}
 				</div>
 			{/if}
@@ -643,199 +658,9 @@
 </div>
 
 <style>
-	.wrap {
-		max-width: 1180px;
-		margin: 0 auto;
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		padding: 14px 14px 40px;
-	}
-	@media (min-width: 720px) {
-		.wrap {
-			gap: 22px;
-			padding: 28px 32px 56px;
-		}
-	}
-
-	.advisory {
-		display: flex;
-		gap: 10px;
-		align-items: flex-start;
-		background: var(--color-warning-bg);
-		border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
-		color: color-mix(in srgb, var(--color-warning) 70%, var(--color-text));
-		border-radius: var(--radius);
-		padding: 10px 12px;
-		font-size: 12.5px;
-		line-height: 1.5;
-	}
-	.advisory svg {
-		flex: none;
-		margin-top: 1px;
-	}
-	.advisory strong {
-		color: inherit;
-	}
-
-	.filterbar {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 10px;
-		box-shadow: var(--shadow);
-		position: sticky;
-		top: 8px;
-		z-index: 20;
-	}
-	@media (min-width: 720px) {
-		.filterbar {
-			flex-direction: row;
-			align-items: center;
-			padding: 10px 12px;
-		}
-	}
-
-	.hero-total {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 12px;
-		background: var(--gradient-brand);
-		color: #fff;
-		border-radius: var(--radius-lg);
-		padding: 18px;
-		box-shadow: var(--shadow);
-	}
-	.hero-total .label {
-		font-size: 12.5px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		opacity: 0.92;
-	}
-	.hero-total .value {
-		font-size: clamp(34px, 10vw, 50px);
-		font-weight: 800;
-		letter-spacing: -0.02em;
-		font-variant-numeric: tabular-nums;
-	}
-	.hero-total .value small {
-		font-size: 0.4em;
-		font-weight: 700;
-		opacity: 0.85;
-		margin-left: 4px;
-	}
-
-	.kpi-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 10px;
-	}
-	@media (min-width: 640px) {
-		.kpi-grid {
-			grid-template-columns: repeat(3, 1fr);
-		}
-	}
-	@media (min-width: 960px) {
-		.kpi-grid {
-			grid-template-columns: repeat(6, 1fr);
-		}
-	}
-
-	.chart-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 12px;
-	}
-	@media (min-width: 900px) {
-		.chart-grid {
-			grid-template-columns: 1fr 1fr;
-		}
-	}
-	.chart-grid :global(.span-2) {
-		grid-column: 1 / -1;
-	}
-
-	.card {
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 15px 15px 17px;
-		box-shadow: var(--shadow);
-	}
-	.card h2 {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		font-size: 14.5px;
-		font-weight: 700;
-		margin: 0;
-		color: var(--color-text);
-	}
-	.card h2 :global(svg) {
-		flex: none;
-		color: var(--color-primary);
-	}
-	.card-note {
-		font-size: 11.5px;
-		color: var(--color-muted);
-		margin: 2px 0 0;
-	}
-	.card-head {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 10px;
-		margin-bottom: 12px;
-		flex-wrap: wrap;
-	}
-	.legend {
-		display: flex;
-		gap: 12px;
-		flex-wrap: wrap;
-	}
-	.legend-item {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--color-muted);
-		font-weight: 600;
-	}
-	.legend-item .swatch {
-		width: 11px;
-		height: 11px;
-		border-radius: 3px;
-		flex: none;
-	}
-
-	.bars {
-		display: flex;
-		flex-direction: column;
-		gap: 9px;
-	}
-
-	.zona-group {
-		margin-bottom: 4px;
-	}
-	.zona-group + .zona-group {
-		margin-top: 14px;
-		padding-top: 12px;
-		border-top: 1px dashed var(--color-border);
-	}
-	.zona-title {
-		font-size: 12px;
-		font-weight: 700;
-		color: var(--color-text);
-		margin-bottom: 7px;
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
+	/* Estructura compartida (.wrap, .card, .chart-grid, .bars, etc.) vive en
+	   $lib/dashboard.css, importado desde +layout.svelte — aquí solo queda
+	   lo específico del contenido de esta página. */
 
 	.hogares-total {
 		display: flex;
@@ -929,16 +754,5 @@
 		.obs-tags :global(.bar-row) {
 			grid-template-columns: 148px 1fr 38px;
 		}
-	}
-
-	footer {
-		font-size: 11.5px;
-		color: var(--color-muted);
-		border-top: 1px solid var(--color-border);
-		padding-top: 14px;
-		line-height: 1.6;
-	}
-	footer p {
-		margin: 0 0 6px;
 	}
 </style>

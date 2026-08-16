@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Barrio } from '$lib/data';
-	import type { SortKey } from '$lib/aggregate';
+	import type { EquipamientoItem } from '$lib/equipamientos/types';
+	import type { EquipamientosSortKey } from '$lib/equipamientosAggregate';
 
 	let {
 		rows,
@@ -8,22 +8,19 @@
 		sortDir,
 		onSort
 	}: {
-		rows: Barrio[];
-		sortKey: SortKey;
+		rows: EquipamientoItem[];
+		sortKey: EquipamientosSortKey;
 		sortDir: 1 | -1;
-		onSort: (key: SortKey) => void;
+		onSort: (key: EquipamientosSortKey) => void;
 	} = $props();
 
-	const columns: { key: SortKey; label: string; align: 'left' | 'right' }[] = [
-		{ key: 'name', label: 'Barrio / vereda', align: 'left' },
-		{ key: 'zona', label: 'Zona', align: 'right' },
-		{ key: 'total', label: 'Total', align: 'right' },
-		{ key: 'F', label: 'Mujeres', align: 'right' },
-		{ key: 'M', label: 'Hombres', align: 'right' },
-		{ key: 'Ninos', label: 'Niños', align: 'right' },
-		{ key: 'Jovenes', label: 'Jóvenes', align: 'right' },
-		{ key: 'Adultos', label: 'Adultos', align: 'right' },
-		{ key: 'AdultosMayores', label: 'Ad. mayores', align: 'right' }
+	const columns: { key: EquipamientosSortKey; label: string; align: 'left' | 'right' }[] = [
+		{ key: 'nombre', label: 'Equipamiento', align: 'left' },
+		{ key: 'categoria', label: 'Categoría', align: 'left' },
+		{ key: 'estado', label: 'Estado', align: 'right' },
+		{ key: 'cantidad', label: 'Cantidad', align: 'right' },
+		{ key: 'visita', label: 'Visita técnica', align: 'right' },
+		{ key: 'informe', label: 'Informe', align: 'right' }
 	];
 
 	const fmt = (n: number) => n.toLocaleString('es-CO');
@@ -48,26 +45,17 @@
 		<tbody>
 			{#if rows.length === 0}
 				<tr class="empty-row"
-					><td colspan="9">No se encontraron barrios o veredas con ese filtro.</td></tr
+					><td colspan="6">No se encontraron equipamientos con ese filtro.</td></tr
 				>
 			{:else}
-				{#each rows as b (b.name + '::' + b.zona)}
-					<tr>
-						<td>{b.name}</td>
-						<td class="badge-cell"
-							><span
-								class="badge"
-								class:urbana={b.zona === 'Urbana'}
-								class:rural={b.zona === 'Rural'}>{b.zona}</span
-							></td
-						>
-						<td class="num total-col">{fmt(b.total)}</td>
-						<td class="num">{fmt(b.F)}</td>
-						<td class="num">{fmt(b.M)}</td>
-						<td class="num">{fmt(b.Ninos)}</td>
-						<td class="num">{fmt(b.Jovenes)}</td>
-						<td class="num">{fmt(b.Adultos)}</td>
-						<td class="num">{fmt(b.AdultosMayores)}</td>
+				{#each rows as e (e.categoria + e.nombre)}
+					<tr class:sin-detalle={e.sinDetalle}>
+						<td>{e.nombre}</td>
+						<td>{e.categoria}</td>
+						<td class="num">{e.estado || 'Sin dato'}</td>
+						<td class="num">{fmt(e.cantidad)}</td>
+						<td class="num">{e.visita}</td>
+						<td class="num">{e.informe}</td>
 					</tr>
 				{/each}
 			{/if}
@@ -84,7 +72,7 @@
 	table {
 		border-collapse: collapse;
 		width: 100%;
-		min-width: 640px;
+		min-width: 560px;
 		font-size: 12.5px;
 	}
 	thead th {
@@ -128,6 +116,10 @@
 		font-weight: 600;
 		box-shadow: 1px 0 0 var(--color-border);
 	}
+	tbody td:nth-child(2) {
+		text-align: left;
+		color: var(--color-muted);
+	}
 	tbody tr:hover td {
 		background: var(--color-info-bg);
 	}
@@ -137,26 +129,9 @@
 	tbody td.num {
 		font-variant-numeric: tabular-nums;
 	}
-	tbody td.total-col {
-		font-weight: 800;
-	}
-	.badge-cell {
-		text-align: right;
-	}
-	.badge {
-		font-size: 10.5px;
-		font-weight: 700;
-		padding: 2px 7px;
-		border-radius: var(--radius-full);
-		letter-spacing: 0.02em;
-	}
-	.badge.urbana {
-		background: color-mix(in srgb, var(--series-mujeres) 16%, transparent);
-		color: var(--series-mujeres);
-	}
-	.badge.rural {
-		background: color-mix(in srgb, var(--series-hombres) 18%, transparent);
-		color: var(--series-hombres);
+	tbody tr.sin-detalle td:first-child {
+		font-style: italic;
+		color: var(--color-muted);
 	}
 	.empty-row td {
 		text-align: center;
