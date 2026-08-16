@@ -1,6 +1,6 @@
 {
-  "total": 1874,
-  "asOf": "16 de agosto de 2026 a las 3:38 p. m.",
+  "total": 1882,
+  "asOf": "16 de agosto de 2026 a las 5:37 p. m.",
   "barrios": [
     {
       "name": "San Antonio",
@@ -42,8 +42,8 @@
       "F": 92,
       "Ninos": 27,
       "Jovenes": 40,
-      "Adultos": 67,
-      "AdultosMayores": 14,
+      "Adultos": 66,
+      "AdultosMayores": 15,
       "zona": "Urbana"
     },
     {
@@ -64,8 +64,8 @@
       "F": 46,
       "Ninos": 12,
       "Jovenes": 20,
-      "Adultos": 29,
-      "AdultosMayores": 10,
+      "Adultos": 30,
+      "AdultosMayores": 9,
       "zona": "Urbana"
     },
     {
@@ -109,7 +109,7 @@
       "Ninos": 5,
       "Jovenes": 8,
       "Adultos": 16,
-      "AdultosMayores": 10,
+      "AdultosMayores": 9,
       "zona": "Rural"
     },
     {
@@ -410,6 +410,17 @@
       "zona": "Urbana"
     },
     {
+      "name": "Nueva Ventura",
+      "total": 5,
+      "M": 2,
+      "F": 3,
+      "Ninos": 0,
+      "Jovenes": 0,
+      "Adultos": 3,
+      "AdultosMayores": 2,
+      "zona": "Rural"
+    },
+    {
       "name": "Los Naranjos",
       "total": 5,
       "M": 2,
@@ -559,7 +570,7 @@
       "F": 4,
       "Ninos": 0,
       "Jovenes": 1,
-      "Adultos": 2,
+      "Adultos": 1,
       "AdultosMayores": 1,
       "zona": "Urbana"
     },
@@ -573,6 +584,17 @@
       "Adultos": 1,
       "AdultosMayores": 0,
       "zona": "Urbana"
+    },
+    {
+      "name": "Guachinte",
+      "total": 4,
+      "M": 2,
+      "F": 2,
+      "Ninos": 0,
+      "Jovenes": 0,
+      "Adultos": 3,
+      "AdultosMayores": 1,
+      "zona": "Rural"
     },
     {
       "name": "Bonanza Tulipanes",
@@ -1321,17 +1343,6 @@
       "Adultos": 0,
       "AdultosMayores": 0,
       "zona": "Urbana"
-    },
-    {
-      "name": "Guachinte",
-      "total": 1,
-      "M": 1,
-      "F": 0,
-      "Ninos": 0,
-      "Jovenes": 0,
-      "Adultos": 1,
-      "AdultosMayores": 0,
-      "zona": "Rural"
     },
     {
       "name": "Las Flores",
@@ -4218,7 +4229,7 @@
       "personas": 1,
       "estadoBien": "No habitable",
       "tipoBien": "Vivienda",
-      "tenencia": "Poseedor",
+      "tenencia": "Propietario",
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Es un lote que no pertenece a la vivienda (Dos paredes destruidas).",
@@ -4231,7 +4242,7 @@
       "personas": 2,
       "estadoBien": "Habitable",
       "tipoBien": "Vivienda",
-      "tenencia": "Poseedor",
+      "tenencia": "Propietario",
       "visita": "NO",
       "quienVisita": "",
       "observacion": "Piso roto segundo piso, riesgo alto.",
@@ -5314,6 +5325,97 @@
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Gradas por colapsar.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "GUACHINTE-1",
+      "barrio": "Guachinte",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "la vivienda presenta grietas en paredes y caida de pared.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "GUACHINTE-2",
+      "barrio": "Guachinte",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Destruido",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Casa para demoler por riesgo a sus vecinos 311-785-5695",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "NUEVA-VENTURA-1",
+      "barrio": "Nueva Ventura",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Grietas en paredes y pisos.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "NUEVA-VENTURA-2",
+      "barrio": "Nueva Ventura",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Grietas paredes, piso y techo.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "NUEVA-VENTURA-3",
+      "barrio": "Nueva Ventura",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Grietas paredes y piso.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "NUEVA-VENTURA-4",
+      "barrio": "Nueva Ventura",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Grietas en piso.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "NUEVA-VENTURA-5",
+      "barrio": "Nueva Ventura",
+      "zona": "Rural",
+      "personas": 1,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Grietas paredes y piso.",
       "evacuada": "Sin dato"
     },
     {
