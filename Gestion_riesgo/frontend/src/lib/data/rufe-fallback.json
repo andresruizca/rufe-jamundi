@@ -1,6 +1,6 @@
 {
-  "total": 1882,
-  "asOf": "16 de agosto de 2026 a las 5:37 p. m.",
+  "total": 1899,
+  "asOf": "16 de agosto de 2026 a las 6:34 p. m.",
   "barrios": [
     {
       "name": "San Antonio",
@@ -92,13 +92,13 @@
     },
     {
       "name": "Quinamayo",
-      "total": 56,
+      "total": 55,
       "M": 20,
-      "F": 36,
+      "F": 35,
       "Ninos": 5,
       "Jovenes": 14,
       "Adultos": 24,
-      "AdultosMayores": 11,
+      "AdultosMayores": 10,
       "zona": "Rural"
     },
     {
@@ -377,6 +377,17 @@
       "zona": "Rural"
     },
     {
+      "name": "Colina de Miravalle 3",
+      "total": 6,
+      "M": 2,
+      "F": 4,
+      "Ninos": 0,
+      "Jovenes": 2,
+      "Adultos": 1,
+      "AdultosMayores": 3,
+      "zona": "Rural"
+    },
+    {
       "name": "San Isidro",
       "total": 6,
       "M": 3,
@@ -597,6 +608,17 @@
       "zona": "Rural"
     },
     {
+      "name": "Colinas de Miravalle 3",
+      "total": 4,
+      "M": 2,
+      "F": 2,
+      "Ninos": 0,
+      "Jovenes": 0,
+      "Adultos": 2,
+      "AdultosMayores": 2,
+      "zona": "Rural"
+    },
+    {
       "name": "Bonanza Tulipanes",
       "total": 4,
       "M": 3,
@@ -733,6 +755,28 @@
       "total": 3,
       "M": 1,
       "F": 2,
+      "Ninos": 1,
+      "Jovenes": 1,
+      "Adultos": 1,
+      "AdultosMayores": 0,
+      "zona": "Urbana"
+    },
+    {
+      "name": "Colinas del Miravalle 3",
+      "total": 3,
+      "M": 2,
+      "F": 1,
+      "Ninos": 0,
+      "Jovenes": 1,
+      "Adultos": 0,
+      "AdultosMayores": 2,
+      "zona": "Rural"
+    },
+    {
+      "name": "Marbella - Girasoles",
+      "total": 3,
+      "M": 2,
+      "F": 1,
       "Ninos": 1,
       "Jovenes": 1,
       "Adultos": 1,
@@ -958,6 +1002,17 @@
       "Adultos": 2,
       "AdultosMayores": 0,
       "zona": "Urbana"
+    },
+    {
+      "name": "Colinas Mira Valle 3",
+      "total": 2,
+      "M": 1,
+      "F": 1,
+      "Ninos": 0,
+      "Jovenes": 0,
+      "Adultos": 2,
+      "AdultosMayores": 0,
+      "zona": "Rural"
     },
     {
       "name": "Bello Horizonte",
@@ -4255,7 +4310,7 @@
       "personas": 2,
       "estadoBien": "No habitable",
       "tipoBien": "Vivienda",
-      "tenencia": "Poseedor",
+      "tenencia": "Propietario",
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Casa de bahareque, afectación principal en habitación, sala, ducha y barra de comedor. Todo en mal estado.",
@@ -4268,7 +4323,7 @@
       "personas": 1,
       "estadoBien": "Averiado",
       "tipoBien": "Vivienda",
-      "tenencia": "Poseedor",
+      "tenencia": "Propietario",
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Pared del pasillo con 2 grietas.",
@@ -4280,8 +4335,8 @@
       "zona": "Rural",
       "personas": 1,
       "estadoBien": "Averiado",
-      "tipoBien": "Vivienda",
-      "tenencia": "Poseedor",
+      "tipoBien": "Finca",
+      "tenencia": "Propietario",
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Toda la finca presenta grietas.",
@@ -4292,13 +4347,13 @@
       "barrio": "Quinamayó",
       "zona": "Rural",
       "personas": 5,
-      "estadoBien": "Averiado",
+      "estadoBien": "Habitable",
       "tipoBien": "Vivienda",
       "tenencia": "Propietario",
-      "visita": "Sin dato",
-      "quienVisita": "",
+      "visita": "SI",
+      "quienVisita": "VALERIA ALTAMIRANO",
       "observacion": "Se observa ladrillo caído y el techo se ladeó en parte de atrás (patio).",
-      "evacuada": "Sin dato"
+      "evacuada": "NO"
     },
     {
       "hogar": "CHAGRES-1",
@@ -5416,6 +5471,97 @@
       "visita": "Sin dato",
       "quienVisita": "",
       "observacion": "Grietas paredes y piso.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-1",
+      "barrio": "Colinas de Miravalle 3",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "vivienda de 2 niveles con graves afectaciones en la mampostería en estado crítico.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-2",
+      "barrio": "Colinas de Miravalle 3",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Daños mampostería, paredes de forma horizontal, vertical y diagonal, desprendimiento escaleras, se recomienda atención frente a la situación muro.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-3",
+      "barrio": "Colina de Miravalle 3",
+      "zona": "Rural",
+      "personas": 4,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Casa prefabricada, daños de 2 niveles con inclinación de 10° en el 2° piso. Se recomienda evacuación preventiva.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-4",
+      "barrio": "Colinas del Miravalle 3",
+      "zona": "Rural",
+      "personas": 3,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Daños en mampostería.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-5",
+      "barrio": "Colina de Miravalle 3",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "Habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Daños mampostería, cubierta, fisuras, grietas, paredes de forma horizontal, vertical y diagonal.",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "COLINAS-DE-MIRAVALLE-6",
+      "barrio": "Colinas Mira Valle 3",
+      "zona": "Rural",
+      "personas": 2,
+      "estadoBien": "No habitable",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "Daños mampostería, paredes, cielo falso, barda. (concepto de Arquitectas).",
+      "evacuada": "Sin dato"
+    },
+    {
+      "hogar": "MARBELLA-1",
+      "barrio": "Marbella - Girasoles",
+      "zona": "Urbana",
+      "personas": 3,
+      "estadoBien": "Averiado",
+      "tipoBien": "Vivienda",
+      "tenencia": "Propietario",
+      "visita": "Sin dato",
+      "quienVisita": "",
+      "observacion": "La vivienda presenta grietas en paredes desprendimiento de escaleras requiere Alojamiento. La esposa esta en estado de embarazo.",
       "evacuada": "Sin dato"
     },
     {
@@ -8069,19 +8215,6 @@
       "quienVisita": "",
       "observacion": "VIVIENDA COLAPSADA",
       "evacuada": "SI"
-    },
-    {
-      "hogar": "214",
-      "barrio": "Quinamayo",
-      "zona": "Rural",
-      "personas": 1,
-      "estadoBien": "Habitable",
-      "tipoBien": "Vivienda",
-      "tenencia": "Propietario",
-      "visita": "SI",
-      "quienVisita": "VALERIA ALTAMIRANO",
-      "observacion": "SE OBSERVA LADRILLOS CAIDOS Y EL TECHO SE LADEO EN LA PARTE DE ATRAS",
-      "evacuada": "NO"
     },
     {
       "hogar": "215",
@@ -13662,6 +13795,6 @@
     }
   ],
   "warnings": [
-    "76 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
+    "77 persona(s) re-digitalizada(s) en BASE-DATOS RUFE: se actualizaron sus datos de bien/tenencia/zona y se reasignaron a un hogar nuevo — el hogar original al que pertenecían puede haber quedado con menos integrantes de los reales si sus demás compañeros de hogar aún no fueron re-digitalizados."
   ]
 }
