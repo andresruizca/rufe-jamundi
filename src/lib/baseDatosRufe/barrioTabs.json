@@ -86,5 +86,17 @@
 	{
 		"nombre": "MARBELLA",
 		"gid": "252585486"
+	},
+	{
+		"nombre": "SAN-VICENTE",
+		"gid": "327235034"
+	},
+	{
+		"nombre": "MIRADOR-DEL-RIO-CLARO",
+		"gid": "971388294"
+	},
+	{
+		"nombre": "TERRANOVA",
+		"gid": "1117812734"
 	}
 ]
