@@ -3,7 +3,8 @@ import {
 	aggregateHogares,
 	filterHogares,
 	tagObservaciones,
-	listObservaciones
+	listObservaciones,
+	criticalSeverity
 } from './hogaresAggregate';
 import type { Hogar } from './data';
 
@@ -197,5 +198,33 @@ describe('listObservaciones()', () => {
 		]);
 		expect(list.map((o) => o.hogar)).toEqual(['2', '3', '1']);
 		expect(list.map((o) => o.critical)).toEqual([true, false, false]);
+	});
+
+	it('carries evacuada y personas para poder filtrar/ordenar por urgencia sin recruzar contra Hogar', () => {
+		const list = listObservaciones([
+			hogar({ hogar: '1', observacion: 'Grietas leves', evacuada: 'SI', personas: 3 }),
+			hogar({ hogar: '2', observacion: 'Colapso total', evacuada: 'NO', personas: 5 })
+		]);
+		const byHogar = Object.fromEntries(list.map((o) => [o.hogar, o]));
+		expect(byHogar['1'].evacuada).toBe('SI');
+		expect(byHogar['1'].personas).toBe(3);
+		expect(byHogar['2'].evacuada).toBe('NO');
+		expect(byHogar['2'].personas).toBe(5);
+	});
+});
+
+describe('criticalSeverity()', () => {
+	it('counts zero for a non-critical observación', () => {
+		expect(criticalSeverity('Grietas leves en la fachada')).toBe(0);
+	});
+
+	it('counts one keyword match', () => {
+		expect(criticalSeverity('Riesgo de caída de muro')).toBe(1);
+	});
+
+	it('counts several distinct keyword matches, not occurrences of the same one', () => {
+		// "colapso" + "urgente" + "evacuación" = 3 señales distintas, aunque
+		// "colapso" podría aparecer más de una vez en el texto real.
+		expect(criticalSeverity('Colapso total, requiere evacuación urgente')).toBe(3);
 	});
 });

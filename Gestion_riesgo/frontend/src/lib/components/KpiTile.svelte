@@ -1,10 +1,25 @@
 <script lang="ts">
-	let { label, value, color, sub }: { label: string; value: number; color: string; sub: string } =
-		$props();
+	import type { LucideIcon } from '@lucide/svelte';
+
+	let {
+		label,
+		value,
+		color,
+		sub,
+		icon
+	}: { label: string; value: number; color: string; sub: string; icon?: LucideIcon } = $props();
 </script>
 
 <div class="kpi-tile">
-	<div class="kpi-label"><span class="dot" style:background={color}></span>{label}</div>
+	<div class="kpi-label">
+		{#if icon}
+			{@const Icon = icon}
+			<Icon size={15} strokeWidth={2.4} color={color} aria-hidden="true" />
+		{:else}
+			<span class="dot" style:background={color}></span>
+		{/if}
+		{label}
+	</div>
 	<div class="kpi-value">{value.toLocaleString('es-CO')}</div>
 	<div class="kpi-sub">{sub}</div>
 </div>
