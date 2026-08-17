@@ -159,6 +159,8 @@ export interface ObservacionItem {
 	zona: Zona;
 	texto: string;
 	critical: boolean;
+	evacuada: Hogar['evacuada'];
+	personas: number;
 }
 
 export function listObservaciones(hogares: Hogar[]): ObservacionItem[] {
@@ -175,7 +177,18 @@ export function listObservaciones(hogares: Hogar[]): ObservacionItem[] {
 			barrio: h.barrio,
 			zona: h.zona,
 			texto: h.observacion,
-			critical: CRITICAL_PATTERN.test(h.observacion)
+			critical: CRITICAL_PATTERN.test(h.observacion),
+			evacuada: h.evacuada,
+			personas: h.personas
 		}))
 		.sort((a, b) => a.barrio.localeCompare(b.barrio));
+}
+
+/** Cuántas señales de peligro distintas (de las mismas palabras clave
+ * críticas de arriba) menciona una observación — un texto que dice "colapso"
+ * y "urgente" es más grave que uno que solo dice "riesgo". No es un puntaje
+ * médico/estructural, solo cuenta coincidencias, para poder ordenar de un
+ * vistazo cuáles atender primero sin leer las 78 notas completas. */
+export function criticalSeverity(texto: string): number {
+	return OBS_KEYWORDS.filter(({ pattern, critical }) => critical && pattern.test(texto)).length;
 }

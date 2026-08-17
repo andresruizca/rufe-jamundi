@@ -9,7 +9,8 @@
 		aggregateHogares,
 		filterHogares,
 		tagObservaciones,
-		listObservaciones
+		listObservaciones,
+		criticalSeverity
 	} from '$lib/hogaresAggregate';
 	import Header from '$lib/components/Header.svelte';
 	import ZonaFilter from '$lib/components/ZonaFilter.svelte';
@@ -19,6 +20,7 @@
 	import BarrioTable from '$lib/components/BarrioTable.svelte';
 	import LiveStatus from '$lib/components/LiveStatus.svelte';
 	import ObservacionesList from '$lib/components/ObservacionesList.svelte';
+	import HogaresCriticosBadge from '$lib/components/HogaresCriticosBadge.svelte';
 	import {
 		House,
 		MapPin,
@@ -31,7 +33,13 @@
 		ClipboardCheck,
 		Siren,
 		MessageSquareText,
-		Table2
+		Table2,
+		Baby,
+		GraduationCap,
+		User,
+		Glasses,
+		Venus,
+		Mars
 	} from '@lucide/svelte';
 
 	const REFRESH_MS = 3 * 60 * 1000;
@@ -111,6 +119,19 @@
 	const hogaresAgg = $derived(aggregateHogares(filteredHogares));
 	const obsTags = $derived(tagObservaciones(filteredHogares));
 	const obsList = $derived(listObservaciones(filteredHogares));
+	// TODOS los hogares críticos según la observación (toda la data filtrada,
+	// evacuados o no) — no solo el subconjunto sin evacuar. Ordenados por
+	// severidad (cuántas señales de peligro distintas menciona la
+	// observación) para que el popup muestre primero lo más grave; el estado
+	// de evacuación se muestra por fila para no perder ese dato.
+	const hogaresCriticos = $derived(obsList.filter((o) => o.critical));
+	const top20Criticos = $derived(
+		[...hogaresCriticos]
+			.sort(
+				(a, b) => criticalSeverity(b.texto) - criticalSeverity(a.texto) || b.personas - a.personas
+			)
+			.slice(0, 20)
+	);
 
 	const maxHogaresZona = $derived(Math.max(hogaresAgg.urbana, hogaresAgg.rural, 1));
 	const promedioPersonasPorHogar = $derived(
@@ -238,11 +259,14 @@
 		<SearchBox bind:query placeholder="Buscar barrio o vereda…" />
 	</div>
 
-	<div class="hero-total">
-		<div class="label">{heroScopeLabel}</div>
-		<div class="value">
-			{fmt(agg.total)}{#if isFiltered}<small> de {fmt(DATA.total)}</small>{/if}
+	<div class="hero-row">
+		<div class="hero-total">
+			<div class="label">{heroScopeLabel}</div>
+			<div class="value">
+				{fmt(agg.total)}{#if isFiltered}<small> de {fmt(DATA.total)}</small>{/if}
+			</div>
 		</div>
+		<HogaresCriticosBadge top={top20Criticos} total={hogaresCriticos.length} />
 	</div>
 
 	<div class="kpi-grid">
@@ -250,36 +274,42 @@
 			label="Mujeres"
 			value={agg.F}
 			color="var(--series-mujeres)"
+			icon={Venus}
 			sub="{pct(agg.F, agg.total)}% del total filtrado"
 		/>
 		<KpiTile
 			label="Hombres"
 			value={agg.M}
 			color="var(--series-hombres)"
+			icon={Mars}
 			sub="{pct(agg.M, agg.total)}% del total filtrado"
 		/>
 		<KpiTile
 			label="Niños (0–11)"
 			value={agg.Ninos}
-			color="var(--seq-ninos)"
+			color="var(--color-highlight-dark)"
+			icon={Baby}
 			sub="{pct(agg.Ninos, agg.total)}% del total filtrado"
 		/>
 		<KpiTile
 			label="Jóvenes (12–28)"
 			value={agg.Jovenes}
-			color="var(--seq-jovenes)"
+			color="var(--color-secondary-dark)"
+			icon={GraduationCap}
 			sub="{pct(agg.Jovenes, agg.total)}% del total filtrado"
 		/>
 		<KpiTile
 			label="Adultos (29–59)"
 			value={agg.Adultos}
 			color="var(--seq-adultos)"
+			icon={User}
 			sub="{pct(agg.Adultos, agg.total)}% del total filtrado"
 		/>
 		<KpiTile
 			label="Ad. mayores (60+)"
 			value={agg.AdultosMayores}
 			color="var(--seq-mayores)"
+			icon={Glasses}
 			sub="{pct(agg.AdultosMayores, agg.total)}% del total filtrado"
 		/>
 	</div>
@@ -661,6 +691,17 @@
 	/* Estructura compartida (.wrap, .card, .chart-grid, .bars, etc.) vive en
 	   $lib/dashboard.css, importado desde +layout.svelte — aquí solo queda
 	   lo específico del contenido de esta página. */
+
+	.hero-row {
+		display: flex;
+		gap: 12px;
+		flex-wrap: wrap;
+		align-items: stretch;
+	}
+	.hero-row .hero-total {
+		flex: 1;
+		min-width: 220px;
+	}
 
 	.hogares-total {
 		display: flex;
