@@ -11,6 +11,7 @@ use App\Core\HttpError;
 use App\Core\Request;
 use App\Core\Response;
 use App\Rufe\Archivos;
+use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
 use App\Rufe\Validador;
 use Throwable;
@@ -62,6 +63,23 @@ final class RufeController
               LIMIT :limite OFFSET :salto',
             $params + ['limite' => $porPagina, 'salto' => ($pagina - 1) * $porPagina]
         );
+
+        // Buscar por cédula o por nombre es ir a por una persona concreta, no
+        // hojear la bandeja. Queda constancia de quién lo hizo y de cuántas
+        // fichas encontró, pero NUNCA del texto buscado: guardarlo metería la
+        // cédula del ciudadano en una segunda tabla, que es justo lo que la
+        // minimización de datos trata de evitar. Quién vio los datos de quién se
+        // sabe igual, porque abrir una ficha se audita con su radicado.
+        if (Busqueda::buscaPersona($q)) {
+            Auditoria::registrar(
+                $req,
+                'rufe.busqueda_de_persona',
+                Auth::exigirUsuario($req),
+                'rufe_reportes',
+                null,
+                $total.' coincidencias'
+            );
+        }
 
         Response::ok([
             'reportes' => array_map([$this, 'presentarResumen'], $filas),
@@ -623,12 +641,17 @@ final class RufeController
             }
         }
 
-        // La búsqueda libre no toca nombres ni documentos a propósito: se busca
-        // por radicado o por lugar, no por persona.
+        // La búsqueda sí alcanza nombres y cédulas: encontrar a una persona
+        // censada es el motivo por el que existe la bandeja para quien atiende a
+        // un damnificado en ventanilla. Que sea un acceso dirigido a datos
+        // personales se compensa con lo que ya hay alrededor — solo usuarios con
+        // sesión, y cada ficha que se abre queda en la auditoría — más el
+        // registro de la propia búsqueda, unas líneas más abajo.
         $q = trim((string) ($req->query('q') ?? ''));
-        if ($q !== '') {
-            $condiciones[] = '(r.radicado LIKE :q OR r.direccion LIKE :q OR r.vereda_sector_barrio LIKE :q OR r.evento LIKE :q)';
-            $params['q'] = '%'.str_replace(['%', '_'], ['\%', '\_'], $q).'%';
+        [$condicionBusqueda, $paramsBusqueda] = Busqueda::condicion($q);
+        if ($condicionBusqueda !== '') {
+            $condiciones[] = $condicionBusqueda;
+            $params += $paramsBusqueda;
         }
 
         return [

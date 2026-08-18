@@ -94,9 +94,14 @@
 				id="filtro-q"
 				class="campo__control"
 				type="search"
-				placeholder="Radicado, dirección, barrio o evento"
+				placeholder="Cédula, nombre completo o número de ficha"
 				bind:value={filtros.q}
+				aria-describedby="filtro-q-ayuda"
 			/>
+			<p class="campo__ayuda" id="filtro-q-ayuda">
+				También encuentra por dirección, barrio o evento. El nombre puede ir en cualquier orden
+				y sin tildes.
+			</p>
 		</div>
 
 		<div class="campo">
@@ -238,7 +243,8 @@
 	<p class="tarjeta__nota">
 		Cada ficha contiene datos personales y datos sensibles (identidad de género y pertenencia
 		étnica) de todo un núcleo familiar. Abrirla queda registrado en la auditoría del sistema con
-		su usuario y la fecha.
+		su usuario y la fecha. Buscar por cédula o por nombre también queda registrado, sin guardar
+		lo que se escribió.
 	</p>
 </div>
 

@@ -29,6 +29,7 @@ spl_autoload_register(static function (string $clase) use ($raiz): void {
 
 use App\Core\Migrador;
 use App\Sistema\Actualizador;
+use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
 use App\Rufe\Radicado;
 use App\Rufe\Validador;
@@ -900,6 +901,104 @@ prueba('la plantilla de configuración NO viene con la autoactualización encend
     afirmarIgual(false, $config['actualizaciones']['habilitado'], 'la plantilla viene habilitada');
     afirmarIgual('', $config['actualizaciones']['raiz_api'], 'la plantilla trae una ruta puesta');
     afirmarIgual('', $config['actualizaciones']['respaldos'], 'la plantilla trae una carpeta de respaldos puesta');
+});
+
+// ── Buscador de la bandeja ───────────────────────────────────────────────────
+
+/**
+ * Cuántas veces aparece cada marcador `:nombre` en el SQL.
+ *
+ * @return array<string,int>
+ */
+function marcadores(string $sql): array
+{
+    preg_match_all('/:([a-z][a-z0-9_]*)/i', $sql, $m);
+
+    return array_count_values($m[1]);
+}
+
+prueba('ningún marcador se repite en la consulta', function (): void {
+    // ESTE es el fallo que llegó a producción. Con preparadas nativas, un
+    // marcador repetido hace que MySQL responda «Invalid parameter number» al
+    // prepararla, así que el buscador daba error 500 con cualquier texto y no
+    // funcionó nunca. No se veía sin base de datos; aquí sí.
+    foreach (['Juan Pérez', '1113456789', 'RUFE-2026-ABCD1234', 'calle 10 juan 123'] as $texto) {
+        [$sql] = Busqueda::condicion($texto);
+        foreach (marcadores($sql) as $nombre => $veces) {
+            afirmarIgual(1, $veces, "el marcador «{$nombre}» aparece {$veces} veces con «{$texto}»");
+        }
+    }
+});
+
+prueba('hay exactamente un parámetro por marcador', function (): void {
+    foreach (['Juan Pérez García Lopez Ruiz', '1113456789', 'la playa'] as $texto) {
+        [$sql, $params] = Busqueda::condicion($texto);
+        $enSql = array_keys(marcadores($sql));
+        $enParams = array_keys($params);
+        sort($enSql);
+        sort($enParams);
+        afirmarIgual($enSql, $enParams, "descuadre con «{$texto}»");
+    }
+});
+
+prueba('sin texto no hay condición', function (): void {
+    afirmarIgual(['', []], Busqueda::condicion(''));
+    afirmarIgual(['', []], Busqueda::condicion('   '));
+});
+
+prueba('busca por cédula exacta, no por trozos', function (): void {
+    // Un documento parcial devolvería hogares ajenos y convertiría el buscador
+    // en una forma de pasear por el censo.
+    [$sql, $params] = Busqueda::condicion('1113456789');
+    afirmar(str_contains($sql, 'pd.numero_documento = :doc'), 'debe comparar el documento exacto');
+    afirmarIgual('1113456789', $params['doc']);
+});
+
+prueba('acepta la cédula escrita con puntos o espacios', function (): void {
+    afirmarIgual('1113456789', Busqueda::condicion('1.113.456.789')[1]['doc']);
+    afirmarIgual('1113456789', Busqueda::condicion('1 113 456 789')[1]['doc']);
+});
+
+prueba('un número corto no se toma por cédula', function (): void {
+    // «123» es más probablemente parte de una dirección.
+    afirmar(! isset(Busqueda::condicion('123')[1]['doc']), 'no debía buscar por documento');
+});
+
+prueba('el nombre se busca palabra por palabra, sin importar el orden', function (): void {
+    [$sql, $params] = Busqueda::condicion('garcía juan');
+    afirmar(str_contains($sql, "CONCAT(pn.nombres, ' ', pn.apellidos)"), 'debe concatenar nombre y apellido');
+    afirmarIgual('%garcía%', $params['n0']);
+    afirmarIgual('%juan%', $params['n1']);
+    afirmarIgual(2, substr_count($sql, ':n'), 'una condición por palabra');
+});
+
+prueba('no se buscan más palabras de la cuenta', function (): void {
+    [, $params] = Busqueda::condicion('uno dos tres cuatro cinco seis');
+    $delNombre = array_filter(array_keys($params), static fn ($k) => str_starts_with($k, 'n'));
+    afirmarIgual(Busqueda::MAX_PALABRAS, count($delNombre));
+});
+
+prueba('las letras sueltas no cuentan como nombre', function (): void {
+    // Una inicial suelta haría coincidir a media base.
+    afirmar(! isset(Busqueda::condicion('j')[1]['n0']), 'una sola letra no debe buscar por nombre');
+});
+
+prueba('los comodines del LIKE se neutralizan', function (): void {
+    // Sin escapar, buscar «%» devolvería la base entera.
+    afirmar(str_contains(Busqueda::condicion('%')[1]['q0'], '\%'), 'el % debe ir escapado');
+    afirmar(str_contains(Busqueda::condicion('_')[1]['q0'], '\_'), 'el _ debe ir escapado');
+});
+
+prueba('el radicado se sigue encontrando por un trozo', function (): void {
+    afirmarIgual('%XRT9BNCP%', Busqueda::condicion('XRT9BNCP')[1]['q0']);
+});
+
+prueba('distingue buscar una persona de hojear la bandeja', function (): void {
+    // Solo lo primero queda anotado en la auditoría.
+    afirmar(Busqueda::buscaPersona('1113456789'), 'una cédula busca persona');
+    afirmar(Busqueda::buscaPersona('Juan Pérez'), 'un nombre busca persona');
+    afirmar(! Busqueda::buscaPersona(''), 'sin texto no busca persona');
+    afirmar(! Busqueda::buscaPersona('123'), 'un número corto no busca persona');
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────
