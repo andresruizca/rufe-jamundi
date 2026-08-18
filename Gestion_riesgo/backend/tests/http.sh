@@ -103,7 +103,7 @@ reporte() {
 		personas="[{\"nombres\":\"María José\",\"apellidos\":\"Riascos Mina\",\"tipo_documento\":3,\"numero_documento\":\"3$sufijo\",\"parentesco\":1,\"genero\":2,\"fecha_nacimiento\":\"1985-04-11\",\"pertenencia_etnica\":5,\"telefono\":\"3105551234\"}]"
 	fi
 
-	printf '{"evento":"Terremoto","fecha_evento":"%s","zona":"%s","vereda_sector_barrio":"Barrio Belalcázar","direccion":"%s","tipo_bien":"VIVIENDA","forma_tenencia":"PROPIETARIO","estado_bien":"AVERIADO","alojamiento":"LUGAR_HABITUAL","tiene_afectacion_agro":false,"contacto_telefono":"3105551234","declara_veracidad":true,"declara_representacion":true,"autoriza_datos":%s,"autoriza_sensibles":true,"sitio_web":"","personas":%s%s}' \
+	printf '{"evento":"Terremoto","fecha_evento":"%s","zona":"%s","vereda_sector_barrio":"Barrio Belalcázar","direccion":"%s","tipo_bien":"VIVIENDA","forma_tenencia":"PROPIETARIO","estado_bien":"AVERIADO","alojamiento":"LUGAR_HABITUAL","tiene_afectacion_agro":false,"contacto_telefono":"3105551234","autoriza_tratamiento":%s,"sitio_web":"","personas":%s%s}' \
 		"$fecha" "$zona" "$direccion" "$autoriza" "$personas" "$extra"
 }
 
@@ -195,7 +195,7 @@ reset_limite
 espera "número con documento «sin identificación» devuelve 422" 422 POST /rufe/reportes \
 	"$(reporte 116 URBANO '[{"nombres":"Ana","apellidos":"Mina","tipo_documento":6,"numero_documento":"1234","parentesco":1,"genero":2,"pertenencia_etnica":6,"telefono":"3105551234"}]')"
 reset_limite
-espera "sin autorización de datos devuelve 422" 422 POST /rufe/reportes \
+espera "sin autorización devuelve 422" 422 POST /rufe/reportes \
 	"$(reporte 117 URBANO '' false)"
 reset_limite
 espera "corregimiento en zona urbana devuelve 422" 422 POST /rufe/reportes \

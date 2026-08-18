@@ -9,7 +9,7 @@
 	// El botón de registrar otra ficha es el camino habitual: una brigada levanta
 	// varias casas seguidas y no debería tener que volver por el menú cada vez.
 
-	import { Check, ClipboardPlus, Copy, List, Printer } from '@lucide/svelte';
+	import { Check, ClipboardPlus, CloudOff, Copy, List, Printer } from '@lucide/svelte';
 
 	type Props = {
 		radicado: string;
@@ -18,9 +18,25 @@
 		direccion: string;
 		personas: number;
 		onOtra: () => void;
+		/** La ficha quedó guardada sin salir: todavía no hay radicado. */
+		enCola?: boolean;
+		/** Cuántas fichas esperan salir, contando las de visitas anteriores. */
+		pendientes?: number;
+		/** El navegador puede enviarlas con la aplicación cerrada. */
+		enSegundoPlano?: boolean;
 	};
 
-	let { radicado, recibidoEn, evento, direccion, personas, onOtra }: Props = $props();
+	let {
+		radicado,
+		recibidoEn,
+		evento,
+		direccion,
+		personas,
+		onOtra,
+		enCola = false,
+		pendientes = 0,
+		enSegundoPlano = false
+	}: Props = $props();
 
 	let copiado = $state(false);
 
@@ -46,14 +62,47 @@
 </script>
 
 <div class="confirmacion">
-	<div class="marca" aria-hidden="true"><Check size={32} /></div>
+	{#if enCola}
+		<div class="marca marca--espera" aria-hidden="true"><CloudOff size={30} /></div>
 
-	<h1 class="titulo">Ficha registrada</h1>
-	<p class="entrada">Entregue este número al hogar. Es su constancia ante la Alcaldía.</p>
+		<h1 class="titulo">Ficha guardada en el teléfono</h1>
+		<p class="entrada">
+			No se ha perdido nada: los datos están guardados en este dispositivo y se enviarán solos.
+		</p>
 
-	<p class="radicado">{radicado}</p>
+		<div class="espera">
+			<p class="espera__texto">
+				{#if enSegundoPlano}
+					Se enviará en cuanto el teléfono recupere señal, <strong>aunque cierre la aplicación</strong>.
+				{:else}
+					Se enviará en cuanto vuelva la señal. Deje la aplicación abierta: este navegador no
+					permite enviarla en segundo plano.
+				{/if}
+			</p>
 
-	<div class="acciones no-imprimir">
+			{#if pendientes > 0}
+				<p class="espera__cuenta">
+					{pendientes === 1
+						? 'Hay 1 ficha esperando salir.'
+						: `Hay ${pendientes} fichas esperando salir.`}
+				</p>
+			{/if}
+
+			<p class="espera__nota">
+				El número de radicado se genera cuando la ficha llega a la Alcaldía. Podrá consultarlo
+				después en <strong>Reportes RUFE</strong>.
+			</p>
+		</div>
+	{:else}
+		<div class="marca" aria-hidden="true"><Check size={32} /></div>
+
+		<h1 class="titulo">Ficha registrada</h1>
+		<p class="entrada">Entregue este número al hogar. Es su constancia ante la Alcaldía.</p>
+
+		<p class="radicado">{radicado}</p>
+	{/if}
+
+	<div class="acciones no-imprimir" class:acciones--ocultas={enCola}>
 		<button type="button" class="boton" onclick={copiar}>
 			{#if copiado}
 				<Check size={16} aria-hidden="true" />
@@ -75,7 +124,9 @@
 	</p>
 
 	<dl class="detalle">
-		<div><dt>Registrada el</dt><dd>{fecha}</dd></div>
+		{#if !enCola}
+			<div><dt>Registrada el</dt><dd>{fecha}</dd></div>
+		{/if}
 		<div><dt>Evento reportado</dt><dd>{evento}</dd></div>
 		<div><dt>Dirección</dt><dd>{direccion}</dd></div>
 		<div>
@@ -96,19 +147,21 @@
 		</a>
 	</div>
 
-	<section class="siguientes no-imprimir">
-		<h2>Qué sigue</h2>
-		<ol>
-			<li>La ficha queda en estado <strong>Recibido</strong>: todavía no es oficial.</li>
-			<li>Un gestor la revisa y le da el Vo.Bo. desde la bandeja de reportes.</li>
-			<li>Si algo no cuadra, llamarán al teléfono de contacto que registró.</li>
-		</ol>
+	{#if !enCola}
+		<section class="siguientes no-imprimir">
+			<h2>Qué sigue</h2>
+			<ol>
+				<li>La ficha queda en estado <strong>Recibido</strong>: todavía no es oficial.</li>
+				<li>Un gestor la revisa y le da el Vo.Bo. desde la bandeja de reportes.</li>
+				<li>Si algo no cuadra, llamarán al teléfono de contacto que registró.</li>
+			</ol>
 
-		<p class="indicacion">
-			Dígale al hogar que, para consultar el estado, se acerque a la Secretaría de Gestión del
-			Riesgo de Desastres con este número de radicado.
-		</p>
-	</section>
+			<p class="indicacion">
+				Dígale al hogar que, para consultar el estado, se acerque a la Secretaría de Gestión del
+				Riesgo de Desastres con este número de radicado.
+			</p>
+		</section>
+	{/if}
 </div>
 
 <style>
@@ -127,6 +180,45 @@
 		border-radius: 50%;
 		background: var(--color-success-bg);
 		color: var(--color-success);
+	}
+
+	/* Azul y no verde: la ficha está a salvo, pero todavía no llegó. Usar el
+	   mismo verde del éxito haría creer que ya está en la Alcaldía. */
+	.marca--espera {
+		background: var(--color-info-bg);
+		color: var(--color-primary);
+	}
+
+	.espera {
+		margin-bottom: 1.4rem;
+		padding: 0.9rem;
+		border: 1px solid #bcd9f6;
+		border-radius: 12px;
+		background: var(--color-info-bg);
+		text-align: left;
+	}
+
+	.espera__texto {
+		margin: 0 0 0.5rem;
+		font-size: 0.88rem;
+		color: var(--color-primary-dark);
+	}
+
+	.espera__cuenta {
+		margin: 0 0 0.5rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--color-primary-dark);
+	}
+
+	.espera__nota {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--color-muted);
+	}
+
+	.acciones--ocultas {
+		display: none;
 	}
 
 	.titulo {

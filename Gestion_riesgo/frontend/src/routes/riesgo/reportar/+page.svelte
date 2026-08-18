@@ -44,6 +44,7 @@
 	import AvisoDatos from '$lib/rufe-form/componentes/AvisoDatos.svelte';
 	import ResumenEnvio from '$lib/rufe-form/componentes/ResumenEnvio.svelte';
 	import Confirmacion from '$lib/rufe-form/componentes/Confirmacion.svelte';
+	import PendientesLocales from '$lib/rufe-form/componentes/PendientesLocales.svelte';
 
 	// ── Estado ──────────────────────────────────────────────────────────────
 
@@ -56,6 +57,15 @@
 	let errores = $state<Errores>({});
 	let errorEnvio = $state<string | null>(null);
 	let enviado = $state<RespuestaEnvio | null>(null);
+
+	/**
+	 * La ficha quedó guardada sin salir todavía.
+	 *
+	 * Se trata igual que una enviada: el trabajo de esa casa ya está a salvo en el
+	 * dispositivo, así que el censador pasa a la confirmación y puede seguir con la
+	 * siguiente. Quedarse esperando la señal era lo que lo bloqueaba en la vereda.
+	 */
+	let guardadaSinEnviar = $state(false);
 	let enLinea = $state(true);
 	let hayBorradorPrevio = $state(false);
 	let ubicando = $state(false);
@@ -69,6 +79,9 @@
 	let evidencias = $state<GestorEvidencias | null>(null);
 
 	const enviando = $derived(envio.estado === 'enviando');
+
+	/** Cambia con la cola, para que la lista de pendientes se relea sola. */
+	const versionCola = $derived(envio.pendientes + (envio.estado === 'enviando' ? 1000 : 0));
 
 	const paso = $derived(PASOS[indice]);
 	const esUltimo = $derived(paso.id === 'revision');
@@ -178,11 +191,21 @@
 
 		await empezarDeNuevo();
 
+		// Borrador y evidencias se estrenan juntos: comparten la clave, y
+		// reutilizar la anterior arrastraría las fotos de la casa pasada a la
+		// siguiente. Las de la ficha que quedó en cola ya están copiadas allí.
+		if (catalogos) {
+			detenerEvidencias?.();
+			evidencias = new GestorEvidencias(catalogos, borrador.clave);
+			detenerEvidencias = evidencias.iniciar();
+		}
+
 		datos.evento = evento;
 		datos.evento_otro = eventoOtro;
 		datos.fecha_evento = fecha;
 
 		enviado = null;
+		guardadaSinEnviar = false;
 		errorEnvio = null;
 		envio.descartar();
 		indice = PASOS.findIndex((p) => p.id === 'ubicacion');
@@ -210,7 +233,7 @@
 	// Un aviso al cerrar solo cuando de verdad hay algo sin escribir en disco: el
 	// debounce es de 800 ms, así que en la práctica casi nunca aparece.
 	function alCerrar(evento: BeforeUnloadEvent) {
-		if (enviado || borrador.estado !== 'guardando') return;
+		if (enviado || guardadaSinEnviar || borrador.estado !== 'guardando') return;
 		evento.preventDefault();
 	}
 
@@ -347,12 +370,17 @@
 					evento: muestraEventoOtro(datos) ? datos.evento_otro : datos.evento,
 					direccion: datos.direccion,
 					personas: datos.personas.length
-				}
+				},
+				evidencias?.paraLaCola() ?? []
 			);
 
 			// null significa que quedó en cola por falta de red: no es un error, y la
 			// pantalla lo dice con sus propias palabras.
-			if (respuesta) await alQuedarEnviado(respuesta);
+			if (respuesta.estado === 'enviado') {
+				await alQuedarEnviado(respuesta.respuesta);
+			} else {
+				await alQuedarGuardada();
+			}
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errorEnvio = e.message;
@@ -368,6 +396,23 @@
 				errorEnvio = 'No se pudo enviar el reporte. Intente de nuevo.';
 			}
 		}
+	}
+
+	/** La ficha quedó en cola: se cierra el formulario igual, sin radicado. */
+	async function alQuedarGuardada() {
+		resumenFinal = {
+			evento: muestraEventoOtro(datos) ? datos.evento_otro : datos.evento,
+			direccion: datos.direccion,
+			personas: datos.personas.length
+		};
+
+		guardadaSinEnviar = true;
+		borrador.descartar();
+
+		// Las fotos NO se limpian: siguen en IndexedDB atadas a esta ficha y son
+		// lo que el Service Worker subirá. Borrarlas aquí perdería las evidencias.
+		evidencias = null;
+		subirAlInicio();
 	}
 
 	/** Cierre común del envío, venga de pulsar el botón o del reintento automático. */
@@ -482,15 +527,28 @@
 				{errorCarga}
 			</div>
 			<button type="button" class="boton" onclick={() => location.reload()}>Reintentar</button>
-		{:else if enviado}
+		{:else if enviado || guardadaSinEnviar}
 			<Confirmacion
-				radicado={enviado.radicado}
-				recibidoEn={enviado.recibido_en}
+				enCola={guardadaSinEnviar}
+				pendientes={envio.pendientes}
+				enSegundoPlano={envio.enSegundoPlano}
+				radicado={enviado?.radicado ?? ''}
+				recibidoEn={enviado?.recibido_en ?? new Date().toISOString()}
 				evento={resumenFinal.evento}
 				direccion={resumenFinal.direccion}
 				personas={resumenFinal.personas}
 				onOtra={registrarOtra}
 			/>
+
+			{#if guardadaSinEnviar}
+				<div class="pendientes-confirmacion">
+					<PendientesLocales
+						version={versionCola}
+						{enLinea}
+						onReintentar={() => void envio.reintentarPendiente()}
+					/>
+				</div>
+			{/if}
 		{:else if catalogos}
 			{#if borrador.otraPestana}
 				<div class="aviso aviso--error" role="alert">
@@ -517,6 +575,12 @@
 
 			<!-- ── Paso 0: orientación ─────────────────────────────────── -->
 			{#if paso.id === 'inicio'}
+				<PendientesLocales
+					version={versionCola}
+					{enLinea}
+					onReintentar={() => void envio.reintentarPendiente()}
+				/>
+
 				<div class="intro">
 					<h1 class="intro__titulo">Registrar un RUFE</h1>
 
@@ -870,52 +934,32 @@
 
 					<AvisoDatos compacto />
 
-					<label class="opcion" class:opcion--activa={datos.declara_veracidad}>
-						<input type="checkbox" bind:checked={datos.declara_veracidad} onchange={alCambiar} />
-						<span class="opcion__texto">
-							La información fue suministrada por el jefe de hogar o un integrante del hogar.
-						</span>
-					</label>
-					{#if errores.declara_veracidad}
-						<span class="campo__error">{errores.declara_veracidad}</span>
-					{/if}
-
-					<label class="opcion" class:opcion--activa={datos.declara_representacion}>
+					<!--
+						Una sola casilla, pero su texto tiene que decirlo todo. La Ley 1581
+						exige que la autorización sea informada, y para los datos sensibles
+						—identidad de género y pertenencia étnica— exige además advertir que
+						responder es voluntario. Menos casillas no puede significar menos
+						información: por eso este párrafo es largo y por eso el aviso subió de
+						versión, que es lo que queda guardado con cada ficha.
+					-->
+					<label class="opcion opcion--consentimiento" class:opcion--activa={datos.autoriza_tratamiento}>
 						<input
 							type="checkbox"
-							bind:checked={datos.declara_representacion}
+							bind:checked={datos.autoriza_tratamiento}
 							onchange={alCambiar}
 						/>
 						<span class="opcion__texto">
-							Quien informó declaró ser jefe(a) de hogar, o contar con la autorización de las
-							personas registradas para entregar sus datos.
+							Confirmo que la información fue suministrada por el jefe(a) de hogar o un
+							integrante del hogar, que declaró ser jefe(a) de hogar o contar con autorización
+							de las personas registradas, y que <strong>autorizó de manera libre, previa,
+							expresa e informada</strong> el tratamiento de los datos personales de esta ficha
+							para la atención de la emergencia, incluidos los de
+							<strong>identidad de género</strong> y <strong>pertenencia étnica</strong>, que la
+							ley considera sensibles y cuya entrega es voluntaria.
 						</span>
 					</label>
-					{#if errores.declara_representacion}
-						<span class="campo__error">{errores.declara_representacion}</span>
-					{/if}
-
-					<label class="opcion" class:opcion--activa={datos.autoriza_datos}>
-						<input type="checkbox" bind:checked={datos.autoriza_datos} onchange={alCambiar} />
-						<span class="opcion__texto">
-							El ciudadano autorizó el tratamiento de los datos personales de esta ficha para la
-							atención de la emergencia.
-						</span>
-					</label>
-					{#if errores.autoriza_datos}
-						<span class="campo__error">{errores.autoriza_datos}</span>
-					{/if}
-
-					<label class="opcion" class:opcion--activa={datos.autoriza_sensibles}>
-						<input type="checkbox" bind:checked={datos.autoriza_sensibles} onchange={alCambiar} />
-						<span class="opcion__texto">
-							El ciudadano autorizó, de manera libre y voluntaria, el tratamiento de los datos de
-							<strong>identidad de género</strong> y <strong>pertenencia étnica</strong>, que la ley
-							considera sensibles.
-						</span>
-					</label>
-					{#if errores.autoriza_sensibles}
-						<span class="campo__error">{errores.autoriza_sensibles}</span>
+					{#if errores.autoriza_tratamiento}
+						<span class="campo__error">{errores.autoriza_tratamiento}</span>
 					{/if}
 				</div>
 
@@ -1019,6 +1063,11 @@
 		width: 100%;
 		max-width: 44rem;
 		margin: 0 auto;
+	}
+
+	.pendientes-confirmacion {
+		max-width: 34rem;
+		margin: 1.5rem auto 0;
 	}
 
 	.ayuda-paso {
@@ -1141,6 +1190,16 @@
 		font-size: 0.82rem;
 		color: var(--color-muted);
 		line-height: 1.45;
+	}
+
+	/* El consentimiento es un párrafo, no una frase: la casilla se alinea arriba
+	   para que no quede flotando a media altura del texto. */
+	.opcion--consentimiento {
+		align-items: flex-start;
+	}
+
+	.opcion--consentimiento .opcion__texto {
+		line-height: 1.5;
 	}
 
 	.autorizaciones {

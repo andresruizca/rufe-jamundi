@@ -37,12 +37,7 @@ export type BorradorGuardado = {
 };
 
 /** Campos que nunca se persisten. */
-const NO_PERSISTIR = [
-	'declara_veracidad',
-	'declara_representacion',
-	'autoriza_datos',
-	'autoriza_sensibles'
-] as const;
+const NO_PERSISTIR = ['autoriza_tratamiento'] as const;
 
 function limpiarParaGuardar(d: FormularioRufe): FormularioRufe {
 	const copia = structuredClone($state.snapshot(d)) as FormularioRufe;

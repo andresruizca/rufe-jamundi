@@ -25,11 +25,13 @@ import {
 	borrarFicha,
 	fichasPendientes,
 	guardarFicha,
+	guardarFoto,
 	leerFicha,
 	pedirAlmacenamientoPersistente,
 	pedirEnvioEnSegundoPlano,
 	todasLasFichas,
-	type FichaEnCola
+	type FichaEnCola,
+	type FotoEnCola
 } from './cola';
 
 /** Una ficha en cola no se guarda para siempre: pasada una semana ya no sirve. */
@@ -122,13 +124,16 @@ export class GestorEnvio {
 	/**
 	 * Encola la ficha y trata de enviarla.
 	 *
-	 * Devuelve null cuando quedó en cola por falta de red: no es un error, y la
-	 * pantalla debe decirlo con sus propias palabras.
+	 * Devuelve `en-cola` cuando quedó guardada sin salir. No es un error, y sobre
+	 * todo no es un final: en cuanto la ficha está en IndexedDB el trabajo de esa
+	 * casa está a salvo, y el censador puede seguir con la siguiente sin esperar a
+	 * que vuelva la señal. Esperar era lo que lo dejaba bloqueado en una vereda.
 	 */
 	async enviar(
 		cuerpo: Record<string, unknown>,
-		resumen: FichaEnCola['resumen']
-	): Promise<RespuestaEnvio | null> {
+		resumen: FichaEnCola['resumen'],
+		fotos: Omit<FotoEnCola, 'envioId' | 'subida'>[] = []
+	): Promise<{ estado: 'enviado'; respuesta: RespuestaEnvio } | { estado: 'en-cola' }> {
 		this.#envioId ??= uid();
 
 		const ficha: FichaEnCola = {
@@ -141,6 +146,14 @@ export class GestorEnvio {
 			resumen
 		};
 
+		// Las fotos se copian a la cola ATADAS A ESTA FICHA antes de intentar nada.
+		// Viven en otro almacén mientras se está llenando el formulario, atadas al
+		// borrador; si no se copiaran, el Service Worker no las encontraría y
+		// enviaría la ficha sin evidencias, en silencio.
+		for (const foto of fotos) {
+			await guardarFoto({ ...foto, envioId: ficha.envioId, subida: false });
+		}
+
 		await guardarFicha(ficha);
 		await this.#contarPendientes();
 
@@ -148,7 +161,9 @@ export class GestorEnvio {
 		// Donde no hay soporte, queda el latido de arriba.
 		this.enSegundoPlano = await pedirEnvioEnSegundoPlano();
 
-		return this.#intentar(ficha);
+		const respuesta = await this.#intentar(ficha);
+
+		return respuesta ? { estado: 'enviado', respuesta } : { estado: 'en-cola' };
 	}
 
 	/** Reintenta lo que haya en cola. No hace nada si no hay nada o ya está en curso. */

@@ -144,6 +144,79 @@ describe('fotos en cola', () => {
 	});
 });
 
+describe('las fotos viajan con su ficha', () => {
+	// El fallo que esto fija: mientras se llena el formulario las fotos viven en
+	// otro almacén, atado al borrador. Si no se copian a la cola al encolar la
+	// ficha, el Service Worker no las encuentra y la envía SIN evidencias, sin
+	// que nadie se entere.
+	it('el Service Worker encuentra por envioId lo que se guardó con la ficha', async () => {
+		await guardarFicha(ficha('envio-1'));
+
+		for (const uid of ['a', 'b']) {
+			await guardarFoto({
+				uid,
+				envioId: 'envio-1',
+				tipo: uid === 'a' ? 'DOCUMENTO' : 'DANO',
+				nombre: `${uid}.webp`,
+				mime: 'image/webp',
+				blob: new Blob([uid]),
+				subida: false
+			});
+		}
+
+		const fotos = await fotosDe('envio-1');
+		expect(fotos).toHaveLength(2);
+		expect(fotos.map((f) => f.tipo).sort()).toEqual(['DANO', 'DOCUMENTO']);
+	});
+
+	it('una ficha sin fotos devuelve una lista vacía, no un error', async () => {
+		await guardarFicha(ficha('envio-sin-fotos'));
+		expect(await fotosDe('envio-sin-fotos')).toEqual([]);
+	});
+
+	it('las fotos de dos fichas encoladas no se mezclan', async () => {
+		await guardarFicha(ficha('casa-1'));
+		await guardarFicha(ficha('casa-2'));
+
+		await guardarFoto({
+			uid: 'f1', envioId: 'casa-1', tipo: 'DANO', nombre: 'f1.webp',
+			mime: 'image/webp', blob: new Blob(['1']), subida: false
+		});
+		await guardarFoto({
+			uid: 'f2', envioId: 'casa-2', tipo: 'DANO', nombre: 'f2.webp',
+			mime: 'image/webp', blob: new Blob(['2']), subida: false
+		});
+
+		expect((await fotosDe('casa-1')).map((f) => f.uid)).toEqual(['f1']);
+		expect((await fotosDe('casa-2')).map((f) => f.uid)).toEqual(['f2']);
+
+		// Enviar una no puede llevarse las evidencias de la otra.
+		await borrarFicha('casa-1');
+		expect(await fotosDe('casa-1')).toEqual([]);
+		expect(await fotosDe('casa-2')).toHaveLength(1);
+	});
+});
+
+describe('varias fichas en cola a la vez', () => {
+	// Es el caso que motivó todo: el censador levanta tres casas seguidas sin
+	// señal y ninguna puede perderse ni estorbar a las otras.
+	it('conviven y salen en el orden en que se levantaron', async () => {
+		await guardarFicha(ficha('casa-a', { creadoEn: 1000 }));
+		await guardarFicha(ficha('casa-b', { creadoEn: 2000 }));
+		await guardarFicha(ficha('casa-c', { creadoEn: 3000 }));
+
+		expect((await fichasPendientes()).map((f) => f.envioId)).toEqual([
+			'casa-a',
+			'casa-b',
+			'casa-c'
+		]);
+
+		// La primera sale; las otras dos siguen esperando intactas.
+		await borrarFicha('casa-a');
+		expect((await fichasPendientes()).map((f) => f.envioId)).toEqual(['casa-b', 'casa-c']);
+	});
+});
+
 describe('espejo del token', () => {
 	// El Service Worker no puede leer localStorage. Sin este espejo no podría
 	// enviar nada con la aplicación cerrada, que es el punto de todo esto.

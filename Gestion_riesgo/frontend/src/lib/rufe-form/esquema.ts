@@ -91,7 +91,7 @@ export const PASOS: Paso[] = [
 		id: 'revision',
 		titulo: 'Revisar y enviar',
 		ayuda: 'Verifique la información antes de enviarla.',
-		campos: ['declara_veracidad', 'declara_representacion', 'autoriza_datos', 'autoriza_sensibles'],
+		campos: ['autoriza_tratamiento'],
 		cuentaEnProgreso: false
 	}
 ];
@@ -169,10 +169,7 @@ export function formularioVacio(): FormularioRufe {
 		observaciones: '',
 		contacto_telefono: '',
 		contacto_correo: '',
-		declara_veracidad: false,
-		declara_representacion: false,
-		autoriza_datos: false,
-		autoriza_sensibles: false
+		autoriza_tratamiento: false
 	};
 }
 
@@ -267,10 +264,7 @@ export function aCuerpoDeApi(
 		observaciones: d.observaciones.trim(),
 		contacto_telefono: d.contacto_telefono.trim(),
 		contacto_correo: d.contacto_correo.trim(),
-		declara_veracidad: d.declara_veracidad,
-		declara_representacion: d.declara_representacion,
-		autoriza_datos: d.autoriza_datos,
-		autoriza_sensibles: d.autoriza_sensibles,
+		autoriza_tratamiento: d.autoriza_tratamiento,
 		personas: d.personas.map((p) => ({
 			nombres: p.nombres.trim(),
 			apellidos: p.apellidos.trim(),

@@ -510,26 +510,24 @@ final class Validador
             }
         }
 
-        // El consentimiento es la base legal del tratamiento: sin él no hay
-        // reporte que guardar, así que se valida como cualquier campo obligatorio.
+        // El consentimiento es la base legal del tratamiento: sin él no hay ficha
+        // que guardar, así que se valida como cualquier campo obligatorio.
         //
-        // Quien marca estas casillas es el funcionario que levanta la ficha, pero
-        // lo que declara es lo que le manifestó el ciudadano en campo. Por eso los
-        // mensajes hablan del ciudadano y no de quien está en la pantalla: la
-        // autorización sigue siendo suya, y el funcionario solo la registra.
-        $casillas = [
-            'declara_veracidad' => 'Confirme que la información fue suministrada por el jefe de hogar o un integrante del hogar.',
-            'declara_representacion' => 'Confirme que quien informó declaró ser jefe de hogar o contar con autorización de las personas registradas.',
-            'autoriza_datos' => 'Registre la autorización del ciudadano para el tratamiento de sus datos personales.',
-            'autoriza_sensibles' => 'Registre la autorización del ciudadano para el tratamiento de los datos de género y pertenencia étnica.',
-        ];
-
-        foreach ($casillas as $campo => $mensaje) {
-            if (($e[$campo] ?? false) !== true) {
-                $this->errores[$campo] = $mensaje;
-            }
+        // Es UNA sola casilla, pero su texto tiene que decirlo todo. La Ley 1581
+        // exige que la autorización sea informada, y para los datos sensibles
+        // —identidad de género y pertenencia étnica— exige además que se advierta
+        // que responder es voluntario. Reducir el número de casillas no puede
+        // reducir lo que se informa: por eso el aviso cambia de versión, y esa
+        // versión queda guardada con cada ficha. Ante un reclamo, lo que prueba
+        // qué aceptó el ciudadano es ese número, no lo que hoy diga la pantalla.
+        if (($e['autoriza_tratamiento'] ?? false) !== true) {
+            $this->errores['autoriza_tratamiento'] =
+                'Debe confirmar la declaración y la autorización del ciudadano para poder registrar la ficha.';
         }
 
+        // Se siguen guardando por separado aunque la casilla sea una: la ley
+        // distingue los datos sensibles del resto, y fundir las dos columnas
+        // impediría responder más adelante qué autorizó exactamente el ciudadano.
         $this->datos['autoriza_datos'] = 1;
         $this->datos['autoriza_sensibles'] = 1;
         $this->datos['autorizacion_texto'] = Catalogos::AVISO_VERSION;

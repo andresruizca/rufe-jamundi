@@ -126,10 +126,7 @@ function base(array $cambios = []): array
         'personas' => [persona()],
         'tiene_afectacion_agro' => false,
         'contacto_telefono' => '3105551234',
-        'declara_veracidad' => true,
-        'declara_representacion' => true,
-        'autoriza_datos' => true,
-        'autoriza_sensibles' => true,
+        'autoriza_tratamiento' => true,
     ], $cambios);
 }
 
@@ -496,15 +493,30 @@ prueba('el correo se normaliza a minúsculas', function (): void {
     afirmarIgual('ana@jamundi.gov.co', datos(base(['contacto_correo' => 'Ana@Jamundi.Gov.CO']))['contacto_correo']);
 });
 
-prueba('las cuatro autorizaciones son obligatorias', function (): void {
-    foreach (['declara_veracidad', 'declara_representacion', 'autoriza_datos', 'autoriza_sensibles'] as $campo) {
-        afirmarError(base([$campo => false]), $campo);
-    }
+prueba('la autorización es obligatoria', function (): void {
+    afirmarError(base(['autoriza_tratamiento' => false]), 'autoriza_tratamiento');
 });
 
 prueba('una autorización que no sea exactamente true no vale', function (): void {
-    afirmarError(base(['autoriza_datos' => 'si']), 'autoriza_datos');
-    afirmarError(base(['autoriza_datos' => 1]), 'autoriza_datos');
+    // Un 1 o un "si" no son un consentimiento: se exige el booleano, para que un
+    // cliente mal escrito no pueda dar por autorizado lo que nadie autorizó.
+    afirmarError(base(['autoriza_tratamiento' => 'si']), 'autoriza_tratamiento');
+    afirmarError(base(['autoriza_tratamiento' => 1]), 'autoriza_tratamiento');
+});
+
+prueba('una sola casilla sigue guardando las dos columnas de la ley', function (): void {
+    // La ley distingue los datos sensibles del resto. Aunque el ciudadano marque
+    // una casilla, la base debe poder responder qué autorizó exactamente.
+    $d = datos(base());
+    afirmarIgual(1, $d['autoriza_datos']);
+    afirmarIgual(1, $d['autoriza_sensibles']);
+});
+
+prueba('el aviso aceptado sube de versión al cambiar su texto', function (): void {
+    // Lo que prueba qué aceptó el ciudadano es este número, no lo que hoy diga
+    // la pantalla. Las fichas anteriores conservan la versión que aceptaron.
+    afirmarIgual('habeas-data-v2', Catalogos::AVISO_VERSION);
+    afirmarIgual('habeas-data-v2', datos(base())['autorizacion_texto']);
 });
 
 prueba('se guarda la versión del aviso aceptado', function (): void {

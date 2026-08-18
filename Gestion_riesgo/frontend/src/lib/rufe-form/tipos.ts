@@ -94,10 +94,11 @@ export type FormularioRufe = {
 	observaciones: string;
 	contacto_telefono: string;
 	contacto_correo: string;
-	declara_veracidad: boolean;
-	declara_representacion: boolean;
-	autoriza_datos: boolean;
-	autoriza_sensibles: boolean;
+	/**
+	 * Una sola casilla, con un texto que lo dice todo: la declaración de quien
+	 * informó y la autorización del ciudadano, datos sensibles incluidos.
+	 */
+	autoriza_tratamiento: boolean;
 };
 
 /** Archivo ya aceptado por el servidor dentro de una carga. */

@@ -20,8 +20,7 @@ final class Catalogos
 
     public const FORMATO_VERSION = '01';
 
-    /** Versión del aviso de tratamiento aceptado. Se guarda con cada reporte. */
-    public const AVISO_VERSION = 'habeas-data-v1';
+    public const AVISO_VERSION = 'habeas-data-v2';
 
     public const DEPARTAMENTO = 'Valle del Cauca';
 

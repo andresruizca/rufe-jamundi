@@ -87,10 +87,7 @@ function base(cambios: Partial<FormularioRufe> = {}): FormularioRufe {
 		personas: [jefe()],
 		tiene_afectacion_agro: false,
 		contacto_telefono: '3105551234',
-		declara_veracidad: true,
-		declara_representacion: true,
-		autoriza_datos: true,
-		autoriza_sensibles: true,
+		autoriza_tratamiento: true,
 		...cambios
 	};
 }
@@ -389,16 +386,17 @@ describe('contacto', () => {
 	});
 });
 
-describe('autorizaciones', () => {
-	it('las cuatro son obligatorias', () => {
-		for (const campo of [
-			'declara_veracidad',
-			'declara_representacion',
-			'autoriza_datos',
-			'autoriza_sensibles'
-		] as const) {
-			expect(errores(base({ [campo]: false }))).toHaveProperty(campo);
-		}
+describe('autorización', () => {
+	// Una sola casilla desde que se refundieron las cuatro. Que siga siendo
+	// obligatoria es lo que impide registrar una ficha sin base legal.
+	it('es obligatoria', () => {
+		expect(errores(base({ autoriza_tratamiento: false }))).toHaveProperty(
+			'autoriza_tratamiento'
+		);
+	});
+
+	it('marcada, la ficha es válida', () => {
+		expect(errores(base({ autoriza_tratamiento: true }))).toEqual({});
 	});
 });
 
@@ -412,7 +410,7 @@ describe('pasoDelError', () => {
 		expect(pasoDelError('estado_bien')).toBe('inmueble');
 		expect(pasoDelError('alojamiento_direccion')).toBe('alojamiento');
 		expect(pasoDelError('contacto_telefono')).toBe('evidencias');
-		expect(pasoDelError('autoriza_datos')).toBe('revision');
+		expect(pasoDelError('autoriza_tratamiento')).toBe('revision');
 	});
 
 	it('una clave desconocida cae en el paso de revisión, que es donde se envía', () => {

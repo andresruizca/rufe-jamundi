@@ -412,20 +412,9 @@ function validarContacto(d: FormularioRufe): Errores {
 function validarAutorizaciones(d: FormularioRufe): Errores {
 	const e: Errores = {};
 
-	if (!d.declara_veracidad) {
-		e.declara_veracidad = 'Debe declarar que la información suministrada es veraz.';
-	}
-	if (!d.declara_representacion) {
-		e.declara_representacion =
-			'Debe declarar que es jefe de hogar o que cuenta con autorización de las personas registradas.';
-	}
-	if (!d.autoriza_datos) {
-		e.autoriza_datos =
-			'Debe autorizar el tratamiento de sus datos personales para poder enviar el reporte.';
-	}
-	if (!d.autoriza_sensibles) {
-		e.autoriza_sensibles =
-			'Debe autorizar el tratamiento de los datos de género y pertenencia étnica.';
+	if (!d.autoriza_tratamiento) {
+		e.autoriza_tratamiento =
+			'Debe confirmar la declaración y la autorización del ciudadano para poder registrar la ficha.';
 	}
 
 	return e;
@@ -459,10 +448,7 @@ export function pasoDelError(clave: string): IdPaso {
 		contacto_telefono: 'evidencias',
 		contacto_correo: 'evidencias',
 		archivo: 'evidencias',
-		declara_veracidad: 'revision',
-		declara_representacion: 'revision',
-		autoriza_datos: 'revision',
-		autoriza_sensibles: 'revision'
+		autoriza_tratamiento: 'revision'
 	};
 
 	return mapa[clave] ?? 'revision';
