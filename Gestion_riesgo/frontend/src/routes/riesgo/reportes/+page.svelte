@@ -98,20 +98,21 @@
 				bind:value={filtros.q}
 				aria-describedby="filtro-q-ayuda"
 			/>
-			<p class="campo__ayuda" id="filtro-q-ayuda">
-				También encuentra por dirección, barrio o evento. El nombre puede ir en cualquier orden
-				y sin tildes.
-			</p>
 		</div>
 
-		<div class="campo">
+		<p class="campo__ayuda filtros__ayuda" id="filtro-q-ayuda">
+			También encuentra por dirección, barrio o evento. El nombre puede ir en cualquier orden y
+			sin tildes.
+		</p>
+
+		<div class="campo filtros__estado">
 			<label class="campo__etiqueta" for="filtro-estado">Estado</label>
 			<select id="filtro-estado" class="campo__control" bind:value={filtros.estado}>
 				{#each ESTADOS as e (e.codigo)}<option value={e.codigo}>{e.etiqueta}</option>{/each}
 			</select>
 		</div>
 
-		<div class="campo">
+		<div class="campo filtros__zona">
 			<label class="campo__etiqueta" for="filtro-zona">Zona</label>
 			<select id="filtro-zona" class="campo__control" bind:value={filtros.zona}>
 				{#each ZONAS as z (z.codigo)}<option value={z.codigo}>{z.etiqueta}</option>{/each}
@@ -257,13 +258,29 @@
 
 	@media (min-width: 760px) {
 		.filtros {
-			grid-template-columns: 2fr 1fr 1fr auto;
+			/* El buscador se queda con el espacio sobrante; los dos selectores piden
+			   solo lo que necesitan para mostrar su opción más larga. */
+			grid-template-columns: minmax(14rem, 1fr) minmax(9.5rem, auto) minmax(9.5rem, auto) auto;
 			align-items: end;
+			column-gap: 0.7rem;
+			row-gap: 0.3rem;
 		}
+
+		/* Colocación explícita: sin esto la ayuda, al ocupar todo el ancho, echaría
+		   a los selectores a una tercera fila. */
+		.filtros__buscar { grid-area: 1 / 1; }
+		.filtros__estado { grid-area: 1 / 2; }
+		.filtros__zona { grid-area: 1 / 3; }
+		.filtros__acciones { grid-area: 1 / 4; }
+		.filtros__ayuda { grid-area: 2 / 1 / 3 / -1; }
 	}
 
 	.filtros .campo {
 		margin-bottom: 0;
+	}
+
+	.filtros__ayuda {
+		margin: 0;
 	}
 
 	.filtros__acciones {
