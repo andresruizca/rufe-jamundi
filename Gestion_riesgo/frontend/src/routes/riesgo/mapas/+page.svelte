@@ -126,21 +126,16 @@
 		mapa.on('click', () => mapa.scrollWheelZoom.enable());
 		mapa.on('mouseout', () => mapa.scrollWheelZoom.disable());
 
-		const oscuro =
-			document.documentElement.dataset.theme === 'dark' ||
-			(!document.documentElement.dataset.theme &&
-				window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-		L.tileLayer(
-			oscuro
-				? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-				: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-			{
-				maxZoom: 19,
-				attribution:
-					'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-			}
-		).addTo(mapa);
+		// El fondo del mapa va siempre claro, aunque el resto del sistema esté en
+		// tema oscuro. Sobre el fondo oscuro las calles y los nombres quedaban casi
+		// invisibles, y la mancha de calor —que es naranja y roja— perdía todo el
+		// contraste. La cartografía se lee mejor en claro, y así además coincide
+		// con los planos que la Alcaldía ya tiene impresos.
+		L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+			maxZoom: 19,
+			attribution:
+				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+		}).addTo(mapa);
 
 		refrescarCapas();
 		encuadrar();
@@ -337,7 +332,9 @@
 		/* Leaflet dibuja sus tejas y controles con posición absoluta; sin recorte
 		   se salen de la esquina redondeada. */
 		overflow: hidden;
-		background: var(--color-surface-alt);
+		/* Color fijo, no del tema: es lo que se ve mientras cargan las tejas, y
+		   debe ser del tono del mapa que viene detrás, no del de la aplicación. */
+		background: #eaedf0;
 	}
 
 	.leyenda {
@@ -373,5 +370,13 @@
 	   que no griten sobre el tema oscuro del sistema. */
 	.lienzo :global(.leaflet-control-attribution) {
 		font-size: 0.65rem;
+	}
+
+	/* Leaflet dibuja sus globos y controles en claro. Con el tema oscuro del
+	   sistema heredaban el color de texto y quedaban blanco sobre blanco. */
+	.lienzo :global(.leaflet-popup-content),
+	.lienzo :global(.leaflet-control-attribution),
+	.lienzo :global(.leaflet-control-zoom a) {
+		color: #1b2430;
 	}
 </style>
