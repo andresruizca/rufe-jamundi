@@ -13,7 +13,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
-		ArrowLeft, ArrowRight, LoaderCircle, MapPin, Send, TriangleAlert, Trash2
+		ArrowLeft, ArrowRight, CloudOff, LoaderCircle, MapPin, Send, TriangleAlert, Trash2
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { rufeApi } from '$lib/api/servicios';
@@ -44,7 +44,6 @@
 	import AvisoDatos from '$lib/rufe-form/componentes/AvisoDatos.svelte';
 	import ResumenEnvio from '$lib/rufe-form/componentes/ResumenEnvio.svelte';
 	import Confirmacion from '$lib/rufe-form/componentes/Confirmacion.svelte';
-	import PendientesLocales from '$lib/rufe-form/componentes/PendientesLocales.svelte';
 
 	// ── Estado ──────────────────────────────────────────────────────────────
 
@@ -80,8 +79,6 @@
 
 	const enviando = $derived(envio.estado === 'enviando');
 
-	/** Cambia con la cola, para que la lista de pendientes se relea sola. */
-	const versionCola = $derived(envio.pendientes + (envio.estado === 'enviando' ? 1000 : 0));
 
 	const paso = $derived(PASOS[indice]);
 	const esUltimo = $derived(paso.id === 'revision');
@@ -539,13 +536,17 @@
 				onOtra={registrarOtra}
 			/>
 
-			{#if guardadaSinEnviar}
+			{#if guardadaSinEnviar && envio.pendientes > 0}
 				<div class="pendientes-confirmacion">
-					<PendientesLocales
-						version={versionCola}
-						{enLinea}
-						onReintentar={() => void envio.reintentarPendiente()}
-					/>
+					<a class="aviso aviso--info aviso-pendientes" href="/riesgo/pendientes">
+						<CloudOff size={16} aria-hidden="true" />
+						<span>
+							{envio.pendientes === 1
+								? 'Hay 1 ficha esperando salir.'
+								: `Hay ${envio.pendientes} fichas esperando salir.`}
+							<strong>Ver pendientes</strong>
+						</span>
+					</a>
 				</div>
 			{/if}
 		{:else if catalogos}
@@ -574,11 +575,20 @@
 
 			<!-- ── Paso 0: orientación ─────────────────────────────────── -->
 			{#if paso.id === 'inicio'}
-				<PendientesLocales
-					version={versionCola}
-					{enLinea}
-					onReintentar={() => void envio.reintentarPendiente()}
-				/>
+				<!-- Un aviso, no la lista: vigilar la cola es trabajo de «Pendientes».
+				     Pero callarlo del todo sería peor — el censador tiene que saber que
+				     hay trabajo sin salir antes de empezar otra casa. -->
+				{#if envio.pendientes > 0}
+					<a class="aviso aviso--info aviso-pendientes" href="/riesgo/pendientes">
+						<CloudOff size={16} aria-hidden="true" />
+						<span>
+							{envio.pendientes === 1
+								? 'Hay 1 ficha guardada sin enviar.'
+								: `Hay ${envio.pendientes} fichas guardadas sin enviar.`}
+							<strong>Ver pendientes</strong>
+						</span>
+					</a>
+				{/if}
 
 				<div class="intro">
 					<h1 class="intro__titulo">Registrar un RUFE</h1>
@@ -1049,6 +1059,19 @@
 	.pendientes-confirmacion {
 		max-width: 34rem;
 		margin: 1.5rem auto 0;
+	}
+
+	.aviso-pendientes {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		text-decoration: none;
+		color: var(--aviso-info-texto);
+	}
+
+	.aviso-pendientes strong {
+		text-decoration: underline;
+		white-space: nowrap;
 	}
 
 	.ayuda-paso {

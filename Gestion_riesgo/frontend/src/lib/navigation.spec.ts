@@ -45,6 +45,13 @@ describe('acceso al formulario de captura', () => {
 		expect(puedeAcceder('/riesgo/reportar', null)).toBe(false);
 	});
 
+	it('Pendientes tiene el mismo control que el formulario', () => {
+		expect(puedeAcceder('/riesgo/pendientes', 'GESTOR')).toBe(true);
+		expect(puedeAcceder('/riesgo/pendientes', 'ADMINISTRADOR')).toBe(true);
+		expect(puedeAcceder('/riesgo/pendientes', 'VISUALIZACION')).toBe(false);
+		expect(puedeAcceder('/riesgo/pendientes', null)).toBe(false);
+	});
+
 	// puedeAcceder() permite por omisión las rutas que no conoce: si la entrada
 	// desapareciera del registro, el formulario quedaría abierto a cualquier rol
 	// autenticado sin que nada más lo delatara.
@@ -52,6 +59,7 @@ describe('acceso al formulario de captura', () => {
 		const item = NAV_ITEMS.find((i) => i.href === '/riesgo/reportar');
 		expect(item).toBeDefined();
 		expect(item?.roles).toEqual(['ADMINISTRADOR', 'GESTOR']);
+		expect(item?.parentId).toBe('grupo-registro');
 	});
 });
 
@@ -72,17 +80,20 @@ describe('menú por rol', () => {
 	}
 
 	it('el visor no ve el enlace de registrar', () => {
-		expect(etiquetas('VISUALIZACION')).not.toContain('Registro');
+		expect(etiquetas('VISUALIZACION')).not.toContain('Nueva ficha');
+		expect(etiquetas('VISUALIZACION')).not.toContain('Pendientes');
 	});
 
 	it('el gestor sí lo ve, y no ve administración', () => {
-		expect(etiquetas('GESTOR')).toContain('Registro');
+		expect(etiquetas('GESTOR')).toContain('Nueva ficha');
+		expect(etiquetas('GESTOR')).toContain('Pendientes');
 		expect(etiquetas('GESTOR')).not.toContain('Usuarios del sistema');
 	});
 
 	it('el administrador lo ve todo', () => {
 		const e = etiquetas('ADMINISTRADOR');
-		expect(e).toContain('Registro');
+		expect(e).toContain('Nueva ficha');
+		expect(e).toContain('Pendientes');
 		expect(e).toContain('Reportes RUFE');
 		expect(e).toContain('Usuarios del sistema');
 	});
@@ -97,6 +108,7 @@ describe('títulos', () => {
 		expect(resolverTitulo('/riesgo/reportar')).toBe(
 			'Registro Unifamiliar de Emergencias — captura en campo'
 		);
+		expect(resolverTitulo('/riesgo/pendientes')).toBe('Fichas pendientes de enviar');
 		expect(resolverTitulo('/riesgo/reportes')).toBe('Fichas RUFE registradas');
 	});
 });

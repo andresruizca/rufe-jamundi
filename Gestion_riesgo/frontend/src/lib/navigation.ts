@@ -17,7 +17,16 @@
 //               exactas para que un hijo más específico gane siempre sobre su
 //               padre; usa expresión regular para rutas con parámetros.
 
-import { LayoutDashboard, Users, ShieldCheck, Info, ClipboardList, ClipboardPlus } from '@lucide/svelte';
+import {
+	LayoutDashboard,
+	Users,
+	ShieldCheck,
+	Info,
+	ClipboardList,
+	ClipboardPlus,
+	CloudOff,
+	FilePlus2
+} from '@lucide/svelte';
 import type { Component } from 'svelte';
 
 /**
@@ -82,15 +91,37 @@ export const NAV_ITEMS: NavItem[] = [
 		match: ['/dashboard']
 	},
 
+	// «Registro» agrupa el formulario y la cola local. Separarlos evita que la
+	// pantalla de captura tenga que hacer dos trabajos: levantar una ficha nueva y
+	// vigilar las que todavía no salieron.
+	{
+		id: 'grupo-registro',
+		type: 'group',
+		label: 'Registro',
+		icon: ClipboardPlus,
+		roles: ESCRITURA
+	},
 	{
 		id: 'captura-rufe',
 		type: 'item',
-		label: 'Registro',
+		parentId: 'grupo-registro',
+		label: 'Nueva ficha',
 		title: 'Registro Unifamiliar de Emergencias — captura en campo',
 		href: '/riesgo/reportar',
-		icon: ClipboardPlus,
+		icon: FilePlus2,
 		roles: ESCRITURA,
 		match: ['/riesgo/reportar']
+	},
+	{
+		id: 'pendientes-rufe',
+		type: 'item',
+		parentId: 'grupo-registro',
+		label: 'Pendientes',
+		title: 'Fichas pendientes de enviar',
+		href: '/riesgo/pendientes',
+		icon: CloudOff,
+		roles: ESCRITURA,
+		match: ['/riesgo/pendientes']
 	},
 	{
 		id: 'reportes-rufe',
