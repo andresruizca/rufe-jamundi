@@ -75,7 +75,7 @@
 	}
 
 	async function intentarAhora() {
-		await envio.reintentarPendiente();
+		await envio.reintentarTodo();
 		await refrescar();
 	}
 

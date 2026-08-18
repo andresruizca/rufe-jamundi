@@ -177,7 +177,11 @@ export class GestorEnvio {
 			navigator.serviceWorker?.controller?.postMessage({ tipo: 'enviar-pendientes' });
 		}
 
-		const pendientes = await fichasPendientes();
+		// Las que el servidor ya rechazó se saltan en los reintentos automáticos.
+		// Si no, la primera en error se reintenta cada 30 segundos para siempre y
+		// las que están detrás nunca salen — la cola entera queda secuestrada por
+		// una sola ficha defectuosa.
+		const pendientes = (await fichasPendientes()).filter((f) => f.estado !== 'error');
 		if (pendientes.length === 0) {
 			await this.#contarPendientes();
 
@@ -185,6 +189,29 @@ export class GestorEnvio {
 		}
 
 		return this.#intentar(pendientes[0]);
+	}
+
+	/**
+	 * Reintento pedido a mano desde «Pendientes».
+	 *
+	 * Reintenta también las rechazadas: si el motivo era del servidor y ya se
+	 * corrigió, el censador no tiene otra forma de volver a intentarlo. Nunca
+	 * propaga el error — quien pulsa el botón lee el resultado en la pantalla.
+	 */
+	async reintentarTodo(): Promise<void> {
+		for (const f of await fichasPendientes()) {
+			if (f.estado === 'error') {
+				f.estado = 'pendiente';
+				f.error = undefined;
+				await guardarFicha(f);
+			}
+		}
+
+		try {
+			await this.reintentarPendiente();
+		} catch {
+			// El motivo ya quedó en this.error y en la propia ficha.
+		}
 	}
 
 	descartar(): void {
@@ -237,11 +264,16 @@ export class GestorEnvio {
 				return null;
 			}
 
-			// 4xx: los datos no sirven. Reintentarlos daría igual.
-			await borrarFicha(ficha.envioId);
+			// 4xx: los datos no sirven y reintentarlos daría igual. Pero la ficha NO
+			// se borra: son los datos de un hogar damnificado y solo existen aquí.
+			// Se marca con el motivo para que aparezca en «Pendientes» y sea el
+			// censador quien decida corregirla o descartarla.
+			this.error = e instanceof ApiError ? e.message : 'No se pudo enviar la ficha.';
+			ficha.estado = 'error';
+			ficha.error = this.error;
+			await guardarFicha(ficha);
 			await this.#contarPendientes();
 			this.estado = 'error';
-			this.error = e instanceof ApiError ? e.message : 'No se pudo enviar la ficha.';
 
 			throw e;
 		}

@@ -20,7 +20,7 @@
 // así que la cola sin conexión ocupa megabytes y no decenas de ellos.
 
 import { browser } from '$app/environment';
-import { API_BASE } from '$lib/api/client';
+import { API_BASE, leerToken } from '$lib/api/client';
 import { rufeApi } from '$lib/api/servicios';
 import type { Catalogos, EvidenciaLocal, TipoEvidencia } from './tipos';
 import { uid } from './esquema';
@@ -216,7 +216,8 @@ export class GestorEvidencias {
 		if (archivo.idServidor && this.carga) {
 			try {
 				await fetch(`${API_BASE}/rufe/cargas/${this.carga}/archivos/${archivo.idServidor}`, {
-					method: 'DELETE'
+					method: 'DELETE',
+					headers: { Authorization: `Bearer ${leerToken() ?? ''}` }
 				});
 			} catch {
 				// Si no se pudo borrar en el servidor, el archivo queda en la carga
@@ -311,6 +312,11 @@ export class GestorEvidencias {
 			const xhr = new XMLHttpRequest();
 			xhr.open('POST', `${API_BASE}/rufe/cargas/${this.carga}/archivos`);
 			xhr.setRequestHeader('Accept', 'application/json');
+
+			// XMLHttpRequest no pasa por el cliente de la API, así que la cabecera
+			// se pone a mano. Sin ella el servidor responde 401 y la foto nunca sube.
+			const token = leerToken();
+			if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
 			xhr.upload.onprogress = (e) => {
 				if (e.lengthComputable) registro.progreso = Math.round((e.loaded / e.total) * 100);

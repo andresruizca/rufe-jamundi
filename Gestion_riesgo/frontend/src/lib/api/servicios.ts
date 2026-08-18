@@ -50,14 +50,16 @@ export type FiltrosReportes = {
 
 /** Formulario RUFE: la parte pública y la bandeja interna. */
 export const rufeApi = {
-	// ── Público, sin token ──────────────────────────────────────────────
-	// En los POST se pasa `autenticada = false` para no enviar la cabecera
-	// Authorization a un endpoint público: un funcionario que abra el formulario
-	// ciudadano no tiene por qué exponer ahí su token de sesión.
+	// ── Captura en campo ────────────────────────────────────────────────
+	// Todas van autenticadas. Cuando el formulario era público estas tres se
+	// llamaban con `autenticada = false` para no exponer el token en rutas
+	// abiertas; al volverse internas se cambió el router de PHP pero no estas
+	// llamadas, así que salían sin cabecera Authorization y el servidor las
+	// rechazaba con 401 — sin importar cuántas veces se iniciara sesión.
 	catalogos: () => api.get<Catalogos>('/rufe/catalogos'),
-	abrirCarga: () => api.post<RespuestaCarga>('/rufe/cargas', {}, false),
+	abrirCarga: () => api.post<RespuestaCarga>('/rufe/cargas', {}),
 	enviarReporte: (cuerpo: Record<string, unknown>) =>
-		api.post<RespuestaEnvio>('/rufe/reportes', cuerpo, false),
+		api.post<RespuestaEnvio>('/rufe/reportes', cuerpo),
 
 	// ── Bandeja interna ─────────────────────────────────────────────────
 	listar: (filtros: FiltrosReportes = {}) => {

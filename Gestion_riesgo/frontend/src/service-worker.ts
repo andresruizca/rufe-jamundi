@@ -81,7 +81,10 @@ sw.addEventListener('message', (evento) => {
  * igual y solo gastaría batería.
  */
 async function enviarPendientes(): Promise<void> {
-	const pendientes = await fichasPendientes();
+	// Las que el servidor ya rechazó se quedan quietas: reintentarlas en cada
+	// evento de red gastaría batería sin cambiar nada. Solo el censador puede
+	// desatascarlas, desde «Pendientes».
+	const pendientes = (await fichasPendientes()).filter((f) => f.estado !== 'error');
 	if (pendientes.length === 0) return;
 
 	const token = await tokenEspejado();
