@@ -126,16 +126,27 @@
 		mapa.on('click', () => mapa.scrollWheelZoom.enable());
 		mapa.on('mouseout', () => mapa.scrollWheelZoom.disable());
 
-		// El fondo del mapa va siempre claro, aunque el resto del sistema esté en
-		// tema oscuro. Sobre el fondo oscuro las calles y los nombres quedaban casi
-		// invisibles, y la mancha de calor —que es naranja y roja— perdía todo el
-		// contraste. La cartografía se lee mejor en claro, y así además coincide
-		// con los planos que la Alcaldía ya tiene impresos.
-		L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-			maxZoom: 19,
+		// El fondo va siempre claro, aunque el sistema esté en tema oscuro: sobre
+		// negro las calles y los nombres se perdían, y la mancha de calor —naranja
+		// y roja— no tenía contra qué contrastar.
+		//
+		// Se usa «Voyager» y no el «Positron» de antes. Positron está pensado para
+		// desaparecer bajo los datos: todo gris, sin jerarquía de vías. Aquí el
+		// fondo tiene que hacer trabajo propio, porque quien mira el mapa necesita
+		// reconocer por dónde va la vía principal y dónde está el río para saber
+		// qué barrio es el de la mancha. Voyager trae esa jerarquía, agua en azul y
+		// zonas verdes, como el plano que ya imprimió la Alcaldía. Es del mismo
+		// proveedor, así que sigue sin necesitar clave ni cuenta.
+		L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+			maxZoom: 20,
 			attribution:
 				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
 		}).addTo(mapa);
+
+		// La escala es lo que convierte una mancha en una magnitud: sin ella no se
+		// sabe si el foco abarca una manzana o media vereda. El plano impreso la
+		// lleva, y quien compare los dos necesita la misma referencia.
+		L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(mapa);
 
 		refrescarCapas();
 		encuadrar();
@@ -149,10 +160,20 @@
 
 		if (verCalor && visibles.length > 0) {
 			capaCalor = (L as any).heatLayer(calorDe(visibles), {
-				radius: 22,
-				blur: 18,
+				radius: 26,
+				blur: 20,
 				maxZoom: 16,
-				minOpacity: 0.25
+				minOpacity: 0.3,
+				// El degradado de fábrica arranca en azul, que sobre este fondo se
+				// confunde con el río y con las zonas de agua. Se sustituye por uno
+				// que solo recorre los cálidos: así la mancha nunca se puede leer
+				// como un accidente geográfico.
+				gradient: {
+					0.2: '#ffd166',
+					0.45: '#f7a440',
+					0.7: '#ef6c3a',
+					1.0: '#c62d1f'
+				}
 			}).addTo(mapa);
 		}
 
@@ -160,11 +181,15 @@
 			capaPredios = L.layerGroup(
 				visibles.map((p) =>
 					L.circleMarker([p.lat, p.lon], {
-						radius: 6,
+						radius: 7,
+						// Anillo blanco grueso: separa un predio de otro cuando se
+						// amontonan y despega el punto de un fondo que ahora tiene
+						// color propio. Es lo mismo que hacen los alfileres del plano
+						// impreso.
 						color: '#ffffff',
-						weight: 1.5,
+						weight: 2,
 						fillColor: colorDe(p.estadoBien),
-						fillOpacity: 0.92
+						fillOpacity: 1
 					}).bindPopup(popup(p))
 				)
 			).addTo(mapa);
@@ -329,6 +354,9 @@
 		height: clamp(22rem, 62vh, 40rem);
 		border: 1px solid var(--color-border);
 		border-radius: 10px;
+		/* Un poco de profundidad separa el mapa —que ahora tiene color propio— de
+		   la tarjeta que lo contiene. */
+		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%);
 		/* Leaflet dibuja sus tejas y controles con posición absoluta; sin recorte
 		   se salen de la esquina redondeada. */
 		overflow: hidden;
@@ -353,10 +381,13 @@
 	}
 
 	.leyenda__punto {
-		width: 11px;
-		height: 11px;
+		width: 13px;
+		height: 13px;
 		border-radius: 50%;
-		border: 1.5px solid #fff;
+		/* El mismo anillo blanco que llevan los puntos del mapa, para que la
+		   leyenda se lea como una muestra y no como otra cosa. */
+		border: 2px solid #fff;
+		box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
 		flex: 0 0 auto;
 	}
 
@@ -376,7 +407,20 @@
 	   sistema heredaban el color de texto y quedaban blanco sobre blanco. */
 	.lienzo :global(.leaflet-popup-content),
 	.lienzo :global(.leaflet-control-attribution),
+	.lienzo :global(.leaflet-control-scale-line),
 	.lienzo :global(.leaflet-control-zoom a) {
 		color: #1b2430;
+	}
+
+	.lienzo :global(.leaflet-popup-content) {
+		font-size: 0.83rem;
+		line-height: 1.45;
+		margin: 0.7rem 0.85rem;
+	}
+
+	.lienzo :global(.leaflet-control-scale-line) {
+		border-color: #5c6b7a;
+		background: rgb(255 255 255 / 78%);
+		font-size: 0.68rem;
 	}
 </style>
