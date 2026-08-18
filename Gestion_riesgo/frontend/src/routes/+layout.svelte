@@ -28,7 +28,7 @@
 
 	const titulo = $derived(resolverTitulo(ruta));
 
-	/** Pantalla estrecha: el menú se cierra al navegar para no tapar el contenido. */
+	/** Pantalla estrecha: ahí el menú nunca se abre solo al entrar. */
 	function esEstrecha(): boolean {
 		return browser && window.matchMedia('(max-width: 1100px)').matches;
 	}
@@ -56,7 +56,17 @@
 	}
 
 	function alNavegar() {
-		if (esEstrecha()) menuAbierto = false;
+		// Se cierra siempre, no solo en pantallas estrechas. El menú es un panel
+		// superpuesto en cualquier tamaño —con su velo oscuro encima del
+		// contenido—, así que dejarlo abierto tras elegir una sección obligaba a
+		// hacer un clic más, en cualquier sitio, para poder ver la página que ya
+		// se había cargado detrás.
+		cerrarMenu();
+
+		// El foco no puede quedarse en un enlace del panel que acaba de ocultarse:
+		// queda dentro de un contenedor `aria-hidden` y quien navega con teclado se
+		// queda sin punto de partida. Se lleva al principio de la página nueva.
+		document.getElementById('inicio-de-pagina')?.focus();
 	}
 
 	// Guardia de navegación. Depende de la ruta y de la sesión, así que también
