@@ -90,7 +90,7 @@
 	.pendientes {
 		margin-bottom: 1.2rem;
 		padding: 0.85rem;
-		border: 1px solid #bcd9f6;
+		border: 1px solid var(--aviso-info-borde);
 		border-radius: 12px;
 		background: var(--color-info-bg);
 	}

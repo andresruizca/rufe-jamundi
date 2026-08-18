@@ -546,7 +546,7 @@
 	}
 
 	.zona-peligro {
-		border: 1px solid #f0c2bc;
+		border: 1px solid var(--aviso-error-borde);
 	}
 
 	.confirmar p {
@@ -573,25 +573,25 @@
 	.pastilla--recibido {
 		background: var(--color-info-bg);
 		color: var(--color-primary-dark);
-		border-color: #bcd9f6;
+		border-color: var(--aviso-info-borde);
 	}
 
 	.pastilla--en_validacion {
-		background: #fff4dd;
-		color: #8a5a00;
-		border-color: #f2d69a;
+		background: var(--aviso-alerta-fondo);
+		color: var(--aviso-alerta-texto);
+		border-color: var(--aviso-alerta-borde);
 	}
 
 	.pastilla--validado {
 		background: var(--color-success-bg);
-		color: #146643;
-		border-color: #b6e0cd;
+		color: var(--aviso-ok-texto);
+		border-color: var(--aviso-ok-borde);
 	}
 
 	.pastilla--rechazado {
 		background: var(--color-danger-bg);
-		color: #8f271c;
-		border-color: #f0c2bc;
+		color: var(--aviso-error-texto);
+		border-color: var(--aviso-error-borde);
 	}
 
 	.pastilla--archivado {

@@ -192,7 +192,7 @@
 	.espera {
 		margin-bottom: 1.4rem;
 		padding: 0.9rem;
-		border: 1px solid #bcd9f6;
+		border: 1px solid var(--aviso-info-borde);
 		border-radius: 12px;
 		background: var(--color-info-bg);
 		text-align: left;
@@ -337,7 +337,7 @@
 	}
 
 	.boton--otra:hover {
-		background: #146643;
+		background: color-mix(in srgb, var(--color-success) 82%, black);
 	}
 
 	@media (min-width: 480px) {

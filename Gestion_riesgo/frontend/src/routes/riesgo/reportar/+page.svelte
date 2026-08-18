@@ -107,11 +107,10 @@
 		const detenerBorrador = borrador.iniciar();
 		const detenerEnvio = envio.iniciar();
 
-		// Una ficha que quedó en cola de una visita anterior se retoma sola; en
-		// cuanto salga, la pantalla pasa a la confirmación.
-		void hayFichasPendientes().then((n) => {
-			if (n > 0) indice = PASOS.length - 1;
-		});
+		// Las fichas que quedaron en cola de una visita anterior salen solas y se
+		// muestran en la lista de pendientes del primer paso. NO se salta al último
+		// paso: hacerlo dejaba al censador atrapado en el resumen de una ficha que
+		// ya estaba guardada, sin poder empezar la siguiente.
 
 		void iniciar();
 
@@ -970,33 +969,18 @@
 					</div>
 				{/if}
 
-				{#if envio.enCola}
-					<div class="aviso aviso--info" role="status">
-						<strong>La ficha quedó guardada y se enviará sola.</strong>
-						{#if envio.enSegundoPlano}
-							En cuanto el teléfono recupere señal se enviará automáticamente, aunque cierre la
-							aplicación.
-						{:else}
-							Se enviará en cuanto vuelva la señal. Deje esta página abierta: su navegador no
-							permite enviarla en segundo plano.
-						{/if}
-						{#if envio.pendientes > 1}
-							<span class="reintentos">Hay {envio.pendientes} fichas esperando salir.</span>
-						{:else if envio.intentos > 1}
-							<span class="reintentos">Intentos: {envio.intentos}.</span>
-						{/if}
+				{#if envio.sesionRequerida}
+					<div class="aviso aviso--error" role="alert">
+						<TriangleAlert size={16} aria-hidden="true" />
+						Su sesión venció. Vuelva a iniciar sesión: las fichas que ya guardó se enviarán
+						solas y no se ha perdido ninguna.
 					</div>
+				{/if}
 
-					{#if envio.sesionRequerida}
-						<div class="aviso aviso--error" role="alert">
-							<TriangleAlert size={16} aria-hidden="true" />
-							Su sesión venció. Vuelva a iniciar sesión y las fichas pendientes se enviarán solas.
-						</div>
-					{/if}
-				{:else if !enLinea}
+				{#if !enLinea}
 					<div class="aviso aviso--info" role="status">
-						Sin conexión. Puede pulsar «Enviar» igualmente: el reporte quedará guardado en este
-						dispositivo y se enviará solo cuando vuelva la señal.
+						Sin conexión. Puede pulsar «Guardar» igualmente: la ficha queda en este dispositivo
+						y se envía sola cuando vuelva la señal.
 					</div>
 				{/if}
 			{/if}
@@ -1015,17 +999,14 @@
 						type="button"
 						class="boton boton--enviar"
 						onclick={enviar}
-						disabled={enviando || envio.enCola || borrador.otraPestana}
+						disabled={enviando || borrador.otraPestana}
 					>
 						{#if enviando}
 							<LoaderCircle size={16} class="girando" aria-hidden="true" />
 							Enviando…
-						{:else if envio.enCola}
-							<LoaderCircle size={16} class="girando" aria-hidden="true" />
-							Esperando señal…
 						{:else}
 							<Send size={16} aria-hidden="true" />
-							{enLinea ? 'Enviar el reporte' : 'Guardar y enviar cuando haya señal'}
+							{enLinea ? 'Enviar la ficha' : 'Guardar y enviar cuando haya señal'}
 						{/if}
 					</button>
 				{:else}
@@ -1178,13 +1159,6 @@
 		margin-bottom: 1rem;
 	}
 
-	.reintentos {
-		display: block;
-		margin-top: 0.3rem;
-		font-size: 0.78rem;
-		opacity: 0.85;
-	}
-
 	.autorizaciones__nota {
 		margin: 0;
 		font-size: 0.82rem;
@@ -1228,7 +1202,7 @@
 	}
 
 	.boton--enviar:hover:not(:disabled) {
-		background: #146643;
+		background: color-mix(in srgb, var(--color-success) 82%, black);
 	}
 
 	/* Fuera de la vista pero presente para quien automatiza: no se usa
