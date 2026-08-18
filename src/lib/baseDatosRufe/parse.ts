@@ -5,37 +5,63 @@ import type { Zona } from '../rufe/types';
 import type { BaseDatosDataset } from './types';
 
 /**
- * "BASE-DATOS RUFE": una pestaña por barrio/vereda, todas con el mismo
- * encabezado (verificado el 2026-08-15 contra las 13 pestañas existentes).
+ * "BASE-DATOS RUFE": una pestaña por barrio/vereda. En teoría todas
+ * comparten el mismo encabezado, pero en la práctica ya cambió una vez sin
+ * avisar (el 2026-08-18 aparecieron "PERSONAS EVACUADAS" y "REALIZÓ VISITA"
+ * nuevas antes de "Observaciones" en las 26 pestañas existentes a esa
+ * fecha, corriendo esa columna del índice 29 al 31 — un índice fijo leyó
+ * silenciosamente el campo equivocado hasta que se detectó a mano). Por eso
+ * las columnas NO se ubican por índice fijo: se buscan por el texto del
+ * encabezado de cada pestaña, así un cambio de estructura futuro lanza un
+ * error visible (capturado por pestaña en `parseBaseDatosRufe`, sin tumbar
+ * las demás) en vez de leer datos de la columna equivocada sin que nadie lo
+ * note.
+ *
  * A diferencia de la hoja original, acá cada fila trae su propio
  * corregimiento/barrio/zona diligenciados (no hace falta rellenar hacia
  * adelante dentro del hogar), y la zona viene directa en "Ubicación del
  * Bien" — no hay que inferirla del corregimiento.
- *
- *   0 N° Hogar · 1 Departamento · 2 Municipio · 3 Evento · 4 Fecha Evento
- *   5 Fecha RUFE · 6 Ubicación del Bien (zona) · 7 Corregimiento
- *   8 Vereda/Sector/Barrio · 9 Dirección · 10 Alojamiento Actual
- *   11 Forma de Tenencia · 12 Estado del Bien · 13 Tipo de Bien · 14 Item
- *   15 Nombre(s) · 16 Apellido(s) · 17 Tipo de Documento
- *   18 Número de Documento · 19 Parentesco · 20 Identidad de Género
- *   21 Fecha de Nacimiento · 22 Pertenencia Étnica · 23 N° de Teléfono
- *   24-28 datos agropecuarios (no usados todavía) · 29 Observaciones
  */
 const HEADER_ROWS = 1;
-const COL = {
-	hogar: 0,
-	zona: 6,
-	corregimiento: 7,
-	barrio: 8,
-	tenencia: 11,
-	estadoBien: 12,
-	tipoBien: 13,
-	documento: 18,
-	genero: 20,
-	fechaNacimiento: 21,
-	observacion: 29
+
+/** Encabezados tal cual aparecen en la hoja, para cada campo que nos
+ * importa. Si el texto exacto cambia (o la columna desaparece), se prefiere
+ * fallar fuerte antes que adivinar una posición. */
+const HEADER_NAMES = {
+	hogar: 'N° Hogar',
+	zona: 'Ubicación del Bien',
+	corregimiento: 'Corregimiento',
+	barrio: 'Vereda/Sector/Barrio',
+	tenencia: 'Forma de Tenencia',
+	estadoBien: 'Estado del Bien',
+	tipoBien: 'Tipo de Bien',
+	documento: 'Número de Documento',
+	genero: 'Identidad de Género',
+	fechaNacimiento: 'Fecha de Nacimiento',
+	observacion: 'Observaciones'
 } as const;
-const MIN_COLS = 30;
+
+type ColumnIndex = Record<keyof typeof HEADER_NAMES, number>;
+
+function resolveColumnIndex(headerRow: string[], nombreTab: string): ColumnIndex {
+	const normalizado = headerRow.map((h) => h.trim());
+	const resultado = {} as ColumnIndex;
+	const faltantes: string[] = [];
+	for (const [campo, encabezado] of Object.entries(HEADER_NAMES) as [
+		keyof typeof HEADER_NAMES,
+		string
+	][]) {
+		const idx = normalizado.indexOf(encabezado);
+		if (idx === -1) faltantes.push(encabezado);
+		else resultado[campo] = idx;
+	}
+	if (faltantes.length > 0) {
+		throw new Error(
+			`La pestaña "${nombreTab}" de BASE-DATOS RUFE no tiene la(s) columna(s) esperada(s): ${faltantes.join(', ')}. ¿Cambió el encabezado?`
+		);
+	}
+	return resultado;
+}
 
 /** Edad calculada contra la fecha del sismo (fija), no la fecha de hoy — así
  * un mismo registro no cambia de "grupo de edad" con el paso del tiempo real,
@@ -112,11 +138,14 @@ export function parseBarrioTabCsv(csvText: string, nombreTab: string): PersonRec
 		);
 	}
 
+	const COL = resolveColumnIndex(data[0] ?? [], nombreTab);
+	const minCols = Math.max(...Object.values(COL)) + 1;
+
 	const dataRows = data.slice(HEADER_ROWS);
 	const records: PersonRecord[] = [];
 
 	for (const raw of dataRows) {
-		const r = raw.length < MIN_COLS ? [...raw, ...Array(MIN_COLS - raw.length).fill('')] : raw;
+		const r = raw.length < minCols ? [...raw, ...Array(minCols - raw.length).fill('')] : raw;
 
 		const nHogar = clean(r[COL.hogar]);
 		const documento = clean(r[COL.documento]);

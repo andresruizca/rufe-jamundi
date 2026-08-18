@@ -206,6 +206,24 @@ describe('parseBarrioTabCsv', () => {
 		);
 		expect(out.every((r) => r.corregimiento === 'Puente Vélez')).toBe(true);
 	});
+
+	it('finds Observaciones by header name even if the sheet inserts columns before it (regression: el 2026-08-18 la hoja agregó "PERSONAS EVACUADAS"/"REALIZÓ VISITA" antes de Observaciones en las 26 pestañas y un índice fijo leyó la columna equivocada)', () => {
+		const headerConColumnasNuevas =
+			'N° Hogar,Departamento,Municipio,Evento,Fecha Evento,Fecha RUFE,Ubicación del Bien,Corregimiento,Vereda/Sector/Barrio,Dirección,Alojamiento Actual,Forma de Tenencia,Estado del Bien,Tipo de Bien,Item,Nombre(s),Apellido(s),Tipo de Documento,Número de Documento,Parentesco,Identidad de Género,Fecha de Nacimiento,Pertenencia Étnica,N° de Teléfono,Tipo de Cultivo,Unidad de Medida,Área (Cantidad),Sector Pecuario (Especie),Cantidad (Unidades),PERSONAS EVACUADAS,REALIZÓ VISITA,Observaciones';
+		const filaConColumnasNuevas =
+			'1,,,,,,Urbano,,Terranova,,,,,,,A,B,,1,,,,,,,,,,,,,Vivienda colapsada';
+		const out = parseBarrioTabCsv(
+			[headerConColumnasNuevas, filaConColumnasNuevas].join('\n'),
+			'TERRANOVA'
+		);
+		expect(out[0].observacion).toBe('Vivienda colapsada');
+	});
+
+	it('throws a clear per-tab error when an expected column is missing, instead of silently misreading another one', () => {
+		const headerSinObservaciones =
+			'N° Hogar,Departamento,Municipio,Evento,Fecha Evento,Fecha RUFE,Ubicación del Bien,Corregimiento,Vereda/Sector/Barrio,Dirección,Alojamiento Actual,Forma de Tenencia,Estado del Bien,Tipo de Bien,Item,Nombre(s),Apellido(s),Tipo de Documento,Número de Documento,Parentesco,Identidad de Género,Fecha de Nacimiento';
+		expect(() => parseBarrioTabCsv(headerSinObservaciones, 'X')).toThrow(/Observaciones/);
+	});
 });
 
 describe('parseBarrioTabCsv + buildDataset integration', () => {
