@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
+use App\Controllers\RufeController;
+use App\Controllers\RufeCapturaController;
 use App\Controllers\UsuariosController;
 use App\Core\Auth;
 use App\Core\Config;
@@ -81,6 +83,8 @@ $router = new Router;
 $auth = new AuthController;
 $usuarios = new UsuariosController;
 $acerca = new AcercaController;
+$rufeCaptura = new RufeCapturaController;
+$rufe = new RufeController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -88,6 +92,10 @@ $router->get('/health', static function (): void {
 });
 
 $router->post('/auth/login', [$auth, 'login']);
+
+// El sistema no expone ninguna otra ruta sin token. El formulario RUFE se
+// diligencia en campo por un funcionario, no por el ciudadano, así que su
+// captura vive con el resto de rutas de escritura.
 
 // ── Autenticadas (cualquier rol) ─────────────────────────────────────────
 $router->get('/auth/me', [$auth, 'me'], Auth::TODOS);
@@ -97,8 +105,30 @@ $router->post('/auth/password', [$auth, 'cambiarPassword'], Auth::TODOS);
 $router->get('/acerca/sistema', [$acerca, 'sistema'], Auth::TODOS);
 $router->get('/acerca/actualizaciones', [$acerca, 'actualizaciones'], Auth::TODOS);
 
+// Bandeja RUFE: consultar es de todos los roles, decidir no.
+$router->get('/rufe/reportes', [$rufe, 'listar'], Auth::TODOS);
+$router->get('/rufe/reportes/{id}', [$rufe, 'ver'], Auth::TODOS);
+$router->get('/rufe/reportes/{id}/evidencias/{evidencia}', [$rufe, 'descargarEvidencia'], Auth::TODOS);
+
+// ── Gestión de datos (ADMINISTRADOR y GESTOR) ────────────────────────────
+// Captura del formulario RUFE en campo.
+$router->get('/rufe/catalogos', [$rufeCaptura, 'catalogos'], Auth::ESCRITURA);
+$router->post('/rufe/cargas', [$rufeCaptura, 'abrirCarga'], Auth::ESCRITURA);
+$router->get('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'listarArchivos'], Auth::ESCRITURA);
+$router->post('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'subirArchivo'], Auth::ESCRITURA);
+$router->delete('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'eliminarArchivo'], Auth::ESCRITURA);
+$router->post('/rufe/reportes', [$rufeCaptura, 'crear'], Auth::ESCRITURA);
+
+$router->put('/rufe/reportes/{id}', [$rufe, 'actualizar'], Auth::ESCRITURA);
+$router->put('/rufe/reportes/{id}/estado', [$rufe, 'cambiarEstado'], Auth::ESCRITURA);
+$router->get('/rufe/borradores', [$rufe, 'listarBorradores'], Auth::ESCRITURA);
+$router->post('/rufe/borradores', [$rufe, 'guardarBorrador'], Auth::ESCRITURA);
+$router->get('/rufe/borradores/{clave}', [$rufe, 'verBorrador'], Auth::ESCRITURA);
+$router->delete('/rufe/borradores/{clave}', [$rufe, 'eliminarBorrador'], Auth::ESCRITURA);
+
 // ── Solo ADMINISTRADOR ───────────────────────────────────────────────────
 $soloAdmin = [Auth::ADMINISTRADOR];
+$router->post('/rufe/reportes/{id}/anonimizar', [$rufe, 'anonimizar'], $soloAdmin);
 $router->get('/usuarios', [$usuarios, 'listar'], $soloAdmin);
 $router->post('/usuarios', [$usuarios, 'crear'], $soloAdmin);
 $router->get('/usuarios/{id}', [$usuarios, 'ver'], $soloAdmin);

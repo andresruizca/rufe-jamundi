@@ -1,0 +1,410 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Rufe;
+
+use App\Core\Config;
+use App\Core\Db;
+use App\Core\HttpError;
+use RuntimeException;
+
+/**
+ * Evidencias fotográficas del reporte. Campo añadido: el formato de papel no lo
+ * contempla.
+ *
+ * Reglas que gobiernan este archivo:
+ *
+ * - Nada de lo que envía el cliente se usa para construir una ruta. El nombre en
+ *   disco se genera con random_bytes y la extensión sale de una lista blanca; el
+ *   nombre original solo se guarda como texto en la base.
+ * - El MIME se determina leyendo el contenido con finfo, nunca con el que
+ *   declara el navegador, que es un simple encabezado que cualquiera falsifica.
+ * - Los archivos viven fuera del docroot. Si Apache nunca puede alcanzarlos, da
+ *   igual que alguien logre subir código: no hay URL que lo ejecute.
+ *
+ * Limitación documentada: el hosting compartido no ofrece antivirus, así que no
+ * se analiza el contenido más allá de la coherencia formato/extensión. Las
+ * mitigaciones son la lista blanca, el límite de tamaño y cantidad, el renombrado
+ * y el almacenamiento inalcanzable por web.
+ */
+final class Archivos
+{
+    /** Vigencia de una carga sin adoptar, en horas. */
+    public const HORAS_CARGA = 2;
+
+    // ── Cargas temporales ────────────────────────────────────────────────────
+
+    /**
+     * Valida y guarda un archivo dentro de una carga aún sin reporte.
+     *
+     * @param  array{nombre:string,tmp:string,tamano:int,error:int}  $subido
+     * @return array<string,mixed> fila creada, en la forma que ve el cliente
+     */
+    public static function guardarEnCarga(array $subido, string $cargaHash, string $tipo): array
+    {
+        self::revisarErrorDeSubida($subido['error']);
+
+        if (! isset(Catalogos::TIPOS_EVIDENCIA[$tipo])) {
+            throw HttpError::validacion(['archivo' => 'Tipo de archivo no reconocido.']);
+        }
+
+        $limite = Catalogos::TIPOS_EVIDENCIA[$tipo]['maximo'];
+
+        // El cupo se cuenta por tipo: la cédula y las fotos del daño no compiten
+        // entre sí por el mismo hueco.
+        $delTipo = Db::first(
+            'SELECT COUNT(*) AS n FROM rufe_evidencias WHERE carga_hash = :c AND tipo = :t',
+            ['c' => $cargaHash, 't' => $tipo]
+        ) ?? ['n' => 0];
+
+        if ((int) $delTipo['n'] >= $limite) {
+            throw HttpError::validacion([
+                'archivo' => $tipo === 'DOCUMENTO'
+                    ? 'Ya adjuntó la foto del documento. Quite la anterior si desea cambiarla.'
+                    : 'Solo puede adjuntar hasta '.$limite.' fotos del daño.',
+            ]);
+        }
+
+        $existentes = Db::first(
+            'SELECT COUNT(*) AS n, COALESCE(SUM(tamano_bytes), 0) AS bytes
+               FROM rufe_evidencias
+              WHERE carga_hash = :c',
+            ['c' => $cargaHash]
+        ) ?? ['n' => 0, 'bytes' => 0];
+
+        if ($subido['tamano'] > Catalogos::MAX_BYTES_ARCHIVO) {
+            throw HttpError::validacion(
+                ['archivo' => 'Cada archivo debe pesar menos de '.self::enMb(Catalogos::MAX_BYTES_ARCHIVO).'.']
+            );
+        }
+
+        if ((int) $existentes['bytes'] + $subido['tamano'] > Catalogos::MAX_BYTES_CARGA) {
+            throw HttpError::validacion(
+                ['archivo' => 'En total puede adjuntar hasta '.self::enMb(Catalogos::MAX_BYTES_CARGA).'.']
+            );
+        }
+
+        [$extension, $mime] = self::verificarTipo($subido['tmp'], $subido['nombre']);
+
+        $nombreGuardado = bin2hex(random_bytes(16)).'.'.$extension;
+        $relativa = 'temporal/'.$cargaHash.'/'.$nombreGuardado;
+        $destino = self::base().'/'.$relativa;
+
+        self::asegurarDirectorio(dirname($destino));
+
+        if (! move_uploaded_file($subido['tmp'], $destino)) {
+            throw new RuntimeException('No se pudo almacenar el archivo subido.');
+        }
+
+        chmod($destino, 0640);
+
+        Db::exec(
+            'INSERT INTO rufe_evidencias
+                (carga_hash, tipo, nombre_original, nombre_guardado, ruta_relativa, mime,
+                 extension, tamano_bytes, hash_sha256, expira_en)
+             VALUES (:c, :ti, :no, :ng, :rr, :mi, :ex, :ta, :ha, :exp)',
+            [
+                'c' => $cargaHash,
+                'ti' => $tipo,
+                'no' => self::nombreLegible($subido['nombre']),
+                'ng' => $nombreGuardado,
+                'rr' => $relativa,
+                'mi' => $mime,
+                'ex' => $extension,
+                'ta' => $subido['tamano'],
+                'ha' => hash_file('sha256', $destino),
+                'exp' => date('Y-m-d H:i:s', time() + self::HORAS_CARGA * 3600),
+            ]
+        );
+
+        $id = Db::lastId();
+
+        return [
+            'id' => $id,
+            'tipo' => $tipo,
+            'nombre_original' => self::nombreLegible($subido['nombre']),
+            'tamano_bytes' => $subido['tamano'],
+            'mime' => $mime,
+        ];
+    }
+
+    /** @return list<array<string,mixed>> */
+    public static function listarCarga(string $cargaHash): array
+    {
+        $filas = Db::all(
+            'SELECT id, tipo, nombre_original, tamano_bytes, mime
+               FROM rufe_evidencias
+              WHERE carga_hash = :c AND reporte_id IS NULL
+              ORDER BY id',
+            ['c' => $cargaHash]
+        );
+
+        return array_map(
+            static fn (array $f): array => [
+                'id' => (int) $f['id'],
+                'tipo' => $f['tipo'],
+                'nombre_original' => $f['nombre_original'],
+                'tamano_bytes' => (int) $f['tamano_bytes'],
+                'mime' => $f['mime'],
+            ],
+            $filas
+        );
+    }
+
+    public static function eliminarDeCarga(string $cargaHash, int $id): void
+    {
+        $fila = Db::first(
+            'SELECT id, ruta_relativa FROM rufe_evidencias
+              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL',
+            ['i' => $id, 'c' => $cargaHash]
+        );
+
+        if ($fila === null) {
+            throw HttpError::noEncontrado('El archivo no existe o ya fue enviado.');
+        }
+
+        self::borrarDelDisco((string) $fila['ruta_relativa']);
+        Db::exec('DELETE FROM rufe_evidencias WHERE id = :i', ['i' => $id]);
+    }
+
+    /**
+     * Traslada los archivos de una carga al reporte recién creado.
+     *
+     * Se llama dentro de la transacción del envío. Si la transacción se revierte
+     * después, las filas vuelven atrás pero los archivos ya se movieron: quedan
+     * huérfanos en disco, sin fila que los referencie y sin URL que los alcance.
+     * Es el fallo aceptado; lo contrario (mover al confirmar) exigiría un commit
+     * en dos fases que no vale la pena aquí.
+     *
+     * @return int cuántos archivos se adoptaron
+     */
+    public static function adoptar(string $cargaHash, int $reporteId): int
+    {
+        $filas = Db::all(
+            'SELECT id, nombre_guardado, ruta_relativa FROM rufe_evidencias
+              WHERE carga_hash = :c AND reporte_id IS NULL',
+            ['c' => $cargaHash]
+        );
+
+        if ($filas === []) {
+            return 0;
+        }
+
+        $carpeta = sprintf('rufe/%s/%d', date('Y/m'), $reporteId);
+        self::asegurarDirectorio(self::base().'/'.$carpeta);
+
+        foreach ($filas as $fila) {
+            $nueva = $carpeta.'/'.$fila['nombre_guardado'];
+            $origen = self::base().'/'.$fila['ruta_relativa'];
+            $destino = self::base().'/'.$nueva;
+
+            if (is_file($origen) && ! rename($origen, $destino)) {
+                throw new RuntimeException('No se pudo mover una evidencia a su carpeta definitiva.');
+            }
+
+            Db::exec(
+                'UPDATE rufe_evidencias
+                    SET reporte_id = :r, ruta_relativa = :rr, carga_hash = NULL, expira_en = NULL
+                  WHERE id = :i',
+                ['r' => $reporteId, 'rr' => $nueva, 'i' => (int) $fila['id']]
+            );
+        }
+
+        @rmdir(self::base().'/temporal/'.$cargaHash);
+
+        return count($filas);
+    }
+
+    /**
+     * Sin cron en el hosting, la limpieza va montada en el tráfico: la llama el
+     * endpoint que abre cargas nuevas.
+     */
+    public static function purgarCargasCaducadas(): void
+    {
+        $filas = Db::all(
+            'SELECT id, ruta_relativa, carga_hash FROM rufe_evidencias
+              WHERE reporte_id IS NULL AND expira_en IS NOT NULL AND expira_en < NOW()
+              LIMIT 200'
+        );
+
+        foreach ($filas as $fila) {
+            self::borrarDelDisco((string) $fila['ruta_relativa']);
+            Db::exec('DELETE FROM rufe_evidencias WHERE id = :i', ['i' => (int) $fila['id']]);
+            @rmdir(self::base().'/temporal/'.$fila['carga_hash']);
+        }
+    }
+
+    /**
+     * Borra del disco un conjunto de filas ya eliminadas de la base.
+     *
+     * @param list<array<string,mixed>> $filas con al menos `ruta_relativa`
+     */
+    public static function borrarVarios(array $filas): void
+    {
+        foreach ($filas as $fila) {
+            self::borrarDelDisco((string) ($fila['ruta_relativa'] ?? ''));
+        }
+    }
+
+    // ── Descarga protegida ───────────────────────────────────────────────────
+
+    /**
+     * Emite el archivo al funcionario autenticado.
+     *
+     * El Content-Type sale de la lista blanca y no de la base, y va con nosniff y
+     * una CSP que apaga todo: así, aunque un archivo lograra colarse con
+     * contenido activo, el navegador no lo ejecutaría al abrirlo.
+     *
+     * @param array<string,mixed> $fila
+     */
+    public static function emitir(array $fila): void
+    {
+        $ruta = self::base().'/'.$fila['ruta_relativa'];
+
+        if (! is_file($ruta)) {
+            throw HttpError::noEncontrado('El archivo ya no está disponible.');
+        }
+
+        $extension = (string) $fila['extension'];
+        $mime = Catalogos::EXTENSIONES[$extension][0] ?? 'application/octet-stream';
+
+        header('Content-Type: '.$mime);
+        header('Content-Length: '.(string) filesize($ruta));
+        header('Content-Disposition: attachment; filename="'.self::nombreDescarga($fila).'"');
+        header('X-Content-Type-Options: nosniff');
+        header("Content-Security-Policy: default-src 'none'; sandbox");
+        header('Cache-Control: private, no-store');
+
+        readfile($ruta);
+    }
+
+    /** @param array<string,mixed> $fila */
+    private static function nombreDescarga(array $fila): string
+    {
+        $base = pathinfo((string) $fila['nombre_original'], PATHINFO_FILENAME);
+        $base = preg_replace('/[^A-Za-z0-9 _\-]/', '', $base) ?: 'evidencia';
+
+        return substr($base, 0, 60).'.'.$fila['extension'];
+    }
+
+    // ── Interno ──────────────────────────────────────────────────────────────
+
+    /**
+     * Determina la extensión real. Se exige que la extensión del nombre y el
+     * contenido coincidan: un .php renombrado a .jpg falla aquí porque finfo lo
+     * ve como text/x-php, y un JPEG llamado .php falla porque .php no está en la
+     * lista blanca.
+     *
+     * @return array{0:string,1:string} extensión, MIME
+     */
+    private static function verificarTipo(string $ruta, string $nombreOriginal): array
+    {
+        $extension = strtolower((string) pathinfo($nombreOriginal, PATHINFO_EXTENSION));
+
+        if (! isset(Catalogos::EXTENSIONES[$extension])) {
+            throw HttpError::validacion([
+                'archivo' => 'Solo se admiten imágenes ('
+                    .implode(', ', array_keys(Catalogos::EXTENSIONES)).').',
+            ]);
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo !== false ? (string) finfo_file($finfo, $ruta) : '';
+        if ($finfo !== false) {
+            finfo_close($finfo);
+        }
+
+        if (! in_array($mime, Catalogos::EXTENSIONES[$extension], true)) {
+            throw HttpError::validacion([
+                'archivo' => 'El contenido del archivo no corresponde con su extensión.',
+            ]);
+        }
+
+        // Las imágenes que GD reconoce se comprueban además por dimensiones: un
+        // archivo que dice ser PNG y no tiene alto ni ancho no es una foto.
+        // HEIC y PDF no pasan por aquí porque getimagesize no los entiende.
+        if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            $medidas = @getimagesize($ruta);
+            if ($medidas === false || $medidas[0] < 1 || $medidas[1] < 1) {
+                throw HttpError::validacion(['archivo' => 'La imagen está dañada o no se puede leer.']);
+            }
+        }
+
+        return [$extension, $mime];
+    }
+
+    private static function revisarErrorDeSubida(int $error): void
+    {
+        if ($error === UPLOAD_ERR_OK) {
+            return;
+        }
+
+        $mensaje = match ($error) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'El archivo supera el tamaño permitido por el servidor.',
+            UPLOAD_ERR_PARTIAL => 'La carga se interrumpió. Intente de nuevo.',
+            UPLOAD_ERR_NO_FILE => 'No se recibió ningún archivo.',
+            default => 'No se pudo recibir el archivo. Intente de nuevo.',
+        };
+
+        throw HttpError::validacion(['archivo' => $mensaje]);
+    }
+
+    /** Solo para mostrarlo de vuelta; nunca toca el sistema de archivos. */
+    private static function nombreLegible(string $nombre): string
+    {
+        $limpio = preg_replace('/[\x00-\x1F\x7F]/u', '', basename($nombre)) ?? 'archivo';
+
+        return mb_substr(trim($limpio) === '' ? 'archivo' : trim($limpio), 0, 180);
+    }
+
+    private static function borrarDelDisco(string $relativa): void
+    {
+        // Cinturón y tirantes: aunque ruta_relativa la genera este mismo código,
+        // un '..' guardado por error no debe poder borrar fuera del almacén.
+        if (str_contains($relativa, '..')) {
+            return;
+        }
+
+        $ruta = self::base().'/'.$relativa;
+        if (is_file($ruta)) {
+            @unlink($ruta);
+        }
+    }
+
+    private static function asegurarDirectorio(string $ruta): void
+    {
+        if (is_dir($ruta)) {
+            return;
+        }
+
+        if (! mkdir($ruta, 0750, true) && ! is_dir($ruta)) {
+            throw new RuntimeException('No se pudo crear el directorio de almacenamiento.');
+        }
+    }
+
+    /**
+     * Raíz del almacén, fuera del docroot.
+     *
+     * Si el hosting no permitiera una carpeta fuera del docroot, el respaldo es
+     * una dentro protegida por .htaccess, que es más débil: bastaría un cambio de
+     * configuración de Apache para dejarla al descubierto.
+     */
+    public static function base(): string
+    {
+        $ruta = rtrim((string) Config::get('almacenamiento.ruta', ''), '/');
+
+        if ($ruta === '') {
+            throw new RuntimeException('Falta configurar "almacenamiento.ruta" en config.php.');
+        }
+
+        self::asegurarDirectorio($ruta);
+
+        return $ruta;
+    }
+
+    private static function enMb(int $bytes): string
+    {
+        return round($bytes / 1048576).' MB';
+    }
+}

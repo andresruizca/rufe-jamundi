@@ -7,7 +7,7 @@
 	import '$lib/theme.css';
 	import '$lib/shell.css';
 	import MenuLateral from '$lib/components/layout/MenuLateral.svelte';
-	import { resolverTitulo, puedeAcceder } from '$lib/navigation';
+	import { resolverTitulo, puedeAcceder, esRutaPublica } from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
 
 	let { children } = $props();
@@ -18,6 +18,12 @@
 
 	const ruta = $derived(page.url.pathname);
 	const esLogin = $derived(ruta === '/login');
+
+	// El login y el formulario ciudadano se sirven sin sesión y sin armazón. La
+	// lista vive en $lib/navigation para que sumar una ruta pública sea una
+	// decisión visible en un solo archivo y no un `if` escondido aquí.
+	const esPublica = $derived(esRutaPublica(ruta));
+
 	const titulo = $derived(resolverTitulo(ruta));
 
 	/** Pantalla estrecha: el menú se cierra al navegar para no tapar el contenido. */
@@ -56,19 +62,26 @@
 	$effect(() => {
 		if (sesion.cargando) return;
 
-		if (!sesion.autenticado && !esLogin) {
-			void goto('/login', { replaceState: true });
-
-			return;
-		}
-
+		// Quien ya tiene sesión no debe quedarse en el login. Va antes que la
+		// excepción pública porque /login también está en esa lista.
 		if (sesion.autenticado && esLogin) {
 			void goto('/dashboard', { replaceState: true });
 
 			return;
 		}
 
-		if (sesion.autenticado && !esLogin && !puedeAcceder(ruta, sesion.rol)) {
+		// El resto de rutas públicas no se redirige nunca: un ciudadano sin cuenta
+		// no debe acabar en el login, y un funcionario con sesión abierta debe
+		// poder abrir el formulario ciudadano para revisarlo.
+		if (esPublica) return;
+
+		if (!sesion.autenticado) {
+			void goto('/login', { replaceState: true });
+
+			return;
+		}
+
+		if (!puedeAcceder(ruta, sesion.rol)) {
 			void goto('/dashboard', { replaceState: true });
 		}
 	});
@@ -84,7 +97,12 @@
 </script>
 
 <svelte:head>
-	<title>{esLogin ? 'Iniciar sesión' : titulo} · SGR Jamundí</title>
+	<!-- El formulario ciudadano pone su propio título: no se le antepone "SGR
+	     Jamundí" porque quien lo abre no es usuario del sistema y ese nombre no
+	     le dice nada. -->
+	{#if !esPublica || esLogin}
+		<title>{esLogin ? 'Iniciar sesión' : titulo} · SGR Jamundí</title>
+	{/if}
 </svelte:head>
 
 <svelte:window onkeydown={alPulsarTecla} />
@@ -94,7 +112,7 @@
 		<LoaderCircle size={20} class="girando" aria-hidden="true" />
 		Cargando el sistema…
 	</div>
-{:else if esLogin}
+{:else if esPublica}
 	{@render children?.()}
 {:else if !sesion.autenticado}
 	<!--

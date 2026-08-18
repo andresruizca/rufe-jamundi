@@ -672,3 +672,133 @@ h3 {
 	margin-top: 1.2rem;
 	flex-wrap: wrap;
 }
+
+/* ── Formularios largos (RUFE ciudadano) ─────────────────────────────────────
+   Lo que sigue lo usa el formulario público, pensado para un teléfono de gama
+   baja: controles de al menos 44 px de alto (el mínimo cómodo para el pulgar,
+   según la guía de accesibilidad de la WCAG para objetivos táctiles) y texto que
+   no obliga a hacer zoom. */
+
+.campo__ayuda {
+	display: block;
+	margin-bottom: 0.35rem;
+	font-size: 0.78rem;
+	color: var(--color-muted);
+	font-weight: 400;
+}
+
+/* El error no se señala solo con color: además del borde rojo, el mensaje va
+   escrito bajo el campo y el control queda marcado con aria-invalid. */
+.campo--invalido .campo__control {
+	border-color: var(--color-danger);
+	border-width: 2px;
+}
+
+.campo__requerido {
+	color: var(--color-danger);
+	margin-left: 0.15rem;
+}
+
+.campo--grande .campo__control {
+	min-height: 44px;
+	font-size: 1rem;
+}
+
+/* Indicador de progreso por pasos. */
+.pasos {
+	margin-bottom: 1.25rem;
+}
+
+.pasos__texto {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	font-size: 0.8rem;
+	color: var(--color-muted);
+	margin-bottom: 0.4rem;
+}
+
+.pasos__actual {
+	font-weight: 600;
+	color: var(--color-text);
+}
+
+.pasos__barra {
+	height: 6px;
+	border-radius: var(--radius-full);
+	background: var(--color-surface-alt);
+	overflow: hidden;
+}
+
+.pasos__avance {
+	height: 100%;
+	border-radius: var(--radius-full);
+	background: var(--gradient-brand);
+	transition: width var(--transition);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pasos__avance {
+		transition: none;
+	}
+}
+
+/* Opciones grandes de selección única (radio o casilla) para dedo pulgar. */
+.opciones {
+	display: grid;
+	gap: 0.5rem;
+	border: 0;
+	padding: 0;
+	margin: 0;
+}
+
+.opcion {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.6rem;
+	padding: 0.7rem 0.8rem;
+	min-height: 44px;
+	border: 1px solid var(--color-border-strong);
+	border-radius: 10px;
+	background: var(--color-surface);
+	cursor: pointer;
+	font-size: 0.92rem;
+	line-height: 1.35;
+}
+
+.opcion:hover {
+	background: var(--color-surface-alt);
+}
+
+.opcion:focus-within {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 1px;
+}
+
+.opcion input {
+	margin: 0.15rem 0 0;
+	width: 1.05rem;
+	height: 1.05rem;
+	accent-color: var(--color-primary);
+	flex: none;
+}
+
+/* Seleccionado: no solo cambia el color de fondo, también engorda el borde, para
+   que se distinga sin percibir color. */
+.opcion--activa {
+	border-color: var(--color-primary);
+	border-width: 2px;
+	background: var(--color-info-bg);
+	padding: calc(0.7rem - 1px) calc(0.8rem - 1px);
+}
+
+.opcion__texto {
+	display: block;
+}
+
+.opcion__nota {
+	display: block;
+	font-size: 0.78rem;
+	color: var(--color-muted);
+	margin-top: 0.1rem;
+}

@@ -17,8 +17,23 @@
 //               exactas para que un hijo más específico gane siempre sobre su
 //               padre; usa expresión regular para rutas con parámetros.
 
-import { LayoutDashboard, Users, ShieldCheck, Info } from '@lucide/svelte';
+import { LayoutDashboard, Users, ShieldCheck, Info, ClipboardList, ClipboardPlus } from '@lucide/svelte';
 import type { Component } from 'svelte';
+
+/**
+ * Rutas que se sirven sin sesión. Solo el login.
+ *
+ * La lista existe para que añadir una ruta pública sea una decisión visible y
+ * deliberada, en un solo archivo, y no un `if` escondido en el layout. Cada
+ * entrada amplía lo que un desconocido puede abrir.
+ *
+ * Estas rutas se dibujan sin el armazón: ni menú lateral, ni barra superior.
+ */
+export const RUTAS_PUBLICAS: string[] = ['/login'];
+
+export function esRutaPublica(ruta: string): boolean {
+	return RUTAS_PUBLICAS.includes(ruta);
+}
 
 export const ROLES = {
 	ADMINISTRADOR: 'ADMINISTRADOR',
@@ -65,6 +80,27 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: LayoutDashboard,
 		roles: TODOS,
 		match: ['/dashboard']
+	},
+
+	{
+		id: 'captura-rufe',
+		type: 'item',
+		label: 'Registrar RUFE',
+		title: 'Registrar un RUFE en campo',
+		href: '/riesgo/reportar',
+		icon: ClipboardPlus,
+		roles: ESCRITURA,
+		match: ['/riesgo/reportar']
+	},
+	{
+		id: 'reportes-rufe',
+		type: 'item',
+		label: 'Reportes RUFE',
+		title: 'Reportes ciudadanos — RUFE',
+		href: '/riesgo/reportes',
+		icon: ClipboardList,
+		roles: TODOS,
+		match: ['/riesgo/reportes', /^\/riesgo\/reportes\/[^/]+$/]
 	},
 
 	{

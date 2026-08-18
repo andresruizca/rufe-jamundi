@@ -44,6 +44,26 @@ return [
         'duracion_horas' => 12,
     ],
 
+    // Evidencias del formulario RUFE. Ruta ABSOLUTA y FUERA del document root:
+    // si Apache no puede alcanzarla, da igual que alguien logre subir un archivo
+    // ejecutable, porque no existe URL que lo dispare.
+    //
+    // En cPanel, si el sitio está en /home1/CUENTA/grj.oticjamundi.com, una ruta
+    // correcta es /home1/CUENTA/sgr_almacen (hermana, no hija).
+    'almacenamiento' => [
+        'ruta' => '',
+    ],
+
+    'rufe' => [
+        // Sal para derivar el hash de la IP del ciudadano y las claves del
+        // control de tasa. Debe ser larga y aleatoria, y no debe cambiar: si
+        // cambia, los contadores de tasa en curso se reinician y los reportes
+        // anteriores dejan de poder correlacionarse por origen.
+        //
+        // Generar con:  php -r "echo bin2hex(random_bytes(32));"
+        'sal' => '',
+    ],
+
     'github' => [
         // Token de solo lectura. Se usa desde el servidor para que nunca viaje
         // al navegador. Un repositorio público funciona sin token, pero con él
