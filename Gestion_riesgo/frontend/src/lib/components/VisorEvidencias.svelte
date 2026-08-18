@@ -75,6 +75,19 @@
 		abierta = i;
 	}
 
+	// Con la vista abierta, la rueda del ratón movía la página de detrás: se
+	// cerraba la foto y uno aparecía en otro punto de la ficha sin saber por qué.
+	$effect(() => {
+		if (abierta === null) return;
+
+		const previo = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+
+		return () => {
+			document.body.style.overflow = previo;
+		};
+	});
+
 	function cerrar(): void {
 		abierta = null;
 	}
@@ -408,8 +421,22 @@
 		/* Por encima del menú (60) y del modal (80): mientras está abierta, esta
 		   vista es lo único con lo que se interactúa. */
 		z-index: 90;
-		display: grid;
-		place-items: center;
+
+		/*
+		 * Flex y no rejilla, por una razón concreta.
+		 *
+		 * Con `display: grid` la fila se dimensiona según su contenido, así que el
+		 * `max-height: 100%` de la caja no tenía contra qué resolverse y no se
+		 * aplicaba: la caja crecía hasta el tamaño natural de la foto, se salía de
+		 * la pantalla y la imagen aparecía muy por debajo del borde inferior.
+		 *
+		 * En un contenedor flex de altura definida —que aquí lo es, por `inset: 0`—
+		 * los porcentajes de los hijos sí se resuelven, y la caja queda acotada a
+		 * la ventana.
+		 */
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		padding: clamp(0.5rem, 3vw, 2rem);
 	}
 
@@ -430,9 +457,11 @@
 		gap: 0.7rem;
 		width: min(1100px, 100%);
 		max-height: 100%;
+		min-height: 0;
 	}
 
 	.visor__barra {
+		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -480,15 +509,22 @@
 
 	.visor__imagen {
 		position: relative;
-		display: grid;
-		place-items: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		/* `min-height: 0` deja que este bloque se encoja por debajo del tamaño de
+		   la foto; sin él, un elemento flex nunca baja del tamaño de su contenido
+		   y volvería a empujar la caja fuera de la pantalla. */
 		min-height: 0;
-		flex: 1;
+		flex: 1 1 auto;
 	}
 
 	.visor__imagen img {
+		/* Ahora el 100% se resuelve contra un alto real, así que la foto se ajusta
+		   al hueco que quede entre la barra y las miniaturas, sea el que sea. */
 		max-width: 100%;
-		max-height: min(72vh, 100%);
+		max-height: 100%;
 		object-fit: contain;
 		border-radius: 10px;
 		background: #0d1a2b;
@@ -497,7 +533,7 @@
 	.visor__estado {
 		display: grid;
 		place-items: center;
-		min-height: 40vh;
+		min-height: 12rem;
 		color: #cfe0f2;
 	}
 
@@ -529,6 +565,7 @@
 	}
 
 	.visor__tiras {
+		flex: 0 0 auto;
 		display: flex;
 		gap: 0.45rem;
 		justify-content: center;
