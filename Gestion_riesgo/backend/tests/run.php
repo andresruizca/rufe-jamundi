@@ -504,6 +504,24 @@ prueba('una autorización que no sea exactamente true no vale', function (): voi
     afirmarError(base(['autoriza_tratamiento' => 1]), 'autoriza_tratamiento');
 });
 
+prueba('se guarda el aviso que leyó el ciudadano, no el vigente hoy', function (): void {
+    // Una ficha levantada sin señal puede llegar días después, con la aplicación
+    // ya cambiada. Estampar la versión vigente afirmaría que esa persona aceptó
+    // un texto que nunca vio, y ese registro es la prueba exigible ante la SIC.
+    afirmarIgual('habeas-data-v1', datos(base(['aviso_version' => 'habeas-data-v1']))['autorizacion_texto']);
+    afirmarIgual('habeas-data-v2', datos(base(['aviso_version' => 'habeas-data-v2']))['autorizacion_texto']);
+});
+
+prueba('un aviso inventado no se guarda: se usa el vigente', function (): void {
+    // El cliente no puede escribir cualquier cosa en la prueba del consentimiento.
+    afirmarIgual(Catalogos::AVISO_VERSION, datos(base(['aviso_version' => 'lo-que-sea']))['autorizacion_texto']);
+    afirmarIgual(Catalogos::AVISO_VERSION, datos(base(['aviso_version' => 123]))['autorizacion_texto']);
+});
+
+prueba('sin aviso declarado se asume el vigente', function (): void {
+    afirmarIgual(Catalogos::AVISO_VERSION, datos(base())['autorizacion_texto']);
+});
+
 prueba('una sola casilla sigue guardando las dos columnas de la ley', function (): void {
     // La ley distingue los datos sensibles del resto. Aunque el ciudadano marque
     // una casilla, la base debe poder responder qué autorizó exactamente.

@@ -530,7 +530,15 @@ final class Validador
         // impediría responder más adelante qué autorizó exactamente el ciudadano.
         $this->datos['autoriza_datos'] = 1;
         $this->datos['autoriza_sensibles'] = 1;
-        $this->datos['autorizacion_texto'] = Catalogos::AVISO_VERSION;
+
+        // La ficha dice qué aviso se le mostró al ciudadano. Se acepta solo si es
+        // uno que existió de verdad; si no viene ninguno, es de antes de que se
+        // enviara y se asume el vigente.
+        $aviso = $e['aviso_version'] ?? null;
+        $this->datos['autorizacion_texto'] = is_string($aviso)
+            && in_array($aviso, Catalogos::AVISOS_CONOCIDOS, true)
+                ? $aviso
+                : Catalogos::AVISO_VERSION;
         $this->datos['autorizacion_en'] = date('Y-m-d H:i:s');
     }
 

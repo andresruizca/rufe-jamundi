@@ -248,7 +248,7 @@ function fechaDePartes(p: Persona): string {
  */
 export function aCuerpoDeApi(
 	d: FormularioRufe,
-	extras: { carga?: string; iniciadoEn?: number } = {}
+	extras: { carga?: string; iniciadoEn?: number; avisoVersion?: string } = {}
 ): Record<string, unknown> {
 	const cuerpo: Record<string, unknown> = {
 		evento: d.evento,
@@ -265,6 +265,10 @@ export function aCuerpoDeApi(
 		contacto_telefono: d.contacto_telefono.trim(),
 		contacto_correo: d.contacto_correo.trim(),
 		autoriza_tratamiento: d.autoriza_tratamiento,
+		// Qué aviso de habeas data se le mostró a esta persona. Viaja con la ficha
+		// porque una levantada sin señal puede enviarse cuando la aplicación ya
+		// cambió: lo que hay que probar es lo que aceptó, no lo que rige hoy.
+		aviso_version: extras.avisoVersion,
 		personas: d.personas.map((p) => ({
 			nombres: p.nombres.trim(),
 			apellidos: p.apellidos.trim(),

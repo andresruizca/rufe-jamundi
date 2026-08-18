@@ -235,3 +235,69 @@ describe('espejo del token', () => {
 		expect(await tokenEspejado()).toBeNull();
 	});
 });
+
+describe('fichas levantadas con una versión anterior', () => {
+	// Una ficha puede esperar días en el teléfono mientras el formulario cambia.
+	// Cuando las cuatro casillas de consentimiento pasaron a ser una, las que ya
+	// estaban en cola quedaron atascadas: el servidor las rechazaba por un campo
+	// que no existía al levantarlas, y en la cola no hay formulario donde
+	// marcarlo. La única salida habría sido descartar los datos del hogar.
+	function vieja(extra: Record<string, unknown> = {}) {
+		return ficha('antigua', {
+			cuerpo: {
+				evento: 'Terremoto',
+				declara_veracidad: true,
+				declara_representacion: true,
+				autoriza_datos: true,
+				autoriza_sensibles: true,
+				...extra
+			}
+		});
+	}
+
+	it('las cuatro casillas viejas equivalen a la autorización única', async () => {
+		await guardarFicha(vieja());
+
+		expect((await leerFicha('antigua'))?.cuerpo.autoriza_tratamiento).toBe(true);
+	});
+
+	// Lo que prueba qué autorizó esa persona es la versión del aviso que leyó.
+	// Estampar la vigente afirmaría que aceptó un texto que nunca vio.
+	it('conserva el aviso que el ciudadano leyó de verdad', async () => {
+		await guardarFicha(vieja());
+
+		expect((await leerFicha('antigua'))?.cuerpo.aviso_version).toBe('habeas-data-v1');
+	});
+
+	it('también al listar las pendientes', async () => {
+		await guardarFicha(vieja());
+
+		const [f] = await fichasPendientes();
+		expect(f.cuerpo.autoriza_tratamiento).toBe(true);
+	});
+
+	// El consentimiento no se inventa: si alguna casilla no se aceptó, la ficha
+	// se queda como está y el servidor la seguirá rechazando, que es lo correcto.
+	it('no da por otorgado lo que no se otorgó', async () => {
+		await guardarFicha(vieja({ autoriza_sensibles: false }));
+
+		expect((await leerFicha('antigua'))?.cuerpo.autoriza_tratamiento).toBeUndefined();
+	});
+
+	it('no toca una ficha que ya trae la autorización única', async () => {
+		await guardarFicha(
+			ficha('nueva', {
+				cuerpo: { evento: 'Terremoto', autoriza_tratamiento: true, aviso_version: 'habeas-data-v2' }
+			})
+		);
+
+		const f = await leerFicha('nueva');
+		expect(f?.cuerpo.aviso_version).toBe('habeas-data-v2');
+	});
+
+	it('tampoco una que la trae explícitamente en falso', async () => {
+		await guardarFicha(vieja({ autoriza_tratamiento: false }));
+
+		expect((await leerFicha('antigua'))?.cuerpo.autoriza_tratamiento).toBe(false);
+	});
+});

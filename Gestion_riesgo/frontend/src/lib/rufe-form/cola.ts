@@ -140,8 +140,49 @@ export async function guardarFicha(ficha: FichaEnCola): Promise<void> {
 	await conAlmacen(FICHAS, 'readwrite', (a) => a.put(ficha), undefined);
 }
 
+/**
+ * Pone al día una ficha levantada con una versión anterior de la aplicación.
+ *
+ * Una ficha puede quedarse días en el teléfono mientras el formulario cambia
+ * bajo sus pies. Cuando eso pasa, el servidor la rechaza por un campo que no
+ * existía al levantarla, y el censador no tiene forma de arreglarlo: en la cola
+ * no hay formulario donde marcar nada. La única alternativa sería descartarla,
+ * es decir, perder los datos de un hogar damnificado.
+ *
+ * Hoy hay una sola migración: las cuatro casillas de consentimiento pasaron a
+ * ser una. Solo se da por otorgada la nueva si las cuatro viejas estaban
+ * aceptadas — que es lo que el formulario de entonces exigía para dejar enviar,
+ * y cubre lo mismo que la actual. Se conserva además el aviso que esa persona
+ * leyó de verdad, `habeas-data-v1`: la prueba de qué autorizó es esa versión, no
+ * la que rija el día en que la ficha por fin sale.
+ */
+export function alDia(ficha: FichaEnCola): FichaEnCola {
+	const c = ficha.cuerpo;
+	if (c.autoriza_tratamiento !== undefined) return ficha;
+
+	const cuatroViejas =
+		c.declara_veracidad === true &&
+		c.declara_representacion === true &&
+		c.autoriza_datos === true &&
+		c.autoriza_sensibles === true;
+
+	if (!cuatroViejas) return ficha;
+
+	return {
+		...ficha,
+		cuerpo: { ...c, autoriza_tratamiento: true, aviso_version: 'habeas-data-v1' }
+	};
+}
+
 export async function leerFicha(envioId: string): Promise<FichaEnCola | null> {
-	return conAlmacen<FichaEnCola | null>(FICHAS, 'readonly', (a) => a.get(envioId), null);
+	const ficha = await conAlmacen<FichaEnCola | null>(
+		FICHAS,
+		'readonly',
+		(a) => a.get(envioId),
+		null
+	);
+
+	return ficha ? alDia(ficha) : null;
 }
 
 export async function borrarFicha(envioId: string): Promise<void> {
@@ -150,7 +191,9 @@ export async function borrarFicha(envioId: string): Promise<void> {
 }
 
 export async function todasLasFichas(): Promise<FichaEnCola[]> {
-	return conAlmacen<FichaEnCola[]>(FICHAS, 'readonly', (a) => a.getAll(), []);
+	const fichas = await conAlmacen<FichaEnCola[]>(FICHAS, 'readonly', (a) => a.getAll(), []);
+
+	return fichas.map(alDia);
 }
 
 /** Las que todavía deben salir. Es lo que recorre el Service Worker. */

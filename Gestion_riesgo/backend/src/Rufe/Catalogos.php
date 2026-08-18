@@ -22,6 +22,17 @@ final class Catalogos
 
     public const AVISO_VERSION = 'habeas-data-v2';
 
+    /**
+     * Versiones del aviso que alguna vez se le mostraron a un ciudadano.
+     *
+     * Una ficha levantada sin señal puede enviarse días después, cuando la
+     * aplicación ya cambió de versión. Lo que hay que guardar es el aviso que
+     * esa persona leyó, no el que rige el día que la ficha llega: si se estampa
+     * el vigente, el registro afirma que aceptó un texto que nunca vio, y ese
+     * registro es justo la prueba exigible ante la SIC.
+     */
+    public const AVISOS_CONOCIDOS = ['habeas-data-v1', 'habeas-data-v2'];
+
     public const DEPARTAMENTO = 'Valle del Cauca';
 
     public const MUNICIPIO = 'Jamundí';

@@ -361,7 +361,11 @@
 
 		try {
 			const respuesta = await envio.enviar(
-				aCuerpoDeApi(datos, { carga: evidencias?.carga ?? undefined, iniciadoEn }),
+				aCuerpoDeApi(datos, {
+					carga: evidencias?.carga ?? undefined,
+					iniciadoEn,
+					avisoVersion: catalogos?.formato.aviso_version
+				}),
 				{
 					evento: muestraEventoOtro(datos) ? datos.evento_otro : datos.evento,
 					direccion: datos.direccion,
