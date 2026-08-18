@@ -133,7 +133,7 @@ export class GestorEnvio {
 	async enviar(
 		cuerpo: Record<string, unknown>,
 		resumen: FichaEnCola['resumen'],
-		fotos: Omit<FotoEnCola, 'envioId' | 'subida'>[] = []
+		fotos: (Omit<FotoEnCola, 'envioId' | 'subida'> & { subida?: boolean })[] = []
 	): Promise<{ estado: 'enviado'; respuesta: RespuestaEnvio } | { estado: 'en-cola' }> {
 		this.#envioId ??= uid();
 
@@ -152,7 +152,11 @@ export class GestorEnvio {
 		// borrador; si no se copiaran, el Service Worker no las encontraría y
 		// enviaría la ficha sin evidencias, en silencio.
 		for (const foto of fotos) {
-			await guardarFoto({ ...foto, envioId: ficha.envioId, subida: false });
+			// Se respeta si la foto ya estaba subida. Marcarlas todas como
+			// pendientes hacía que las que el formulario ya había subido se
+			// volvieran a enviar a la misma carga, y la ficha quedaba con la misma
+			// evidencia dos veces.
+			await guardarFoto({ ...foto, envioId: ficha.envioId, subida: foto.subida ?? false });
 		}
 
 		await guardarFicha(ficha);

@@ -84,6 +84,28 @@ export const rufeApi = {
 	 * salen por este endpoint, que exige token y deja rastro en auditoría. Por eso
 	 * hay que descargarlas con fetch y no con un `href`, que no lleva cabeceras.
 	 */
+	/**
+	 * Trae una evidencia para verla en pantalla.
+	 *
+	 * Devuelve una URL de objeto que hay que revocar al terminar: si no, el
+	 * navegador conserva la imagen entera en memoria hasta recargar la página, y
+	 * una ficha con varias fotos deja al equipo pesado sin motivo.
+	 *
+	 * Va por `fetch` y no por un `src` directo porque las evidencias viven fuera
+	 * del servidor web y solo salen por este endpoint, que exige el token en una
+	 * cabecera — algo que una etiqueta `<img>` no puede enviar.
+	 */
+	async verEvidencia(reporteId: number, evidenciaId: number): Promise<string> {
+		const respuesta = await fetch(
+			`${API_BASE}/rufe/reportes/${reporteId}/evidencias/${evidenciaId}`,
+			{ headers: { Authorization: `Bearer ${leerToken() ?? ''}` } }
+		);
+
+		if (!respuesta.ok) throw new Error('No se pudo abrir la imagen.');
+
+		return URL.createObjectURL(await respuesta.blob());
+	},
+
 	async descargarEvidencia(reporteId: number, evidenciaId: number, nombre: string): Promise<void> {
 		const respuesta = await fetch(
 			`${API_BASE}/rufe/reportes/${reporteId}/evidencias/${evidenciaId}`,

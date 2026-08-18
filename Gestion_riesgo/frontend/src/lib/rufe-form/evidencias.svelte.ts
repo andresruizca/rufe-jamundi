@@ -280,7 +280,14 @@ export class GestorEvidencias {
 	 * Se entregan para que viajen con la ficha: si el envío se difiere, es el
 	 * Service Worker quien las sube, y solo puede verlas si están en su almacén.
 	 */
-	paraLaCola(): { uid: string; tipo: TipoEvidencia; nombre: string; mime: string; blob: Blob }[] {
+	paraLaCola(): {
+		uid: string;
+		tipo: TipoEvidencia;
+		nombre: string;
+		mime: string;
+		blob: Blob;
+		subida: boolean;
+	}[] {
 		return this.archivos
 			.filter((a) => a.estado !== 'optimizando' && a.estado !== 'error')
 			.map((a) => ({
@@ -288,7 +295,12 @@ export class GestorEvidencias {
 				tipo: a.tipo,
 				nombre: a.nombre,
 				mime: a.archivo.type,
-				blob: a.archivo
+				blob: a.archivo,
+				// Si ya tiene identificador del servidor, esta foto YA está en la
+				// carga. Marcarla como pendiente haría que se volviera a subir y la
+				// ficha acabaría con la misma evidencia repetida — que es justo lo
+				// que pasó con la ficha 9.
+				subida: a.idServidor !== undefined
 			}));
 	}
 

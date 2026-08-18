@@ -10,11 +10,12 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import {
-		ArrowLeft, Check, Download, LoaderCircle, MapPin, ShieldOff, TriangleAlert
+		ArrowLeft, Check, LoaderCircle, MapPin, ShieldOff, TriangleAlert
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { rufeApi } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
+	import VisorEvidencias from '$lib/components/VisorEvidencias.svelte';
 	import { ESCRITURA, SOLO_ADMIN } from '$lib/navigation';
 	import type { DetalleCompleto, EstadoReporte } from '$lib/rufe-form/tipos';
 	import { fechaHora, soloFecha } from '$lib/formato';
@@ -96,14 +97,6 @@
 			error = e instanceof ApiError ? e.message : 'No se pudo anonimizar el reporte.';
 		} finally {
 			guardando = false;
-		}
-	}
-
-	async function descargar(evidenciaId: number, nombre: string) {
-		try {
-			await rufeApi.descargarEvidencia(id, evidenciaId, nombre);
-		} catch {
-			error = 'No se pudo descargar el archivo.';
 		}
 	}
 
@@ -293,28 +286,11 @@
 		<div class="tarjeta">
 			<h2 class="tarjeta__titulo">Evidencias ({detalle.evidencias.length})</h2>
 			<p class="tarjeta__nota">
-				Los archivos se guardan fuera del servidor web. Cada descarga queda registrada en la
-				auditoría con su usuario.
+				Los archivos se guardan fuera del servidor web. Abrir o descargar cualquiera queda
+				registrado en la auditoría con su usuario y la fecha.
 			</p>
 
-			<ul class="evidencias">
-				{#each detalle.evidencias as ev (ev.id)}
-					<li>
-						<span class="evidencia__nombre">{ev.nombre_original}</span>
-						<span class="evidencia__meta">
-							{ev.extension.toUpperCase()} · {Math.round(ev.tamano_bytes / 1024)} KB
-						</span>
-						<button
-							type="button"
-							class="boton boton--suave"
-							onclick={() => descargar(ev.id, ev.nombre_original)}
-						>
-							<Download size={14} aria-hidden="true" />
-							Descargar
-						</button>
-					</li>
-				{/each}
-			</ul>
+			<VisorEvidencias reporteId={r.id} evidencias={detalle.evidencias} />
 		</div>
 	{/if}
 
@@ -476,37 +452,9 @@
 		word-break: break-word;
 	}
 
-	.evidencias {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 0.5rem;
-	}
 
-	.evidencias li {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.55rem 0.7rem;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-	}
 
-	.evidencia__nombre {
-		flex: 1;
-		min-width: 0;
-		font-size: 0.85rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
 
-	.evidencia__meta {
-		font-size: 0.75rem;
-		color: var(--color-muted);
-		flex: none;
-	}
 
 	.decision {
 		border: 0;

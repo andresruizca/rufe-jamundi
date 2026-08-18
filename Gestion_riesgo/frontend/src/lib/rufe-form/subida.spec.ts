@@ -152,3 +152,28 @@ describe('casos límite', () => {
 		await expect(subirFotosDe(ficha(), 'tok')).resolves.toBe('carga-nueva');
 	});
 });
+
+describe('una foto ya subida no se sube dos veces', () => {
+	// El fallo que esto fija: al encolar, TODA foto se marcaba como pendiente,
+	// incluidas las que el formulario ya había subido a la carga. Al enviar, se
+	// volvían a subir a esa misma carga y la ficha quedaba con la misma evidencia
+	// repetida. Se vio en la ficha 9: el mismo archivo, dos veces, mismo peso.
+	it('las marcadas como subidas se saltan si la carga sigue viva', async () => {
+		await ponerFoto('ya-estaba', true);
+		await ponerFoto('nueva', false);
+
+		const carga = await subirFotosDe(ficha({ cuerpo: { carga: 'carga-viva' } }), 'tok');
+
+		expect(carga).toBeNull();
+		// Solo sube la que faltaba.
+		expect(peticiones).toEqual([expect.stringContaining('/carga-viva/archivos')]);
+	});
+
+	it('si todas están subidas no se hace ninguna petición', async () => {
+		await ponerFoto('a', true);
+		await ponerFoto('b', true);
+
+		expect(await subirFotosDe(ficha({ cuerpo: { carga: 'carga-viva' } }), 'tok')).toBeNull();
+		expect(peticiones).toEqual([]);
+	});
+});
