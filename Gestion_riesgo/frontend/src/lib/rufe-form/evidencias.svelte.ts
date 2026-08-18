@@ -85,16 +85,25 @@ export class GestorEvidencias {
 
 		for (const g of guardadas) {
 			const archivo = new File([g.blob], g.nombre, { type: g.tipo });
-			this.archivos.push({
+
+			const registro: EvidenciaLocal = $state({
 				uid: g.uid,
 				tipo: g.categoria,
 				archivo,
 				nombre: g.nombre,
 				tamano: archivo.size,
-				estado: 'pendiente',
+				estado: g.optimizada ? 'pendiente' : 'optimizando',
 				progreso: 0,
+				metricas: (g.metricas as EvidenciaLocal['metricas']) ?? undefined,
 				vistaPrevia: URL.createObjectURL(archivo)
 			});
+
+			this.archivos.push(registro);
+
+			// Una foto guardada por una versión anterior del formulario viene sin
+			// marcar: es el original de la cámara, y subirlo sería exactamente lo
+			// que la optimización existe para impedir. Se comprime ahora.
+			if (!g.optimizada) await this.#optimizarRegistro(registro, archivo);
 		}
 
 		// Las fotos recuperadas se vuelven a subir: la carga anterior pudo caducar
@@ -131,30 +140,7 @@ export class GestorEvidencias {
 
 			this.archivos.push(registro);
 
-			const resultado = await comprimirEvidencia(original, tipo, (p) => {
-				registro.progreso = p;
-			});
-
-			// El usuario pudo quitarla mientras se comprimía.
-			if (!this.archivos.some((a) => a.uid === registro.uid)) {
-				if (resultado.ok) liberarVistaPrevia(resultado.vistaPrevia);
-				continue;
-			}
-
-			if (!resultado.ok) {
-				registro.estado = 'error';
-				registro.reintentable = false;
-				registro.error = resultado.motivo;
-				continue;
-			}
-
-			registro.archivo = resultado.archivo;
-			registro.nombre = resultado.archivo.name;
-			registro.tamano = resultado.archivo.size;
-			registro.metricas = resultado.metricas;
-			registro.vistaPrevia = resultado.vistaPrevia;
-			registro.estado = 'pendiente';
-			registro.progreso = 0;
+			if (!(await this.#optimizarRegistro(registro, original))) continue;
 
 			// Se guarda ya optimizada: si el teléfono se queda sin señal o se cierra
 			// el navegador, la foto sigue ahí y pesa lo que debe pesar.
@@ -162,13 +148,56 @@ export class GestorEvidencias {
 				uid: registro.uid,
 				claveBorrador: this.#claveBorrador,
 				nombre: registro.nombre,
-				tipo: resultado.archivo.type,
+				tipo: registro.archivo.type,
 				categoria: tipo,
-				blob: resultado.archivo
+				blob: registro.archivo,
+				optimizada: true,
+				metricas: registro.metricas
 			});
 		}
 
 		await this.subirPendientes();
+	}
+
+	/**
+	 * Comprime una foto y deja el registro listo para subir.
+	 *
+	 * @returns false si no se pudo, con el registro ya marcado en error
+	 */
+	async #optimizarRegistro(registro: EvidenciaLocal, original: File): Promise<boolean> {
+		registro.estado = 'optimizando';
+		registro.progreso = 0;
+
+		const resultado = await comprimirEvidencia(original, registro.tipo, (p) => {
+			registro.progreso = p;
+		});
+
+		// El usuario pudo quitarla mientras se comprimía.
+		if (!this.archivos.some((a) => a.uid === registro.uid)) {
+			if (resultado.ok) liberarVistaPrevia(resultado.vistaPrevia);
+
+			return false;
+		}
+
+		if (!resultado.ok) {
+			registro.estado = 'error';
+			registro.reintentable = false;
+			registro.error = resultado.motivo;
+
+			return false;
+		}
+
+		liberarVistaPrevia(registro.vistaPrevia);
+
+		registro.archivo = resultado.archivo;
+		registro.nombre = resultado.archivo.name;
+		registro.tamano = resultado.archivo.size;
+		registro.metricas = resultado.metricas;
+		registro.vistaPrevia = resultado.vistaPrevia;
+		registro.estado = 'pendiente';
+		registro.progreso = 0;
+
+		return true;
 	}
 
 	async quitar(uidArchivo: string): Promise<void> {

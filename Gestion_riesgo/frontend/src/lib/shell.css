@@ -352,6 +352,9 @@ h3 {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	/* Un elemento flex no baja de su contenido salvo que se le permita: sin
+	   esto, un título largo ensancha la barra en vez de recortarse. */
+	min-width: 0;
 }
 
 @media (max-width: 600px) {
@@ -365,6 +368,24 @@ h3 {
 	padding: 1.25rem;
 	flex: 1;
 	min-width: 0;
+
+	/*
+	 * Red de seguridad contra el desbordamiento horizontal.
+	 *
+	 * Basta un elemento difícil de partir —el nombre de archivo de treinta
+	 * dígitos que pone la cámara de Android, una tabla ancha, una URL larga—
+	 * para que toda la página se vuelva más ancha que la pantalla del teléfono.
+	 * El síntoma es desconcertante: no se rompe lo que desborda, sino que TODO
+	 * el contenido queda recortado por la derecha.
+	 *
+	 * Se usa `clip` y no `hidden` a propósito: `hidden` crea un contenedor de
+	 * desplazamiento y rompería el `position: sticky` de la barra superior.
+	 * `clip` recorta sin crear ese contenedor.
+	 *
+	 * Lo que sí necesita ancho propio —las tablas— se desplaza dentro de
+	 * `.tabla-envoltura`, que tiene su propio `overflow-x: auto`.
+	 */
+	overflow-x: clip;
 }
 
 .pagina--sin-relleno {

@@ -23,6 +23,17 @@ export type EvidenciaGuardada = {
 	/** DOCUMENTO o DANO. */
 	categoria: 'DOCUMENTO' | 'DANO';
 	blob: Blob;
+	/**
+	 * ¿El blob guardado ya pasó por la compresión?
+	 *
+	 * Sin este dato no hay forma de distinguir una foto optimizada de una
+	 * original guardada por una versión anterior del formulario, y al recuperar
+	 * el borrador se subiría el original —justo lo que la optimización existe
+	 * para impedir—. Ausente significa «no lo sé», y se vuelve a comprimir.
+	 */
+	optimizada?: boolean;
+	/** Métricas del ahorro, para no perderlas al recuperar el borrador. */
+	metricas?: unknown;
 };
 
 function abrir(): Promise<IDBDatabase | null> {
