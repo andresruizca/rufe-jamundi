@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Bandeja de reportes ciudadanos.
+	// Bandeja de fichas RUFE pendientes de validar.
 	//
 	// La lista no trae nombres ni documentos: para decidir qué revisar bastan el
 	// evento, el lugar y la fecha. Los datos identificatorios solo aparecen al
@@ -74,11 +74,11 @@
 </script>
 
 <div class="tarjeta">
-	<h2 class="tarjeta__titulo">Reportes ciudadanos</h2>
+	<h2 class="tarjeta__titulo">Fichas RUFE</h2>
 	<p class="tarjeta__nota">
-		Registro Unifamiliar de Emergencias enviado por la ciudadanía desde
-		<code>/riesgo/reportar</code>. Los reportes llegan en estado «Recibido» y no son oficiales
-		hasta que un gestor los valida.
+		Registro Unifamiliar de Emergencias levantado en campo por los funcionarios desde
+		<strong>Registro</strong>. Las fichas entran en estado «Recibido» y no son oficiales hasta
+		que un gestor les da el Vo.Bo.
 	</p>
 
 	<form
@@ -139,14 +139,14 @@
 	{:else if reportes.length === 0}
 		<p class="vacio">
 			{hayFiltros
-				? 'Ningún reporte coincide con los filtros aplicados.'
-				: 'Todavía no se ha recibido ningún reporte ciudadano.'}
+				? 'Ninguna ficha coincide con los filtros aplicados.'
+				: 'Todavía no se ha registrado ninguna ficha.'}
 		</p>
 	{:else}
 		<div class="tabla-envoltura">
 			<table class="tabla">
 				<caption class="visualmente-oculto">
-					Reportes RUFE recibidos, ordenados por fecha de recepción
+					Fichas RUFE registradas, ordenadas por fecha
 				</caption>
 				<thead>
 					<tr>
@@ -236,9 +236,9 @@
 		Sobre estos datos
 	</h2>
 	<p class="tarjeta__nota">
-		Cada reporte contiene datos personales y datos sensibles (identidad de género y pertenencia
-		étnica) de todo un núcleo familiar. Abrir un reporte queda registrado en la auditoría del
-		sistema con su usuario y la fecha.
+		Cada ficha contiene datos personales y datos sensibles (identidad de género y pertenencia
+		étnica) de todo un núcleo familiar. Abrirla queda registrado en la auditoría del sistema con
+		su usuario y la fecha.
 	</p>
 </div>
 

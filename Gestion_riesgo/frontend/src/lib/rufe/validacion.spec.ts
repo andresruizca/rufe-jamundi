@@ -23,8 +23,8 @@ const CATALOGOS: Catalogos = {
 		extensiones: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf']
 	},
 	tipos_documento: Array.from({ length: 10 }, (_, i) => ({ codigo: i + 1, etiqueta: `Doc ${i + 1}` })),
-	documentos_sin_numero: [6, 7, 8, 9],
-	documentos_alfanumericos: [4, 5, 10],
+	documentos_sin_numero: [6, 7, 8],
+	documentos_alfanumericos: [4, 5, 9, 10],
 	documento_otro: 10,
 	parentescos: Array.from({ length: 15 }, (_, i) => ({ codigo: i + 1, etiqueta: `Par ${i + 1}` })),
 	parentesco_jefe: 1,
@@ -230,6 +230,20 @@ describe('C5, C6 y C7 — número de documento', () => {
 			CATALOGOS
 		);
 		expect(e).not.toHaveProperty('personas.0.numero_documento');
+	});
+
+	it('el NIT lleva número y admite el guion de verificación', () => {
+		const e = validarPersona(
+			jefe({ tipo_documento: 9, numero_documento: '900123456-1' }),
+			0,
+			CATALOGOS
+		);
+		expect(e).not.toHaveProperty('personas.0.numero_documento');
+	});
+
+	it('el NIT sin número se rechaza', () => {
+		const e = validarPersona(jefe({ tipo_documento: 9, numero_documento: '' }), 0, CATALOGOS);
+		expect(e).toHaveProperty('personas.0.numero_documento');
 	});
 
 	it('el documento "Otro" exige decir cuál', () => {

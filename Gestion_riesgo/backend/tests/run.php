@@ -28,6 +28,7 @@ spl_autoload_register(static function (string $clase) use ($raiz): void {
 });
 
 use App\Core\Migrador;
+use App\Sistema\Actualizador;
 use App\Rufe\Catalogos;
 use App\Rufe\Radicado;
 use App\Rufe\Validador;
@@ -619,13 +620,32 @@ prueba('los códigos numéricos empiezan en 1 y son contiguos', function (): voi
     }
 });
 
-prueba('los códigos sin número son los cuatro del formato', function (): void {
-    foreach ([6, 7, 8, 9] as $codigo) {
+prueba('solo tres códigos describen ausencia de documento', function (): void {
+    foreach ([6, 7, 8] as $codigo) {
         afirmar(! Catalogos::exigeNumeroDocumento($codigo), "el código {$codigo} no debería exigir número");
     }
-    foreach ([1, 2, 3, 4, 5, 10] as $codigo) {
+    foreach ([1, 2, 3, 4, 5, 9, 10] as $codigo) {
         afirmar(Catalogos::exigeNumeroDocumento($codigo), "el código {$codigo} debería exigir número");
     }
+});
+
+prueba('el código 9 es el NIT y lleva número', function (): void {
+    // Se leyó mal del PDF original, borroso, como "NA": clasificado así, el
+    // formulario impedía escribir el NIT de un hospital o una escuela, que son
+    // tipos de bien del propio formato.
+    afirmarIgual('NIT', Catalogos::TIPOS_DOCUMENTO[9]);
+    afirmar(Catalogos::exigeNumeroDocumento(9), 'el NIT debe exigir número');
+    afirmar(
+        in_array(9, Catalogos::DOCUMENTOS_ALFANUMERICOS, true),
+        'el NIT debe admitir el guion del dígito de verificación'
+    );
+});
+
+prueba('un NIT con dígito de verificación se acepta', function (): void {
+    afirmarSinError(
+        base(['personas' => [persona(['tipo_documento' => 9, 'numero_documento' => '900123456-1'])]]),
+        'personas.0.numero_documento'
+    );
 });
 
 prueba('los predeterminados apuntan a un evento que existe en el catálogo', function (): void {
@@ -749,6 +769,78 @@ prueba('la reversión no toca ninguna tabla previa', function () use ($raiz): vo
             "la reversión borraría la tabla previa «{$tabla}»"
         );
     }
+});
+
+grupo('Actualizador del sistema');
+
+/** Acceso a los métodos privados: son las reglas que deciden qué se sobrescribe. */
+function actualizador(string $metodo, mixed ...$args): mixed
+{
+    // setAccessible() no se llama: desde PHP 8.1 no hace nada y en 8.5 avisa
+    // como obsoleta. La reflexión ya alcanza los métodos privados.
+    return (new ReflectionMethod(Actualizador::class, $metodo))->invoke(new Actualizador, ...$args);
+}
+
+function constanteActualizador(string $nombre): mixed
+{
+    return (new ReflectionClass(Actualizador::class))->getConstant($nombre);
+}
+
+prueba('config.php nunca se sobrescribe', function (): void {
+    afirmar(
+        in_array('config.php', constanteActualizador('PROTEGIDAS'), true),
+        'config.php debe estar protegido: un despliegue que lo pise borra las credenciales'
+    );
+    afirmar(! actualizador('admisible', 'config.php'), 'admisible() aceptó config.php');
+});
+
+prueba('los instaladores de un solo uso no reviven', function (): void {
+    foreach (['instalar.php', 'migrar.php'] as $archivo) {
+        afirmar(! actualizador('admisible', $archivo), "admisible() aceptó {$archivo}");
+    }
+});
+
+prueba('no se puede escribir fuera del destino', function (): void {
+    foreach (['../config.php', 'src/../../fuera.php', '../../etc/passwd'] as $ruta) {
+        afirmar(! actualizador('admisible', $ruta), "admisible() aceptó «{$ruta}»");
+    }
+});
+
+prueba('solo se escriben extensiones de la lista blanca', function (): void {
+    foreach (['src/Core/Db.php', 'index.php', '_app/x.js', 'estilo.css', 'database/rufe.sql'] as $ok) {
+        afirmar(actualizador('admisible', $ok), "admisible() rechazó «{$ok}»");
+    }
+    foreach (['malo.sh', 'x.exe', 'y.bin', 'z.phar'] as $no) {
+        afirmar(! actualizador('admisible', $no), "admisible() aceptó «{$no}»");
+    }
+});
+
+prueba('el .htaccess sí se escribe pese a no tener extensión', function (): void {
+    afirmar(actualizador('admisible', '.htaccess'), 'admisible() rechazó .htaccess');
+});
+
+prueba('el mapa aplana el backend como lo espera el servidor', function (): void {
+    $mapa = constanteActualizador('MAPA');
+
+    // En el repositorio el punto de entrada vive en public/; en el servidor va
+    // en la raíz de api/, porque el hosting no deja poner código sobre el
+    // document root.
+    afirmarIgual('index.php', $mapa['BACKEND']['Gestion_riesgo/backend/public/index.php']);
+    afirmarIgual('src', $mapa['BACKEND']['Gestion_riesgo/backend/src']);
+    afirmarIgual('database', $mapa['BACKEND']['Gestion_riesgo/backend/database']);
+    afirmarIgual('', $mapa['FRONTEND']['Gestion_riesgo/frontend/build']);
+});
+
+prueba('la plantilla de configuración NO viene con la autoactualización encendida', function () use ($raiz): void {
+    // Es la comprobación que impide el peor descuido posible: que alguien copie
+    // config.example.php a config.php y el sitio quede pudiendo sobrescribirse
+    // a sí mismo sin que nadie lo haya decidido.
+    $config = require $raiz.'/config.example.php';
+
+    afirmar(isset($config['actualizaciones']), 'falta la sección "actualizaciones" en la plantilla');
+    afirmarIgual(false, $config['actualizaciones']['habilitado'], 'la plantilla viene habilitada');
+    afirmarIgual('', $config['actualizaciones']['raiz_api'], 'la plantilla trae una ruta puesta');
+    afirmarIgual('', $config['actualizaciones']['respaldos'], 'la plantilla trae una carpeta de respaldos puesta');
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────

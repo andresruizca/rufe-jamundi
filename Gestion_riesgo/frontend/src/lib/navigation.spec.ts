@@ -72,17 +72,17 @@ describe('menú por rol', () => {
 	}
 
 	it('el visor no ve el enlace de registrar', () => {
-		expect(etiquetas('VISUALIZACION')).not.toContain('Registrar RUFE');
+		expect(etiquetas('VISUALIZACION')).not.toContain('Registro');
 	});
 
 	it('el gestor sí lo ve, y no ve administración', () => {
-		expect(etiquetas('GESTOR')).toContain('Registrar RUFE');
+		expect(etiquetas('GESTOR')).toContain('Registro');
 		expect(etiquetas('GESTOR')).not.toContain('Usuarios del sistema');
 	});
 
 	it('el administrador lo ve todo', () => {
 		const e = etiquetas('ADMINISTRADOR');
-		expect(e).toContain('Registrar RUFE');
+		expect(e).toContain('Registro');
 		expect(e).toContain('Reportes RUFE');
 		expect(e).toContain('Usuarios del sistema');
 	});
@@ -94,7 +94,9 @@ describe('menú por rol', () => {
 
 describe('títulos', () => {
 	it('cada ruta registrada resuelve a su título', () => {
-		expect(resolverTitulo('/riesgo/reportar')).toBe('Registrar un RUFE en campo');
-		expect(resolverTitulo('/riesgo/reportes')).toBe('Reportes ciudadanos — RUFE');
+		expect(resolverTitulo('/riesgo/reportar')).toBe(
+			'Registro Unifamiliar de Emergencias — captura en campo'
+		);
+		expect(resolverTitulo('/riesgo/reportes')).toBe('Fichas RUFE registradas');
 	});
 });

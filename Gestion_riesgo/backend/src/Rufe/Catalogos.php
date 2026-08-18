@@ -71,22 +71,33 @@ final class Catalogos
         6 => 'Menor sin identificación',
         7 => 'Adulto sin identidad',
         8 => 'No informa',
-        9 => 'NA',
+        9 => 'NIT',
         10 => 'Otro',
     ];
 
-    /** Códigos que describen la ausencia de documento: no llevan número. */
-    public const DOCUMENTOS_SIN_NUMERO = [6, 7, 8, 9];
+    /**
+     * Códigos que describen la ausencia de documento: no llevan número.
+     *
+     * El 9 (NIT) NO está aquí: es el identificador tributario de una persona
+     * jurídica y por supuesto tiene número. Es el que usan los bienes
+     * institucionales del formato — hospital, escuela, alcaldía.
+     */
+    public const DOCUMENTOS_SIN_NUMERO = [6, 7, 8];
 
-    /** Documentos cuyo número admite letras además de dígitos. */
-    public const DOCUMENTOS_ALFANUMERICOS = [4, 5, 10];
+    /**
+     * Documentos cuyo número admite letras y guiones además de dígitos.
+     *
+     * El NIT entra aquí por el guion del dígito de verificación (900123456-1),
+     * que un patrón de solo dígitos rechazaría.
+     */
+    public const DOCUMENTOS_ALFANUMERICOS = [4, 5, 9, 10];
 
     public const DOCUMENTO_OTRO = 10;
 
     /** @var array<int,string> */
     public const PARENTESCOS = [
-        1 => 'Jefe(a) o cabeza de hogar',
-        2 => 'Pareja, esposa(o)',
+        1 => 'Jefe(a) o cabeza del hogar',
+        2 => 'Pareja, esposo(a)',
         3 => 'Hijo(a), hijastro(a)',
         4 => 'Abuelo(a)',
         5 => 'Sobrino(a)',
@@ -116,8 +127,8 @@ final class Catalogos
         1 => 'Indígena',
         2 => 'Gitano - ROM',
         3 => 'Raizal',
-        4 => 'Palenquero',
-        5 => 'Negro(a), mulato(a), afrodescendiente, afrocolombiano(a)',
+        4 => 'Palenquero(a)',
+        5 => 'Negro(a), mulato(a), afrodescendiente(a), afrocolombiano(a)',
         6 => 'No aplica',
     ];
 
@@ -131,7 +142,7 @@ final class Catalogos
 
     /** @var array<string,string> */
     public const ALOJAMIENTOS = [
-        'LUGAR_HABITUAL' => 'En el lugar habitual de su residencia',
+        'LUGAR_HABITUAL' => 'Lugar habitual de su residencia',
         'EVACUADO' => 'Evacuado fuera de su residencia',
     ];
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Detalle de un reporte ciudadano y su validación.
+	// Detalle de una ficha RUFE y su validación.
 	//
 	// Aquí es donde el "Vo.Bo. CMGRD/CDGRD" del formato de papel se convierte en
 	// un acto trazable: quién validó, cuándo y con qué nota. Los botones de
@@ -381,7 +381,7 @@
 						{h.estado_anterior ? `${h.estado_anterior} → ` : ''}{h.estado_etiqueta}
 					</span>
 					<span class="historial__meta">
-						{fechaHora(h.creado_en)}{h.usuario_email ? ` · ${h.usuario_email}` : ' · ciudadano'}
+						{fechaHora(h.creado_en)}{h.usuario_email ? ` · ${h.usuario_email}` : ''}
 					</span>
 					{#if h.nota}<span class="historial__nota">{h.nota}</span>{/if}
 				</li>

@@ -20,7 +20,12 @@ final class Migrador
      *
      * @var list<string>
      */
-    public const ARCHIVOS = ['schema.sql', 'rufe.sql', 'rufe_02_evidencias_y_envio.sql'];
+    public const ARCHIVOS = [
+        'schema.sql',
+        'rufe.sql',
+        'rufe_02_evidencias_y_envio.sql',
+        'sistema_01_despliegues.sql',
+    ];
 
     /**
      * @param  list<string>  $archivos

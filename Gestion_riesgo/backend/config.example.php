@@ -89,6 +89,37 @@ return [
         ],
     ],
 
+    // Actualización del sistema desde GitHub (Acerca de → Actualizaciones).
+    //
+    // Viene deshabilitada a propósito: darle a un sitio en producción la
+    // capacidad de sobrescribirse a sí mismo es algo que se enciende a
+    // conciencia, no algo que quede puesto por venir en la plantilla.
+    'actualizaciones' => [
+        'habilitado' => false,
+
+        'owner' => 'miltonf10',
+        'repo'  => 'rufe-jamundi',
+        'rama'  => 'sistema-gestion-riesgo',
+
+        // Rutas ABSOLUTAS en el servidor. Vacías = ese destino se omite.
+        'raiz_api'      => '',   // .../grj.oticjamundi.com/api
+        'raiz_frontend' => '',   // .../grj.oticjamundi.com
+
+        // Respaldos previos a sobrescribir. FUERA del document root, y con
+        // espacio: se guarda una copia completa por despliegue.
+        'respaldos' => '',       // .../sgr_respaldos
+
+        // Tras escribir se comprueba que el sitio siga en pie; si no responde,
+        // se restaura el respaldo automáticamente. Vacío = no se comprueba.
+        'url_salud'    => 'https://grj.oticjamundi.com/api/health',
+        'url_frontend' => 'https://grj.oticjamundi.com/',
+
+        // Pausa entre archivos, en milisegundos. En hosting compartido, escribir
+        // cientos de archivos de golpe dispara los límites de CPU y el proceso
+        // muere a mitad del despliegue.
+        'pausa_ms' => 40,
+    ],
+
     // Clave de un solo uso para ejecutar bin/install.php. Vaciar tras instalar.
     'install_key' => '',
 ];

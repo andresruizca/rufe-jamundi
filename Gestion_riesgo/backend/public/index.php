@@ -14,6 +14,7 @@ declare(strict_types=1);
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
 use App\Controllers\RufeController;
+use App\Controllers\SistemaController;
 use App\Controllers\RufeCapturaController;
 use App\Controllers\UsuariosController;
 use App\Core\Auth;
@@ -85,6 +86,7 @@ $usuarios = new UsuariosController;
 $acerca = new AcercaController;
 $rufeCaptura = new RufeCapturaController;
 $rufe = new RufeController;
+$sistema = new SistemaController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -129,6 +131,11 @@ $router->delete('/rufe/borradores/{clave}', [$rufe, 'eliminarBorrador'], Auth::E
 // ── Solo ADMINISTRADOR ───────────────────────────────────────────────────
 $soloAdmin = [Auth::ADMINISTRADOR];
 $router->post('/rufe/reportes/{id}/anonimizar', [$rufe, 'anonimizar'], $soloAdmin);
+
+// Actualización del sistema: reescribe el código del sitio y corre migraciones.
+// Es la ruta de mayor privilegio que existe aquí.
+$router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
+$router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
 $router->get('/usuarios', [$usuarios, 'listar'], $soloAdmin);
 $router->post('/usuarios', [$usuarios, 'crear'], $soloAdmin);
 $router->get('/usuarios/{id}', [$usuarios, 'ver'], $soloAdmin);
