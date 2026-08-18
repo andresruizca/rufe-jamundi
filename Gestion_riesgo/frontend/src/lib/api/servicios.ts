@@ -10,6 +10,7 @@ import type {
 	RespuestaCarga,
 	RespuestaEnvio
 } from '$lib/rufe-form/tipos';
+import type { Ubicacion } from '$lib/mapa/datos';
 
 /** Acerca de — las dos pestañas. */
 export const acercaApi = {
@@ -99,4 +100,39 @@ export const rufeApi = {
 		enlace.click();
 		URL.revokeObjectURL(url);
 	}
+};
+
+/**
+ * Ubicaciones para la sección Mapas.
+ *
+ * El navegador nunca llama a un geocodificador: le pide al servidor las
+ * direcciones que ya están resueltas. Geocodificar tiene cupo por segundo,
+ * puede costar dinero y necesita una clave que no debe viajar hasta aquí.
+ */
+export const mapaApi = {
+	ubicaciones: (direcciones: string[]) =>
+		api.post<{
+			ubicaciones: Record<string, Ubicacion>;
+			consultadas: number;
+			pendientes: number;
+			descartadas: number;
+		}>('/mapa/ubicaciones', { direcciones }),
+
+	estado: () =>
+		api.get<{
+			por_precision: Record<string, number>;
+			pendientes: number;
+			lote: number;
+			google_activo: boolean;
+			segundos_por_direccion: number;
+		}>('/mapa/estado'),
+
+	geocodificar: () =>
+		api.post<{ procesadas: number; ubicadas: number; sin_ubicar: number; pendientes: number }>(
+			'/mapa/geocodificar',
+			{}
+		),
+
+	corregir: (clave: string, latitud: number, longitud: number) =>
+		api.put<{ clave: string }>(`/mapa/ubicaciones/${clave}`, { latitud, longitud })
 };

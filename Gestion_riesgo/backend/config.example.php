@@ -71,6 +71,18 @@ return [
         'sal' => '',
     ],
 
+    'geocodificacion' => [
+        // Clave de la API de Geocoding de Google. VACÍA por omisión: mientras lo
+        // esté, el sistema ubica las direcciones solo con OpenStreetMap, que es
+        // gratuito y no pide cuenta.
+        //
+        // Poner una clave aquí hace que las direcciones que OpenStreetMap no
+        // logre ubicar se reintenten con Google, que acierta más con direcciones
+        // desordenadas pero cobra por consulta. Nunca viaja al navegador: la
+        // geocodificación ocurre entera en el servidor.
+        'google_key' => '',
+    ],
+
     'github' => [
         // Token de solo lectura. Se usa desde el servidor para que nunca viaje
         // al navegador. Un repositorio público funciona sin token, pero con él

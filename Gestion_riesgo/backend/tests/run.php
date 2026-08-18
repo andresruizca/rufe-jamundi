@@ -31,6 +31,7 @@ use App\Core\Migrador;
 use App\Sistema\Actualizador;
 use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
+use App\Rufe\Geocodificador;
 use App\Rufe\Radicado;
 use App\Rufe\Validador;
 
@@ -999,6 +1000,86 @@ prueba('distingue buscar una persona de hojear la bandeja', function (): void {
     afirmar(Busqueda::buscaPersona('Juan Pérez'), 'un nombre busca persona');
     afirmar(! Busqueda::buscaPersona(''), 'sin texto no busca persona');
     afirmar(! Busqueda::buscaPersona('123'), 'un número corto no busca persona');
+});
+
+// ── Geocodificación ──────────────────────────────────────────────────────────
+
+prueba('la misma dirección escrita de varias formas comparte clave', function (): void {
+    // Cada clave distinta es una consulta más al servicio, con su segundo de
+    // espera y su costo. Reconocer que es la misma casa es la mitad del ahorro.
+    $formas = ['Cra 5 # 10-20', 'CARRERA 5 No 10 20', 'carrera 5 #10 20', '  Cra. 5 #10 - 20  '];
+    $claves = array_map(static fn ($d) => Geocodificador::clave($d), $formas);
+    afirmarIgual(1, count(array_unique($claves)), 'las cuatro formas debían dar una sola clave');
+});
+
+prueba('se normalizan las abreviaturas de vía', function (): void {
+    afirmarIgual('carrera 11 # 8 26', Geocodificador::normalizar('Cra 11 # 8-26'));
+    afirmarIgual('calle 12 # 3 45', Geocodificador::normalizar('Cll 12 No. 3-45'));
+    afirmarIgual('avenida 4 norte', Geocodificador::normalizar('Av 4 Norte'));
+    afirmarIgual('transversal 9 # 2 10', Geocodificador::normalizar('Tv 9 #2-10'));
+});
+
+prueba('a toda dirección se le añade el municipio', function (): void {
+    // Sin esto, «Carrera 11 # 8 26» existe en media Colombia.
+    afirmar(
+        str_ends_with(Geocodificador::consulta('Cra 11 # 8-26'), 'Jamundí, Valle del Cauca, Colombia'),
+        'la consulta debe terminar en el municipio'
+    );
+});
+
+prueba('una calle sin número sí se intenta', function (): void {
+    // «Juan de Ampudia» es una vía real y resuelve a precisión de calle, que
+    // para un mapa de calor ya sirve.
+    afirmar(Geocodificador::utilizable('Juan de ampudia'), 'debía aceptarse');
+});
+
+prueba('lo que no es una dirección no gasta consulta', function (): void {
+    foreach (['NO INFORMA', 'na', 'sin direccion', 'ninguna', 'casa', 'x'] as $texto) {
+        afirmar(! Geocodificador::utilizable($texto), "«{$texto}» no debía intentarse");
+    }
+});
+
+prueba('un punto fuera de Jamundí se descarta', function (): void {
+    // Bogotá: el servicio se equivocó de municipio.
+    afirmarIgual('FALLIDA', Geocodificador::clasificar(['lat' => 4.7110, 'lon' => -74.0721, 'tipo' => 'house']));
+    // Y el mar, por si llega basura.
+    afirmarIgual('FALLIDA', Geocodificador::clasificar(['lat' => 0.0, 'lon' => 0.0, 'tipo' => 'house']));
+});
+
+prueba('el centroide del municipio no se da por bueno', function (): void {
+    // ESTA es la trampa que arruinaría el mapa: una dirección que solo resuelve
+    // a «Jamundí» devuelve coordenadas válidas e inútiles. Pintarlas amontonaría
+    // medio censo sobre el parque principal y la mancha de calor mentiría.
+    afirmarIgual('MUNICIPIO', Geocodificador::clasificar([
+        'lat' => 3.2611, 'lon' => -76.5423, 'tipo' => 'administrative',
+    ]));
+    afirmar(! Geocodificador::pintable('MUNICIPIO'), 'el centroide no debe pintarse');
+    afirmar(! Geocodificador::pintable('FALLIDA'), 'lo fallido no debe pintarse');
+});
+
+prueba('se distingue una casa de una calle y de un barrio', function (): void {
+    $en = static fn (string $tipo) => Geocodificador::clasificar([
+        'lat' => 3.2700, 'lon' => -76.5500, 'tipo' => $tipo,
+    ]);
+    afirmarIgual('EXACTA', $en('house'));
+    afirmarIgual('EXACTA', $en('rooftop'));
+    afirmarIgual('CALLE', $en('residential'));
+    afirmarIgual('BARRIO', $en('suburb'));
+});
+
+prueba('las tres precisiones útiles sí se pintan', function (): void {
+    foreach (['EXACTA', 'CALLE', 'BARRIO'] as $p) {
+        afirmar(Geocodificador::pintable($p), "«{$p}» debía poder pintarse");
+    }
+});
+
+prueba('sin clave configurada no se usa Google', function (): void {
+    // El sistema tiene que funcionar solo con OpenStreetMap.
+    afirmar(! Geocodificador::hayGoogle(), 'Google debe estar apagado por omisión');
+});
+
+prueba('se respeta el segundo entre peticiones que exige OpenStreetMap', function (): void {
+    afirmar(Geocodificador::PAUSA_SEGUNDOS >= 1, 'su política no admite más de una por segundo');
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────

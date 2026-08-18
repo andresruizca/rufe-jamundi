@@ -24,6 +24,8 @@ import {
 	Info,
 	ClipboardList,
 	ClipboardPlus,
+	Map as IconoMapa,
+	MapPinned,
 	CloudOff,
 	FilePlus2
 } from '@lucide/svelte';
@@ -134,6 +136,21 @@ export const NAV_ITEMS: NavItem[] = [
 		match: ['/riesgo/reportes', /^\/riesgo\/reportes\/[^/]+$/]
 	},
 
+	// Fuera del grupo «Registro» y con el mismo rol que Reportes: el mapa se
+	// consulta, no se levanta. Meterlo dentro de un grupo restringido a escritura
+	// se lo escondería a quien solo tiene Visualización, que es justamente quien
+	// más lo mira.
+	{
+		id: 'mapas',
+		type: 'item',
+		label: 'Mapas',
+		title: 'Mapa de la afectación',
+		href: '/riesgo/mapas',
+		icon: IconoMapa,
+		roles: TODOS,
+		match: ['/riesgo/mapas']
+	},
+
 	{
 		id: 'grupo-admin',
 		type: 'group',
@@ -151,6 +168,17 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: Users,
 		roles: SOLO_ADMIN,
 		match: ['/admin/usuarios', /^\/admin\/usuarios\/[^/]+$/]
+	},
+	{
+		id: 'admin-mapas',
+		type: 'item',
+		parentId: 'grupo-admin',
+		label: 'Ubicaciones del mapa',
+		title: 'Ubicación de las direcciones del censo',
+		href: '/admin/mapas',
+		icon: MapPinned,
+		roles: SOLO_ADMIN,
+		match: ['/admin/mapas']
 	},
 
 	{

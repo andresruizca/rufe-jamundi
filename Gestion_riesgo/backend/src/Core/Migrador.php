@@ -25,6 +25,7 @@ final class Migrador
         'rufe.sql',
         'rufe_02_evidencias_y_envio.sql',
         'sistema_01_despliegues.sql',
+        'mapa_01_geocodificacion.sql',
     ];
 
     /**

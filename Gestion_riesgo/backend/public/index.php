@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
+use App\Controllers\MapaController;
 use App\Controllers\RufeController;
 use App\Controllers\SistemaController;
 use App\Controllers\RufeCapturaController;
@@ -87,6 +88,7 @@ $acerca = new AcercaController;
 $rufeCaptura = new RufeCapturaController;
 $rufe = new RufeController;
 $sistema = new SistemaController;
+$mapa = new MapaController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -134,6 +136,14 @@ $router->post('/rufe/reportes/{id}/anonimizar', [$rufe, 'anonimizar'], $soloAdmi
 
 // Actualización del sistema: reescribe el código del sitio y corre migraciones.
 // Es la ruta de mayor privilegio que existe aquí.
+// Ubicaciones del mapa. Consultarlas es de lectura y lo hace cualquier usuario
+// con sesión; geocodificar gasta cupo de un servicio externo y lo lanza un
+// administrador desde su pantalla, por lotes, porque este hosting no tiene cron.
+$router->post('/mapa/ubicaciones', [$mapa, 'ubicaciones'], Auth::TODOS);
+$router->put('/mapa/ubicaciones/{clave}', [$mapa, 'corregir'], Auth::ESCRITURA);
+$router->get('/mapa/estado', [$mapa, 'estado'], $soloAdmin);
+$router->post('/mapa/geocodificar', [$mapa, 'geocodificar'], $soloAdmin);
+
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
 $router->get('/usuarios', [$usuarios, 'listar'], $soloAdmin);

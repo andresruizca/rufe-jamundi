@@ -70,7 +70,9 @@ final class RufeController
         // cédula del ciudadano en una segunda tabla, que es justo lo que la
         // minimización de datos trata de evitar. Quién vio los datos de quién se
         // sabe igual, porque abrir una ficha se audita con su radicado.
-        if (Busqueda::buscaPersona($q)) {
+        // El texto se vuelve a leer de la petición: `filtros()` lo tiene en una
+        // variable suya, no compartida con este método.
+        if (Busqueda::buscaPersona((string) ($req->query('q') ?? ''))) {
             Auditoria::registrar(
                 $req,
                 'rufe.busqueda_de_persona',
