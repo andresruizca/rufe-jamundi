@@ -254,17 +254,25 @@
 		</p>
 	{:else}
 		<div class="controles">
-			<label class="interruptor">
-				<input type="checkbox" bind:checked={verCalor} />
-				<Flame size={15} aria-hidden="true" />
-				Zonas de calor
-			</label>
+			<!-- Las dos casillas van dentro de un grupo con su propio rótulo. Sueltas
+			     no tenían etiqueta encima, así que en una fila alineada por abajo
+			     quedaban descolgadas respecto a «Zona» y «Estado del bien». -->
+			<fieldset class="capas">
+				<legend class="campo__etiqueta">Capas</legend>
+				<div class="capas__opciones">
+					<label class="interruptor">
+						<input type="checkbox" bind:checked={verCalor} />
+						<Flame size={15} aria-hidden="true" />
+						Zonas de calor
+					</label>
 
-			<label class="interruptor">
-				<input type="checkbox" bind:checked={verPredios} />
-				<MapPin size={15} aria-hidden="true" />
-				Predios
-			</label>
+					<label class="interruptor">
+						<input type="checkbox" bind:checked={verPredios} />
+						<MapPin size={15} aria-hidden="true" />
+						Predios
+					</label>
+				</div>
+			</fieldset>
 
 			<div class="campo campo--linea">
 				<label class="campo__etiqueta" for="mapa-zona">Zona</label>
@@ -331,8 +339,28 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 0.7rem;
-		margin-bottom: 0.8rem;
+		gap: 0.55rem 0.8rem;
+		margin-bottom: 0.9rem;
+	}
+
+	/* El grupo se comporta como un campo más de la fila: rótulo arriba y control
+	   abajo, para que todo quede alineado sin cuadrar alturas a mano. */
+	.capas {
+		border: 0;
+		margin: 0;
+		padding: 0;
+		min-inline-size: auto;
+	}
+
+	.capas__opciones {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.25rem 1rem;
+
+		/* La misma altura que tiene un select con su relleno y su borde, para que
+		   las casillas caigan a la altura de los demás controles. */
+		min-height: calc(0.55rem * 2 + 1.35rem + 2px);
 	}
 
 	.interruptor {
@@ -345,9 +373,25 @@
 		white-space: nowrap;
 	}
 
+	.interruptor input {
+		margin: 0;
+		accent-color: var(--color-primary);
+		width: 1rem;
+		height: 1rem;
+	}
+
 	.campo--linea {
 		margin-bottom: 0;
-		min-width: 9rem;
+		/* Piden lo justo para su opción más larga y no más: el ancho sobrante es
+		   del mapa. */
+		flex: 0 1 11rem;
+		min-width: 8.5rem;
+	}
+
+	/* El botón se separa del grupo de filtros y se va al final de la fila cuando
+	   hay sitio, que es donde se espera una acción. */
+	.controles > :global(.boton) {
+		margin-left: auto;
 	}
 
 	.lienzo {
