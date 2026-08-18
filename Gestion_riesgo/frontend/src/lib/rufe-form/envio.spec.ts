@@ -12,6 +12,7 @@ vi.mock('$app/environment', () => ({ browser: true }));
 
 vi.stubGlobal('window', {
 	location: { hostname: 'grj.oticjamundi.com' },
+	localStorage: { getItem: () => 'token-de-la-sesion', setItem() {}, removeItem() {} },
 	addEventListener() {},
 	removeEventListener() {}
 });

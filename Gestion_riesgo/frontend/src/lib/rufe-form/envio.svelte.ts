@@ -17,7 +17,7 @@
 // veces al mismo hogar.
 
 import { browser } from '$app/environment';
-import { ApiError } from '$lib/api/client';
+import { ApiError, leerToken } from '$lib/api/client';
 import { rufeApi } from '$lib/api/servicios';
 import type { RespuestaEnvio } from './tipos';
 import { uid } from './esquema';
@@ -33,6 +33,7 @@ import {
 	type FichaEnCola,
 	type FotoEnCola
 } from './cola';
+import { ErrorDeRed, subirFotosDe } from './subida';
 
 /** Una ficha en cola no se guarda para siempre: pasada una semana ya no sirve. */
 const DIAS_VIGENCIA = 7;
@@ -232,9 +233,15 @@ export class GestorEnvio {
 		await guardarFicha(ficha);
 
 		try {
+			// Las fotos van primero: el servidor las adopta al recibir la ficha, así
+			// que si la ficha entrara antes se quedarían huérfanas hasta caducar.
+			const token = leerToken();
+			const carga = token ? await subirFotosDe(ficha, token) : null;
+
 			const respuesta = await rufeApi.enviarReporte({
 				...ficha.cuerpo,
-				envio_id: ficha.envioId
+				envio_id: ficha.envioId,
+				...(carga ? { carga } : {})
 			});
 
 			this.respuesta = respuesta;
@@ -245,6 +252,16 @@ export class GestorEnvio {
 
 			return respuesta;
 		} catch (e) {
+			// No se pudieron subir las fotos. Es de red: se espera y se reintenta.
+			// La ficha no se toca — enviarla ahora la dejaría sin evidencias.
+			if (e instanceof ErrorDeRed) {
+				this.estado = 'en-cola';
+				this.error = null;
+				await this.#contarPendientes();
+
+				return null;
+			}
+
 			// La sesión venció: la ficha se queda intacta y se pide entrar de nuevo.
 			// No es culpa del dato ni de la red.
 			if (e instanceof ApiError && e.status === 401) {
@@ -271,6 +288,7 @@ export class GestorEnvio {
 			this.error = e instanceof ApiError ? e.message : 'No se pudo enviar la ficha.';
 			ficha.estado = 'error';
 			ficha.error = this.error;
+			ficha.errores = e instanceof ApiError && Object.keys(e.errors).length > 0 ? e.errors : undefined;
 			await guardarFicha(ficha);
 			await this.#contarPendientes();
 			this.estado = 'error';

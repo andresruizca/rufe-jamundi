@@ -42,6 +42,14 @@ export type FichaEnCola = {
 	radicado?: string;
 	/** Último error, para poder explicarlo sin adivinar. */
 	error?: string;
+	/**
+	 * Detalle por campo cuando el servidor rechaza la ficha.
+	 *
+	 * Sin esto, «Revise los datos marcados» es un callejón sin salida: en la cola
+	 * no hay formulario donde estén marcados, así que el censador no tiene forma
+	 * de saber qué corregir ni de decidir si vale la pena descartarla.
+	 */
+	errores?: Record<string, string>;
 	/** Resumen mínimo para poder listarla sin abrir el cuerpo entero. */
 	resumen: { evento: string; direccion: string; personas: number };
 };

@@ -85,6 +85,33 @@
 		await refrescar();
 	}
 
+	/**
+	 * Convierte la clave que devuelve el servidor en algo legible.
+	 *
+	 * Llegan como `personas.2.numero_documento`. No se traduce contra un
+	 * diccionario de etiquetas a propósito: se duplicaría el esquema y se
+	 * desincronizaría en silencio. El mensaje del servidor ya es una frase
+	 * completa; esto solo dice a qué parte de la ficha corresponde.
+	 */
+	function dondeEsta(clave: string): string {
+		const partes = clave.split('.');
+		const trozos: string[] = [];
+
+		for (let i = 0; i < partes.length; i++) {
+			const parte = partes[i];
+
+			if (/^\d+$/.test(parte)) continue;
+
+			const siguiente = partes[i + 1];
+			const numero = siguiente && /^\d+$/.test(siguiente) ? ` ${Number(siguiente) + 1}` : '';
+			trozos.push(parte.replace(/_/g, ' ') + numero);
+		}
+
+		const texto = trozos.join(' · ');
+
+		return texto.charAt(0).toUpperCase() + texto.slice(1);
+	}
+
 	function cuando(ms: number): string {
 		return new Date(ms).toLocaleString('es-CO', {
 			day: '2-digit',
@@ -166,6 +193,14 @@
 								<TriangleAlert size={13} aria-hidden="true" />
 								{ficha.error}
 							</p>
+
+							{#if ficha.errores}
+								<ul class="ficha__campos">
+									{#each Object.entries(ficha.errores) as [campo, mensaje] (campo)}
+										<li><strong>{dondeEsta(campo)}:</strong> {mensaje}</li>
+									{/each}
+								</ul>
+							{/if}
 						{:else if ficha.intentos > 0}
 							<p class="ficha__fecha">
 								{ficha.intentos === 1 ? '1 intento de envío' : `${ficha.intentos} intentos de envío`}
@@ -308,6 +343,19 @@
 		margin: 0.3rem 0 0;
 		font-size: 0.75rem;
 		color: var(--aviso-alerta-texto);
+		overflow-wrap: anywhere;
+	}
+
+	.ficha__campos {
+		list-style: none;
+		margin: 0.35rem 0 0;
+		padding: 0.45rem 0.55rem;
+		display: grid;
+		gap: 0.3rem;
+		border-radius: 8px;
+		background: var(--color-bg);
+		font-size: 0.75rem;
+		line-height: 1.45;
 		overflow-wrap: anywhere;
 	}
 

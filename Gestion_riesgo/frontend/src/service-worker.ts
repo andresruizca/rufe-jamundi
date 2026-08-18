@@ -23,6 +23,7 @@
 // plano y sin enterarse.
 
 import { version } from '$service-worker';
+import { baseApi, ErrorDeRed, subirFotosDe } from '$lib/rufe-form/subida';
 import {
 	ETIQUETA_SYNC,
 	borrarFotosDe,
@@ -35,11 +36,6 @@ import {
 } from '$lib/rufe-form/cola';
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
-
-/** Misma resolución que el cliente de la API, pero sin `$app/environment`. */
-const API_BASE = sw.location.hostname === 'localhost' || sw.location.hostname === '127.0.0.1'
-	? 'http://localhost:8000'
-	: '/api';
 
 sw.addEventListener('install', () => {
 	// Se activa de inmediato: no hay caché vieja que preservar, y esperar a que
@@ -135,7 +131,7 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	let carga: string | null = null;
 
 	try {
-		carga = await subirFotos(ficha, token);
+		carga = await subirFotosDe(ficha, token);
 	} catch (e) {
 		return marcar(ficha, e);
 	}
@@ -143,7 +139,7 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	let respuesta: Response;
 
 	try {
-		respuesta = await fetch(`${API_BASE}/rufe/reportes`, {
+		respuesta = await fetch(`${baseApi()}/rufe/reportes`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 			body: JSON.stringify({ ...ficha.cuerpo, envio_id: ficha.envioId, ...(carga ? { carga } : {}) })
@@ -164,7 +160,12 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 		return marcar(ficha, new ErrorDeRed());
 	}
 
-	let datos: { ok?: boolean; data?: { radicado?: string }; message?: string };
+	let datos: {
+		ok?: boolean;
+		data?: { radicado?: string };
+		message?: string;
+		errors?: Record<string, string>;
+	};
 
 	try {
 		datos = await respuesta.json();
@@ -177,6 +178,7 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 		// que se marca para que una persona lo resuelva.
 		ficha.estado = 'error';
 		ficha.error = datos.message ?? 'El servidor rechazó la ficha.';
+		ficha.errores = datos.errors && Object.keys(datos.errors).length > 0 ? datos.errors : undefined;
 		ficha.actualizadoEn = Date.now();
 		await guardarFicha(ficha);
 
@@ -186,67 +188,13 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	ficha.estado = 'enviada';
 	ficha.radicado = datos.data?.radicado;
 	ficha.error = undefined;
+	ficha.errores = undefined;
 	ficha.actualizadoEn = Date.now();
 	await guardarFicha(ficha);
 	await borrarFotosDe(ficha.envioId);
 
 	return 'ok';
 }
-
-/** Abre una carga y sube las fotos que falten. Devuelve el token de la carga. */
-async function subirFotos(ficha: FichaEnCola, token: string): Promise<string | null> {
-	const fotos = await fotosDe(ficha.envioId);
-	if (fotos.length === 0) return null;
-
-	const carga = await abrirCarga(token);
-
-	for (const foto of fotos) {
-		if (foto.subida) continue;
-		await subirFoto(carga, foto, token);
-	}
-
-	return carga;
-}
-
-async function abrirCarga(token: string): Promise<string> {
-	const respuesta = await fetch(`${API_BASE}/rufe/cargas`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-		body: '{}'
-	}).catch(() => {
-		throw new ErrorDeRed();
-	});
-
-	if (!respuesta.ok) throw new ErrorDeRed();
-
-	const datos = await respuesta.json().catch(() => {
-		throw new ErrorDeRed();
-	});
-
-	return datos.data.carga as string;
-}
-
-async function subirFoto(carga: string, foto: FotoEnCola, token: string): Promise<void> {
-	const cuerpo = new FormData();
-	cuerpo.append('tipo', foto.tipo);
-	cuerpo.append('archivo', foto.blob, foto.nombre);
-
-	const respuesta = await fetch(`${API_BASE}/rufe/cargas/${carga}/archivos`, {
-		method: 'POST',
-		headers: { Authorization: `Bearer ${token}` },
-		body: cuerpo
-	}).catch(() => {
-		throw new ErrorDeRed();
-	});
-
-	// Una foto rechazada por su formato no debe impedir que la ficha salga: el
-	// dato del hogar vale mucho más que una evidencia. Se deja constancia y se
-	// sigue.
-	if (!respuesta.ok && respuesta.status < 500) return;
-	if (!respuesta.ok) throw new ErrorDeRed();
-}
-
-class ErrorDeRed extends Error {}
 
 async function marcar(ficha: FichaEnCola, e: unknown): Promise<Resultado> {
 	const esRed = e instanceof ErrorDeRed;
