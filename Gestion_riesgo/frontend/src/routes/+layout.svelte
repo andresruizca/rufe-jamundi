@@ -7,6 +7,8 @@
 	import '$lib/theme.css';
 	import '$lib/shell.css';
 	import MenuLateral from '$lib/components/layout/MenuLateral.svelte';
+	import BotonArriba from '$lib/components/layout/BotonArriba.svelte';
+	import escudo from '$lib/assets/logo-jamundi.svg';
 	import { resolverTitulo, puedeAcceder, esRutaPublica } from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
 
@@ -142,7 +144,9 @@
 		{/if}
 
 		<div class="contenido">
-			<header class="barra">
+			<!-- `tabindex="-1"` no lo mete en el orden de tabulación: solo permite
+			     que «Volver arriba» pueda poner aquí el foco. -->
+			<header class="barra" id="inicio-de-pagina" tabindex="-1">
 				<button
 					class="barra__menu-btn"
 					type="button"
@@ -152,6 +156,10 @@
 				>
 					<Menu size={20} aria-hidden="true" />
 				</button>
+
+				<!-- Decorativo: el nombre de la entidad va escrito al lado, así que
+				     un texto alternativo lo haría anunciarse dos veces. -->
+				<img class="barra__escudo" src={escudo} alt="" aria-hidden="true" />
 
 				<nav class="miga" aria-label="Ubicación">
 					<span class="miga__raiz">SGR Jamundí</span>
@@ -163,6 +171,12 @@
 			<main class="pagina" class:pagina--sin-relleno={ruta === '/dashboard'}>
 				{@render children?.()}
 			</main>
+
+			<!-- Con el menú abierto no se muestra: quedaría flotando sobre el velo y
+			     sería alcanzable con el tabulador por detrás del panel. -->
+			{#if !menuAbierto}
+				<BotonArriba />
+			{/if}
 		</div>
 	</div>
 {/if}

@@ -301,10 +301,36 @@ h3 {
 	z-index: 20;
 	display: flex;
 	align-items: center;
-	gap: 0.8rem;
+
+	/* Hueco base pequeño: el escudo y el nombre forman una sola unidad visual,
+	   y el botón de menú se separa aparte con su propio margen. */
+	gap: 0.55rem;
 	padding: 0.7rem 1rem;
 	background: var(--color-surface);
 	border-bottom: 1px solid var(--color-border);
+}
+
+/* El escudo de la Alcaldía acompaña al nombre en la barra superior. Va con
+ * alto fijo y ancho automático: el blasón es más alto que ancho y forzarle un
+ * cuadrado lo deformaría. `flex: 0 0 auto` evita que se comprima cuando el
+ * título es largo — en un teléfono, «Registro Unifamiliar de Emergencias»
+ * empujaría hasta aplastarlo. */
+.barra__escudo {
+	display: block;
+	flex: 0 0 auto;
+	height: 28px;
+	width: auto;
+}
+
+/* La barra recibe el foco al pulsar «Volver arriba», pero no es un control:
+ * no debe dibujar un anillo cuando eso ocurre con el ratón. */
+.barra:focus {
+	outline: none;
+}
+
+.barra:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: -2px;
 }
 
 /* Este botón es la única forma de llegar al resto del sistema, así que está
@@ -312,6 +338,9 @@ h3 {
 .barra__menu-btn {
 	display: grid;
 	place-items: center;
+
+	/* Separa el botón del par escudo + nombre, que sí van juntos. */
+	margin-right: 0.3rem;
 	width: 38px;
 	height: 38px;
 	flex: 0 0 auto;
