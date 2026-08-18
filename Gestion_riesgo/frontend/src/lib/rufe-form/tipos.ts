@@ -109,6 +109,8 @@ export type EvidenciaSubida = {
 	mime: string;
 };
 
+import type { MetricasImagen } from './imagen';
+
 /** Archivo en la cola local, con su estado de subida. */
 export type EvidenciaLocal = {
 	uid: string;
@@ -116,11 +118,13 @@ export type EvidenciaLocal = {
 	archivo: File;
 	nombre: string;
 	tamano: number;
-	estado: 'pendiente' | 'subiendo' | 'listo' | 'error';
+	estado: 'optimizando' | 'pendiente' | 'subiendo' | 'listo' | 'error';
 	progreso: number;
 	error?: string;
 	/** El fallo fue de red o del servidor: se reintenta solo al volver la señal. */
 	reintentable?: boolean;
+	/** Qué se ganó al optimizar. Ausente mientras se procesa. */
+	metricas?: MetricasImagen;
 	/** Id que asignó el servidor, disponible solo cuando el estado es `listo`. */
 	idServidor?: number;
 	/** URL de objeto para la vista previa. Se revoca al quitar el archivo. */

@@ -16,7 +16,7 @@
 	import { rufeApi } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { ESCRITURA, SOLO_ADMIN } from '$lib/navigation';
-	import type { DetalleCompleto, EstadoReporte } from '$lib/rufe/tipos';
+	import type { DetalleCompleto, EstadoReporte } from '$lib/rufe-form/tipos';
 	import { fechaHora, soloFecha } from '$lib/formato';
 
 	let detalle = $state<DetalleCompleto | null>(null);

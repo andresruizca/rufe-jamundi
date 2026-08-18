@@ -14,6 +14,10 @@
 // Se usa XMLHttpRequest y no fetch porque fetch todavía no expone el progreso de
 // subida de forma soportada en los navegadores de gama baja que este formulario
 // tiene que atender.
+//
+// Toda foto pasa antes por `imagen.ts`: la original nunca sale del teléfono. Lo
+// que se guarda en IndexedDB y lo que se sube es siempre la versión optimizada,
+// así que la cola sin conexión ocupa megabytes y no decenas de ellos.
 
 import { browser } from '$app/environment';
 import { API_BASE } from '$lib/api/client';
@@ -21,6 +25,7 @@ import { rufeApi } from '$lib/api/servicios';
 import type { Catalogos, EvidenciaLocal, TipoEvidencia } from './tipos';
 import { uid } from './esquema';
 import { borrarEvidencia, borrarEvidenciasDe, guardarEvidencia, leerEvidencias } from './almacen';
+import { comprimirEvidencia, liberarVistaPrevia, tamanoLegible } from './imagen';
 
 export class GestorEvidencias {
 	archivos = $state<EvidenciaLocal[]>([]);
@@ -29,6 +34,7 @@ export class GestorEvidencias {
 
 	readonly total = $derived(this.archivos.reduce((s, a) => s + a.tamano, 0));
 	readonly subiendo = $derived(this.archivos.some((a) => a.estado === 'subiendo'));
+	readonly optimizando = $derived(this.archivos.some((a) => a.estado === 'optimizando'));
 	readonly pendientes = $derived(
 		this.archivos.filter((a) => a.estado === 'pendiente' || a.estado === 'error').length
 	);
@@ -87,7 +93,7 @@ export class GestorEvidencias {
 				tamano: archivo.size,
 				estado: 'pendiente',
 				progreso: 0,
-				vistaPrevia: this.#vistaPrevia(archivo)
+				vistaPrevia: URL.createObjectURL(archivo)
 			});
 		}
 
@@ -100,10 +106,9 @@ export class GestorEvidencias {
 	async agregar(lista: FileList | File[], tipo: TipoEvidencia): Promise<void> {
 		this.error = null;
 
-		const limites = this.#catalogos.limites;
 		const limite = this.limiteDe(tipo);
 
-		for (const archivo of Array.from(lista)) {
+		for (const original of Array.from(lista)) {
 			if (this.archivosDe(tipo).length >= limite) {
 				this.error =
 					tipo === 'DOCUMENTO'
@@ -112,44 +117,54 @@ export class GestorEvidencias {
 				break;
 			}
 
-			const extension = archivo.name.split('.').pop()?.toLowerCase() ?? '';
-			if (!limites.extensiones.includes(extension)) {
-				this.error = `«${archivo.name}» no es un formato admitido (${limites.extensiones.join(', ')}).`;
-				continue;
-			}
-
-			if (archivo.size > limites.bytes_archivo) {
-				this.error = `«${archivo.name}» pesa más de ${enMb(limites.bytes_archivo)}.`;
-				continue;
-			}
-
-			if (this.total + archivo.size > limites.bytes_carga) {
-				this.error = `En total puede adjuntar hasta ${enMb(limites.bytes_carga)}.`;
-				break;
-			}
-
-			const registro: EvidenciaLocal = {
+			// La tarjeta aparece de una vez, en estado «optimizando». Esperar a que
+			// termine la compresión para mostrar algo haría creer que no pasó nada.
+			const registro: EvidenciaLocal = $state({
 				uid: uid(),
 				tipo,
-				archivo,
-				nombre: archivo.name,
-				tamano: archivo.size,
-				estado: 'pendiente',
-				progreso: 0,
-				vistaPrevia: this.#vistaPrevia(archivo)
-			};
+				archivo: original,
+				nombre: original.name,
+				tamano: original.size,
+				estado: 'optimizando',
+				progreso: 0
+			});
 
 			this.archivos.push(registro);
 
-			// Se guarda en IndexedDB antes de intentar subirla: si el teléfono se
-			// queda sin señal o se cierra el navegador, la foto sigue ahí.
+			const resultado = await comprimirEvidencia(original, tipo, (p) => {
+				registro.progreso = p;
+			});
+
+			// El usuario pudo quitarla mientras se comprimía.
+			if (!this.archivos.some((a) => a.uid === registro.uid)) {
+				if (resultado.ok) liberarVistaPrevia(resultado.vistaPrevia);
+				continue;
+			}
+
+			if (!resultado.ok) {
+				registro.estado = 'error';
+				registro.reintentable = false;
+				registro.error = resultado.motivo;
+				continue;
+			}
+
+			registro.archivo = resultado.archivo;
+			registro.nombre = resultado.archivo.name;
+			registro.tamano = resultado.archivo.size;
+			registro.metricas = resultado.metricas;
+			registro.vistaPrevia = resultado.vistaPrevia;
+			registro.estado = 'pendiente';
+			registro.progreso = 0;
+
+			// Se guarda ya optimizada: si el teléfono se queda sin señal o se cierra
+			// el navegador, la foto sigue ahí y pesa lo que debe pesar.
 			void guardarEvidencia({
 				uid: registro.uid,
 				claveBorrador: this.#claveBorrador,
-				nombre: archivo.name,
-				tipo: archivo.type,
+				nombre: registro.nombre,
+				tipo: resultado.archivo.type,
 				categoria: tipo,
-				blob: archivo
+				blob: resultado.archivo
 			});
 		}
 
@@ -164,7 +179,7 @@ export class GestorEvidencias {
 
 		// Sin revoke, cada foto quitada deja retenida su copia en memoria hasta que
 		// se recargue la página.
-		if (archivo.vistaPrevia) URL.revokeObjectURL(archivo.vistaPrevia);
+		liberarVistaPrevia(archivo.vistaPrevia);
 
 		this.archivos.splice(i, 1);
 		void borrarEvidencia(uidArchivo);
@@ -231,21 +246,10 @@ export class GestorEvidencias {
 
 	/** Descarta la carga entera. Se llama al enviar con éxito y al descartar el borrador. */
 	async limpiar(): Promise<void> {
-		for (const a of this.archivos) {
-			if (a.vistaPrevia) URL.revokeObjectURL(a.vistaPrevia);
-		}
+		for (const a of this.archivos) liberarVistaPrevia(a.vistaPrevia);
 		this.archivos = [];
 		this.carga = null;
 		await borrarEvidenciasDe(this.#claveBorrador);
-	}
-
-	#vistaPrevia(archivo: File): string | undefined {
-		// Solo se previsualiza lo que el navegador pinta por sí solo. Un PDF en un
-		// <img> daría un icono roto, y mostrar contenido de un archivo que aún no
-		// se ha validado en el servidor no aporta nada.
-		return archivo.type.startsWith('image/') && archivo.type !== 'image/heic'
-			? URL.createObjectURL(archivo)
-			: undefined;
 	}
 
 	#subir(registro: EvidenciaLocal): Promise<void> {
@@ -321,13 +325,4 @@ export class GestorEvidencias {
 	}
 }
 
-export function enMb(bytes: number): string {
-	return `${Math.round(bytes / 1048576)} MB`;
-}
-
-export function tamanoLegible(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
-
-	return `${(bytes / 1048576).toFixed(1)} MB`;
-}
+export { tamanoLegible };

@@ -9,7 +9,7 @@
 	import { FileWarning, Flag, LoaderCircle, Search, X } from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { rufeApi, type FiltrosReportes } from '$lib/api/servicios';
-	import type { Paginacion, ReporteResumen } from '$lib/rufe/tipos';
+	import type { Paginacion, ReporteResumen } from '$lib/rufe-form/tipos';
 	import { fechaHora, soloFecha } from '$lib/formato';
 
 	let reportes = $state<ReporteResumen[]>([]);

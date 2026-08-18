@@ -1,4 +1,5 @@
 import { api, borrarToken, guardarToken, leerToken } from '$lib/api/client';
+import { espejarToken } from '$lib/rufe-form/cola';
 import type { UsuarioSesion } from '$lib/api/tipos';
 import type { Rol } from '$lib/navigation';
 
@@ -34,7 +35,14 @@ class Sesion {
 	async restaurar(): Promise<void> {
 		this.cargando = true;
 
-		if (!leerToken()) {
+		const token = leerToken();
+
+		// El token vive en localStorage, que el Service Worker no puede leer. Se
+		// espeja en IndexedDB en cada arranque para que el envío en segundo plano
+		// pueda autenticarse con la aplicación cerrada.
+		void espejarToken(token);
+
+		if (!token) {
 			this.usuario = null;
 			this.cargando = false;
 
@@ -60,6 +68,7 @@ class Sesion {
 		);
 
 		guardarToken(datos.token);
+		void espejarToken(datos.token);
 		this.usuario = datos.usuario;
 	}
 
@@ -71,6 +80,10 @@ class Sesion {
 			// navegador: dejar al usuario dentro sería peor.
 		} finally {
 			borrarToken();
+
+			// El espejo se borra también: dejarlo permitiría que el Service Worker
+			// siguiera enviando con una sesión que la persona ya cerró.
+			void espejarToken(null);
 			this.usuario = null;
 		}
 	}

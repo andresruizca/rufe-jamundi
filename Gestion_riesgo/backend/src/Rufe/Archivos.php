@@ -74,9 +74,11 @@ final class Archivos
         ) ?? ['n' => 0, 'bytes' => 0];
 
         if ($subido['tamano'] > Catalogos::MAX_BYTES_ARCHIVO) {
-            throw HttpError::validacion(
-                ['archivo' => 'Cada archivo debe pesar menos de '.self::enMb(Catalogos::MAX_BYTES_ARCHIVO).'.']
-            );
+            // El navegador optimiza cada foto antes de subirla; si llega algo por
+            // encima del tope, o no vino del formulario o la optimización falló.
+            throw HttpError::validacion([
+                'archivo' => 'La foto pesa más de lo permitido. Vuelva a tomarla desde el formulario.',
+            ]);
         }
 
         if ((int) $existentes['bytes'] + $subido['tamano'] > Catalogos::MAX_BYTES_CARGA) {
@@ -321,14 +323,20 @@ final class Archivos
             ]);
         }
 
-        // Las imágenes que GD reconoce se comprueban además por dimensiones: un
-        // archivo que dice ser PNG y no tiene alto ni ancho no es una foto.
-        // HEIC y PDF no pasan por aquí porque getimagesize no los entiende.
-        if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-            $medidas = @getimagesize($ruta);
-            if ($medidas === false || $medidas[0] < 1 || $medidas[1] < 1) {
-                throw HttpError::validacion(['archivo' => 'La imagen está dañada o no se puede leer.']);
-            }
+        // Se comprueba que sea una imagen de verdad y que tenga un tamaño
+        // razonable. Lo segundo no es un capricho: una imagen de 30.000 píxeles
+        // por lado pesa poco comprimida y agota la memoria del proceso al
+        // decodificarla, que es una forma barata de tumbar el sitio.
+        $medidas = @getimagesize($ruta);
+
+        if ($medidas === false || $medidas[0] < 1 || $medidas[1] < 1) {
+            throw HttpError::validacion(['archivo' => 'La imagen está dañada o no se puede leer.']);
+        }
+
+        if ($medidas[0] > Catalogos::MAX_LADO_PIXELES || $medidas[1] > Catalogos::MAX_LADO_PIXELES) {
+            throw HttpError::validacion([
+                'archivo' => 'La imagen tiene una resolución fuera de lo admitido.',
+            ]);
         }
 
         return [$extension, $mime];

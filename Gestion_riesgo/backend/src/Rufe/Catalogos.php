@@ -50,9 +50,30 @@ final class Catalogos
         'DANO' => ['etiqueta' => 'Foto del daño', 'maximo' => self::MAX_EVIDENCIAS_DANO],
     ];
 
-    public const MAX_BYTES_ARCHIVO = 8388608;      // 8 MiB
+    /**
+     * Tope por evidencia. Baja de 8 MiB a 1 MiB porque el navegador ahora
+     * optimiza cada foto antes de subirla y ninguna debería pasar de 900 KB.
+     * El margen que sobra existe para que una foto justo en el límite no se
+     * rechace por unos bytes.
+     *
+     * Es también una defensa: si alguien intentara subir una foto original
+     * saltándose el formulario, el servidor la rechaza.
+     */
+    public const MAX_BYTES_ARCHIVO = 1048576;      // 1 MiB
 
-    public const MAX_BYTES_CARGA = 26214400;       // 25 MiB
+    /** Meta que persigue el navegador antes de dar una foto por buena. */
+    public const OBJETIVO_BYTES_FOTO = 921600;     // 900 KB
+
+    public const MAX_BYTES_CARGA = 5242880;        // 5 MiB
+
+    /**
+     * Dimensión máxima admitida, en píxeles por lado.
+     *
+     * Una imagen de 30.000 × 30.000 pesa poco comprimida y revienta la memoria
+     * del proceso al decodificarla. El navegador nunca manda nada por encima de
+     * 1920, así que este tope solo lo alcanza algo que no vino del formulario.
+     */
+    public const MAX_LADO_PIXELES = 4000;
 
     public const MAX_BYTES_CUERPO = 262144;        // 256 KiB de JSON
 
@@ -274,15 +295,17 @@ final class Catalogos
      * Lista blanca extensión => MIME esperado. La verificación real la hace
      * finfo sobre el contenido; esta tabla dice qué pareja es coherente.
      *
+     * Solo WebP y JPEG: el navegador convierte toda foto a uno de los dos antes
+     * de subirla. Se quitaron PNG (para una fotografía pesa varias veces más),
+     * HEIC (no lo genera nadie después de convertir) y PDF (esto es un campo de
+     * evidencia fotográfica, no un adjunto documental).
+     *
      * @var array<string,list<string>>
      */
     public const EXTENSIONES = [
+        'webp' => ['image/webp'],
         'jpg' => ['image/jpeg'],
         'jpeg' => ['image/jpeg'],
-        'png' => ['image/png'],
-        'webp' => ['image/webp'],
-        'heic' => ['image/heic', 'image/heif'],
-        'pdf' => ['application/pdf'],
     ];
 
     // ── Ayudas ───────────────────────────────────────────────────────────────
@@ -321,6 +344,8 @@ final class Catalogos
                 'evidencias_documento' => self::MAX_EVIDENCIAS_DOCUMENTO,
                 'evidencias_dano' => self::MAX_EVIDENCIAS_DANO,
                 'bytes_archivo' => self::MAX_BYTES_ARCHIVO,
+                'objetivo_bytes_foto' => self::OBJETIVO_BYTES_FOTO,
+                'max_lado_pixeles' => self::MAX_LADO_PIXELES,
                 'bytes_carga' => self::MAX_BYTES_CARGA,
                 'anos_atras_evento' => self::ANOS_ATRAS_EVENTO,
                 'extensiones' => array_keys(self::EXTENSIONES),

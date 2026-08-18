@@ -292,13 +292,21 @@ fi
 
 espera "un token con formato inválido devuelve 404" 404 GET /rufe/cargas/nope/archivos
 
-# Un PNG real de 1x1 px.
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > /tmp/sgr-prueba.png
+# Un WebP real de 1x1 px: es lo que produce el navegador tras optimizar.
+printf 'RIFF$\x00\x00\x00WEBPVP8 \x18\x00\x00\x000\x01\x00\x9d\x01*\x01\x00\x01\x00\x02\x00\x34%%\xa4\x00\x03p\x00\xfe\xfb\xfd\x50\x00' > /tmp/sgr-prueba.webp
 
 CODIGO=$(curl -s -o /tmp/sgr-up.json -w '%{http_code}' -X POST \
+	"$API/rufe/cargas/$CARGA/archivos" -H "$AUTH" -F "archivo=@/tmp/sgr-prueba.webp")
+[ "$CODIGO" = "201" ] && verde "acepta un WebP optimizado" \
+	|| rojo "acepta un WebP optimizado" "recibió $CODIGO — $(head -c 200 /tmp/sgr-up.json)"
+
+# PNG: era válido antes de que el navegador optimizara. Ya no, porque para una
+# fotografía pesa varias veces más que WebP y nadie debería estar subiéndolo.
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > /tmp/sgr-prueba.png
+CODIGO=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
 	"$API/rufe/cargas/$CARGA/archivos" -H "$AUTH" -F "archivo=@/tmp/sgr-prueba.png")
-[ "$CODIGO" = "201" ] && verde "acepta un PNG legítimo" \
-	|| rojo "acepta un PNG legítimo" "recibió $CODIGO — $(head -c 200 /tmp/sgr-up.json)"
+[ "$CODIGO" = "422" ] && verde "rechaza un PNG: solo entran WebP y JPEG" \
+	|| rojo "rechaza un PNG" "recibió $CODIGO"
 
 # Un archivo PHP disfrazado de imagen: la extensión dice .jpg, el contenido no.
 printf '<?php system($_GET["c"]); ?>' > /tmp/sgr-malicioso.jpg
@@ -321,7 +329,7 @@ CODIGO=$(curl -s -o /dev/null -w '%{http_code}' \
 
 titulo "Tipos de evidencia"
 CARGA2=$(curl -s -X POST "$API/rufe/cargas" -H "$AUTH" | sed -n 's/.*"carga":"\([^"]*\)".*/\1/p')
-sube() { curl -s -o /tmp/sgr-t.json -w '%{http_code}' -X POST "$API/rufe/cargas/$CARGA2/archivos" -H "$AUTH" -F "tipo=$1" -F "archivo=@/tmp/sgr-prueba.png"; }
+sube() { curl -s -o /tmp/sgr-t.json -w '%{http_code}' -X POST "$API/rufe/cargas/$CARGA2/archivos" -H "$AUTH" -F "tipo=$1" -F "archivo=@/tmp/sgr-prueba.webp"; }
 
 [ "$(sube DOCUMENTO)" = "201" ] && verde "acepta la foto del documento" || rojo "acepta la foto del documento" ""
 [ "$(sube DOCUMENTO)" = "422" ] && verde "el documento admite solo uno" || rojo "el documento admite solo uno" ""

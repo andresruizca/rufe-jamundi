@@ -30,7 +30,10 @@
 	let entradaArchivo = $state<HTMLInputElement | null>(null);
 	let arrastrando = $state(false);
 
-	const accept = $derived(catalogos.limites.extensiones.map((e) => `.${e}`).join(','));
+	// Cualquier imagen: la foto se convierte a WebP en el teléfono antes de
+	// subirse, así que lo que acepta el servidor no limita lo que puede elegirse
+	// aquí. Un HEIC de iPhone entra por este camino y sale convertido.
+	const accept = 'image/*';
 	const mios = $derived(gestor.archivosDe(tipo));
 	const limite = $derived(gestor.limiteDe(tipo));
 	const lleno = $derived(mios.length >= limite);
@@ -84,9 +87,8 @@
 			</div>
 
 			<p class="zona__pista">
-				También puede arrastrar {varios ? 'las fotos' : 'la foto'} aquí. Máximo
-				{tamanoLegible(catalogos.limites.bytes_archivo)} por archivo
-				({catalogos.limites.extensiones.join(', ')}).
+				También puede arrastrar {varios ? 'las fotos' : 'la foto'} aquí. Se optimizan en el
+				teléfono antes de enviarse: no importa que la cámara las tome muy pesadas.
 			</p>
 
 			<!-- Dos inputs sobre el mismo destino: uno fuerza la cámara, el otro no. -->
@@ -128,22 +130,43 @@
 					</span>
 
 					<span class="archivo__datos">
-						<span class="archivo__nombre">{archivo.nombre}</span>
-						<span class="archivo__meta">
-							{tamanoLegible(archivo.tamano)}
-							{#if archivo.estado === 'subiendo'} · subiendo {archivo.progreso}%{/if}
-							{#if archivo.estado === 'listo'} · guardada{/if}
-							{#if archivo.estado === 'pendiente'} · en espera{/if}
+						<span class="archivo__nombre">
+							{archivo.metricas?.nombreOriginal ?? archivo.nombre}
 						</span>
 
-						{#if archivo.estado === 'subiendo'}
+						<span class="archivo__meta">
+							{#if archivo.estado === 'optimizando'}
+								Optimizando foto… {archivo.progreso}%
+							{:else}
+								{tamanoLegible(archivo.tamano)}
+								{#if archivo.estado === 'subiendo'} · subiendo {archivo.progreso}%{/if}
+								{#if archivo.estado === 'listo'} · guardada{/if}
+								{#if archivo.estado === 'pendiente'} · lista para enviar{/if}
+							{/if}
+						</span>
+
+						<!-- Lo que se ganó al optimizar. Se muestra porque en campo importa:
+						     explica por qué una foto de 8 MB no tarda una eternidad en subir. -->
+						{#if archivo.metricas && archivo.estado !== 'optimizando'}
+							<span class="archivo__ahorro">
+								Original: {tamanoLegible(archivo.metricas.bytesOriginal)} · Optimizada:
+								{tamanoLegible(archivo.metricas.bytesOptimizada)}
+								{#if archivo.metricas.reduccion > 0}
+									· <strong>{archivo.metricas.reduccion} % menos</strong>
+								{/if}
+							</span>
+						{/if}
+
+						{#if archivo.estado === 'optimizando' || archivo.estado === 'subiendo'}
 							<span
 								class="archivo__barra"
 								role="progressbar"
 								aria-valuenow={archivo.progreso}
 								aria-valuemin={0}
 								aria-valuemax={100}
-								aria-label="Progreso de {archivo.nombre}"
+								aria-label={archivo.estado === 'optimizando'
+									? `Optimizando ${archivo.nombre}`
+									: `Subiendo ${archivo.nombre}`}
 							>
 								<span class="archivo__avance" style="width: {archivo.progreso}%"></span>
 							</span>
@@ -158,7 +181,7 @@
 					</span>
 
 					<span class="archivo__acciones">
-						{#if archivo.estado === 'subiendo'}
+						{#if archivo.estado === 'subiendo' || archivo.estado === 'optimizando'}
 							<LoaderCircle size={16} class="girando" aria-hidden="true" />
 						{:else if archivo.estado === 'error' && !archivo.reintentable}
 							<button
@@ -324,6 +347,13 @@
 		display: block;
 		font-size: 0.74rem;
 		color: var(--color-muted);
+	}
+
+	.archivo__ahorro {
+		display: block;
+		margin-top: 0.15rem;
+		font-size: 0.72rem;
+		color: var(--color-success);
 	}
 
 	.archivo__barra {

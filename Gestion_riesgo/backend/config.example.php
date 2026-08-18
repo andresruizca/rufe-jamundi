@@ -41,7 +41,14 @@ return [
 
     'auth' => [
         // Duración de la sesión en horas.
-        'duracion_horas' => 12,
+        //
+        // 24 y no 12 para que cubra una jornada de campo completa: un censador
+        // que sale a las 7 de la mañana no debería tener que volver a entrar a
+        // media tarde con el teléfono sin señal. No se amplía más: el token vive
+        // en un teléfono que puede perderse, y las fichas encoladas no dependen
+        // de que siga vigente — el envío diferido toma el token del momento de
+        // enviar, no el de cuando se guardó la ficha.
+        'duracion_horas' => 24,
     ],
 
     // Evidencias del formulario RUFE. Ruta ABSOLUTA y FUERA del document root:

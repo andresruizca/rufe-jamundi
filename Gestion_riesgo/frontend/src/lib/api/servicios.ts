@@ -9,7 +9,7 @@ import type {
 	ReporteResumen,
 	RespuestaCarga,
 	RespuestaEnvio
-} from '$lib/rufe/tipos';
+} from '$lib/rufe-form/tipos';
 
 /** Acerca de — las dos pestañas. */
 export const acercaApi = {

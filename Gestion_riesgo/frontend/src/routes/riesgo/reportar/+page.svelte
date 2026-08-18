@@ -18,32 +18,32 @@
 	import { ApiError } from '$lib/api/client';
 	import { rufeApi } from '$lib/api/servicios';
 
-	import type { Catalogos, FormularioRufe, RespuestaEnvio } from '$lib/rufe/tipos';
+	import type { Catalogos, FormularioRufe, RespuestaEnvio } from '$lib/rufe-form/tipos';
 	import {
 		PASOS, PASOS_CON_PROGRESO, aCuerpoDeApi, etiquetaLugar, formularioVacio,
 		limpiarCondicionales, muestraAgropecuario, muestraCorregimiento,
 		muestraDireccionAlojamiento, muestraEventoOtro, personaVacia, renglonAgroVacio,
 		type IdPaso
-	} from '$lib/rufe/esquema';
+	} from '$lib/rufe-form/esquema';
 	import {
 		haceAnos, hoy as hoyISO, pasoDelError, validarPaso, validarTodo, type Errores
-	} from '$lib/rufe/validacion';
-	import { GestorBorrador, leerBorrador } from '$lib/rufe/borrador.svelte';
-	import { GestorEvidencias } from '$lib/rufe/evidencias.svelte';
-	import { GestorEnvio, leerEnvioPendiente } from '$lib/rufe/envio.svelte';
+	} from '$lib/rufe-form/validacion';
+	import { GestorBorrador, leerBorrador } from '$lib/rufe-form/borrador.svelte';
+	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
+	import { GestorEnvio, hayFichasPendientes } from '$lib/rufe-form/envio.svelte';
 
-	import CampoTexto from '$lib/rufe/componentes/CampoTexto.svelte';
-	import CampoSelect from '$lib/rufe/componentes/CampoSelect.svelte';
-	import CampoOpciones from '$lib/rufe/componentes/CampoOpciones.svelte';
-	import IndicadorProgreso from '$lib/rufe/componentes/IndicadorProgreso.svelte';
-	import ResumenErrores from '$lib/rufe/componentes/ResumenErrores.svelte';
-	import EstadoAutoguardado from '$lib/rufe/componentes/EstadoAutoguardado.svelte';
-	import ListaPersonas from '$lib/rufe/componentes/ListaPersonas.svelte';
-	import ListaAgropecuaria from '$lib/rufe/componentes/ListaAgropecuaria.svelte';
-	import SubidaEvidencias from '$lib/rufe/componentes/SubidaEvidencias.svelte';
-	import AvisoDatos from '$lib/rufe/componentes/AvisoDatos.svelte';
-	import ResumenEnvio from '$lib/rufe/componentes/ResumenEnvio.svelte';
-	import Confirmacion from '$lib/rufe/componentes/Confirmacion.svelte';
+	import CampoTexto from '$lib/rufe-form/componentes/CampoTexto.svelte';
+	import CampoSelect from '$lib/rufe-form/componentes/CampoSelect.svelte';
+	import CampoOpciones from '$lib/rufe-form/componentes/CampoOpciones.svelte';
+	import IndicadorProgreso from '$lib/rufe-form/componentes/IndicadorProgreso.svelte';
+	import ResumenErrores from '$lib/rufe-form/componentes/ResumenErrores.svelte';
+	import EstadoAutoguardado from '$lib/rufe-form/componentes/EstadoAutoguardado.svelte';
+	import ListaPersonas from '$lib/rufe-form/componentes/ListaPersonas.svelte';
+	import ListaAgropecuaria from '$lib/rufe-form/componentes/ListaAgropecuaria.svelte';
+	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import AvisoDatos from '$lib/rufe-form/componentes/AvisoDatos.svelte';
+	import ResumenEnvio from '$lib/rufe-form/componentes/ResumenEnvio.svelte';
+	import Confirmacion from '$lib/rufe-form/componentes/Confirmacion.svelte';
 
 	// ── Estado ──────────────────────────────────────────────────────────────
 
@@ -94,9 +94,11 @@
 		const detenerBorrador = borrador.iniciar();
 		const detenerEnvio = envio.iniciar();
 
-		// Un reporte que quedó en cola de una visita anterior se retoma solo; en
+		// Una ficha que quedó en cola de una visita anterior se retoma sola; en
 		// cuanto salga, la pantalla pasa a la confirmación.
-		if (leerEnvioPendiente()) indice = PASOS.length - 1;
+		void hayFichasPendientes().then((n) => {
+			if (n > 0) indice = PASOS.length - 1;
+		});
 
 		void iniciar();
 
@@ -221,6 +223,15 @@
 		errores = fallos;
 		if (Object.keys(fallos).length > 0) return;
 
+		// Avanzar con una foto a medio optimizar dejaría el resumen mintiendo sobre
+		// lo que se va a enviar.
+		if (paso.id === 'evidencias' && evidencias?.optimizando) {
+			errorEnvio = 'Espere a que terminen de optimizarse las fotos.';
+
+			return;
+		}
+		errorEnvio = null;
+
 		// El paso de personas se salta la creación manual del jefe de hogar: si se
 		// llega vacío, se crea la primera tarjeta para no mostrar una lista sola.
 		if (paso.id === 'alojamiento' && datos.personas.length === 0) {
@@ -309,6 +320,15 @@
 			return;
 		}
 
+		// No se envía con fotos a medio optimizar: el servidor recibiría la
+		// original, que es justo lo que este paso existe para evitar.
+		if (evidencias?.optimizando) {
+			errorEnvio = 'Espere a que terminen de optimizarse las fotos.';
+			irAPaso('evidencias');
+
+			return;
+		}
+
 		// Un archivo que el servidor rechazó por su formato no se arregla solo: hay
 		// que quitarlo antes de enviar. Los que fallaron por falta de señal no
 		// bloquean nada, porque se reintentan solos.
@@ -322,7 +342,12 @@
 
 		try {
 			const respuesta = await envio.enviar(
-				aCuerpoDeApi(datos, { carga: evidencias?.carga ?? undefined, iniciadoEn })
+				aCuerpoDeApi(datos, { carga: evidencias?.carga ?? undefined, iniciadoEn }),
+				{
+					evento: muestraEventoOtro(datos) ? datos.evento_otro : datos.evento,
+					direccion: datos.direccion,
+					personas: datos.personas.length
+				}
 			);
 
 			// null significa que quedó en cola por falta de red: no es un error, y la
@@ -903,13 +928,27 @@
 
 				{#if envio.enCola}
 					<div class="aviso aviso--info" role="status">
-						<strong>Su reporte quedó guardado y se enviará solo.</strong>
-						No hace falta que haga nada más: en cuanto el teléfono recupere señal se enviará
-						automáticamente. Puede cerrar esta página; al volver a abrirla se retomará.
-						{#if envio.intentos > 1}
+						<strong>La ficha quedó guardada y se enviará sola.</strong>
+						{#if envio.enSegundoPlano}
+							En cuanto el teléfono recupere señal se enviará automáticamente, aunque cierre la
+							aplicación.
+						{:else}
+							Se enviará en cuanto vuelva la señal. Deje esta página abierta: su navegador no
+							permite enviarla en segundo plano.
+						{/if}
+						{#if envio.pendientes > 1}
+							<span class="reintentos">Hay {envio.pendientes} fichas esperando salir.</span>
+						{:else if envio.intentos > 1}
 							<span class="reintentos">Intentos: {envio.intentos}.</span>
 						{/if}
 					</div>
+
+					{#if envio.sesionRequerida}
+						<div class="aviso aviso--error" role="alert">
+							<TriangleAlert size={16} aria-hidden="true" />
+							Su sesión venció. Vuelva a iniciar sesión y las fichas pendientes se enviarán solas.
+						</div>
+					{/if}
 				{:else if !enLinea}
 					<div class="aviso aviso--info" role="status">
 						Sin conexión. Puede pulsar «Enviar» igualmente: el reporte quedará guardado en este

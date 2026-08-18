@@ -666,11 +666,40 @@ prueba('la fecha predeterminada es válida para el formulario', function (): voi
     afirmarIgual([], errores(base(['evento' => Catalogos::EVENTO_PREDETERMINADO, 'fecha_evento' => $f])));
 });
 
+prueba('el servidor solo acepta WebP y JPEG', function (): void {
+    // El navegador convierte toda foto antes de subirla. Aceptar PNG, HEIC o PDF
+    // sería dejar abierta una puerta que el formulario ya no usa.
+    afirmarIgual(['webp', 'jpg', 'jpeg'], array_keys(Catalogos::EXTENSIONES));
+    afirmar(! isset(Catalogos::EXTENSIONES['png']), 'PNG debería estar fuera');
+    afirmar(! isset(Catalogos::EXTENSIONES['pdf']), 'PDF debería estar fuera');
+    afirmar(! isset(Catalogos::EXTENSIONES['heic']), 'HEIC debería estar fuera');
+});
+
+prueba('el tope por foto deja margen sobre la meta del navegador', function (): void {
+    afirmar(
+        Catalogos::MAX_BYTES_ARCHIVO > Catalogos::OBJETIVO_BYTES_FOTO,
+        'el tope del servidor debe ser mayor que la meta del navegador, o una foto en el límite se rechazaría'
+    );
+    afirmar(Catalogos::MAX_BYTES_ARCHIVO <= 1048576, 'el tope subió de 1 MiB');
+    afirmarIgual(921600, Catalogos::OBJETIVO_BYTES_FOTO);
+});
+
+prueba('hay tope de resolución contra bombas de descompresión', function (): void {
+    afirmar(Catalogos::MAX_LADO_PIXELES > 1920, 'debe caber lo que produce el navegador');
+    afirmar(Catalogos::MAX_LADO_PIXELES <= 8000, 'un tope demasiado alto no protege de nada');
+});
+
 prueba('los cupos de evidencia son uno de documento y cuatro de daño', function (): void {
     afirmarIgual(1, Catalogos::MAX_EVIDENCIAS_DOCUMENTO);
     afirmarIgual(4, Catalogos::MAX_EVIDENCIAS_DANO);
     afirmarIgual(5, Catalogos::MAX_EVIDENCIAS);
     afirmarIgual(['DOCUMENTO', 'DANO'], array_keys(Catalogos::TIPOS_EVIDENCIA));
+
+    // Cinco fotos de 900 KB caben de sobra en el cupo total de la carga.
+    afirmar(
+        Catalogos::MAX_EVIDENCIAS * Catalogos::OBJETIVO_BYTES_FOTO < Catalogos::MAX_BYTES_CARGA,
+        'el cupo total de la carga no alcanza para el máximo de fotos'
+    );
 });
 
 prueba('la respuesta de la API es serializable y trae lo esencial', function (): void {
