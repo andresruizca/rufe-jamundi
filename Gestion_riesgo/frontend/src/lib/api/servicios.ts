@@ -10,7 +10,7 @@ import type {
 	RespuestaCarga,
 	RespuestaEnvio
 } from '$lib/rufe-form/tipos';
-import type { Ubicacion } from '$lib/mapa/datos';
+import type { FichaMapa, Ubicacion } from '$lib/mapa/datos';
 
 /** Acerca de — las dos pestañas. */
 export const acercaApi = {
@@ -132,6 +132,8 @@ export const rufeApi = {
  * puede costar dinero y necesita una clave que no debe viajar hasta aquí.
  */
 export const mapaApi = {
+	fichas: () => api.get<{ fichas: FichaMapa[] }>('/mapa/fichas'),
+
 	ubicaciones: (direcciones: string[]) =>
 		api.post<{
 			ubicaciones: Record<string, Ubicacion>;

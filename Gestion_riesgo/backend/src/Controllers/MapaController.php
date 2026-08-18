@@ -10,6 +10,7 @@ use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Request;
 use App\Core\Response;
+use App\Rufe\Catalogos;
 use App\Rufe\Geocodificador;
 
 /**
@@ -123,6 +124,60 @@ final class MapaController
             'pendientes' => count($porClave) - $resueltas,
             'descartadas' => count($direcciones) - count($porClave),
         ]);
+    }
+
+    /**
+     * Las fichas del sistema, listas para dibujar.
+     *
+     * El mapa nacía leyendo solo las hojas de cálculo, que es donde está el censo
+     * en papel digitalizado. Pero las fichas levantadas con el formulario viven
+     * en esta base y no aparecían en ninguna parte: se registraba una casa en
+     * campo y el mapa seguía sin saber de ella.
+     *
+     * Muchas traen coordenadas exactas —las que el censador capturó con el botón
+     * de ubicación—, y ésas no necesitan geocodificarse: son el dato más preciso
+     * que puede haber, mejor que cualquier dirección escrita.
+     *
+     * Solo salen datos de ubicación y de estado del bien. Ni nombres, ni
+     * documentos, ni teléfonos: para pintar un punto no hacen falta, y esta
+     * respuesta la recibe cualquier usuario con sesión.
+     */
+    public function fichas(Request $req): void
+    {
+        Auth::exigirUsuario($req);
+
+        // Se excluyen las rechazadas y archivadas —no representan afectación
+        // vigente— y las anonimizadas, cuya dirección ya se borró a propósito.
+        $filas = Db::all(
+            "SELECT r.radicado, r.zona, r.corregimiento, r.vereda_sector_barrio,
+                    r.direccion, r.estado, r.estado_bien, r.tipo_bien,
+                    r.latitud, r.longitud, r.precision_m,
+                    (SELECT COUNT(*) FROM rufe_personas p WHERE p.reporte_id = r.id) AS personas
+               FROM rufe_reportes r
+              WHERE r.estado NOT IN ('RECHAZADO', 'ARCHIVADO')
+                AND r.anonimizado_en IS NULL
+              ORDER BY r.id"
+        );
+
+        $fichas = [];
+        foreach ($filas as $f) {
+            $fichas[] = [
+                'radicado' => $f['radicado'],
+                'zona' => $f['zona'] === 'RURAL' ? 'Rural' : 'Urbana',
+                'barrio' => $f['vereda_sector_barrio'] ?: ($f['corregimiento'] ?: 'Sin especificar'),
+                'direccion' => $f['direccion'],
+                'personas' => (int) $f['personas'],
+                'estado' => Catalogos::ESTADOS_REPORTE[$f['estado']] ?? $f['estado'],
+                'estado_bien' => Catalogos::ESTADOS_BIEN[$f['estado_bien']] ?? 'No informa',
+                'tipo_bien' => Catalogos::TIPOS_BIEN[$f['tipo_bien']] ?? '',
+                // Coordenadas del censador, cuando las tomó. Son las buenas.
+                'latitud' => $f['latitud'] === null ? null : (float) $f['latitud'],
+                'longitud' => $f['longitud'] === null ? null : (float) $f['longitud'],
+                'precision_m' => $f['precision_m'] === null ? null : (int) $f['precision_m'],
+            ];
+        }
+
+        Response::ok(['fichas' => $fichas]);
     }
 
     /** Cuántas direcciones hay resueltas, pendientes y fallidas. */

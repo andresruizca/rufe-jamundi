@@ -14,9 +14,26 @@ export type Ubicacion = {
 	fuente: string | null;
 };
 
+/** Una ficha del sistema, tal como la devuelve la API. */
+export type FichaMapa = {
+	radicado: string;
+	zona: string;
+	barrio: string;
+	direccion: string;
+	personas: number;
+	estado: string;
+	estado_bien: string;
+	tipo_bien: string;
+	latitud: number | null;
+	longitud: number | null;
+	precision_m: number | null;
+};
+
 /** Un hogar ya ubicado, listo para dibujar. */
 export type PuntoHogar = {
 	hogar: string;
+	/** De dónde salió: del censo en papel digitalizado o del formulario. */
+	origen: 'censo' | 'sistema';
 	barrio: string;
 	zona: string;
 	direccion: string;
@@ -57,12 +74,27 @@ export function ubicable(u: Ubicacion | undefined): u is Ubicacion {
 	return u !== undefined && (u.precision === 'EXACTA' || u.precision === 'CALLE' || u.precision === 'BARRIO');
 }
 
-/** Las direcciones distintas que hay que preguntarle a la API. */
-export function direccionesDe(hogares: Hogar[]): string[] {
+/**
+ * Las direcciones distintas que hay que preguntarle a la API.
+ *
+ * Se juntan las de las dos fuentes en una sola consulta: una misma casa puede
+ * estar en el censo en papel y en una ficha del formulario, y preguntar dos
+ * veces por ella gastaría el doble de cupo del geocodificador para nada.
+ *
+ * Las fichas que ya traen coordenadas del censador no aportan dirección: no hay
+ * nada que resolver.
+ */
+export function direccionesDe(hogares: Hogar[], fichas: FichaMapa[] = []): string[] {
 	const vistas = new Set<string>();
 
 	for (const h of hogares) {
 		const d = h.direccion.trim();
+		if (d !== '') vistas.add(d);
+	}
+
+	for (const f of fichas) {
+		if (f.latitud !== null && f.longitud !== null) continue;
+		const d = f.direccion.trim();
 		if (d !== '') vistas.add(d);
 	}
 
@@ -87,6 +119,7 @@ export function puntosDe(
 
 		puntos.push({
 			hogar: h.hogar,
+			origen: 'censo',
 			barrio: h.barrio,
 			zona: h.zona,
 			direccion: h.direccion,
@@ -96,6 +129,49 @@ export function puntosDe(
 			lon: u.lon,
 			precision: u.precision
 		});
+	}
+
+	return { puntos, sinUbicar };
+}
+
+/**
+ * Las fichas del sistema convertidas en puntos.
+ *
+ * Las que traen coordenadas del censador se usan tal cual: son el dato más
+ * preciso que existe, mejor que cualquier dirección escrita, y no gastan una
+ * consulta al geocodificador. Las demás se ubican por su dirección, igual que
+ * las del censo en papel.
+ */
+export function puntosDeFichas(
+	fichas: FichaMapa[],
+	ubicaciones: Record<string, Ubicacion>
+): { puntos: PuntoHogar[]; sinUbicar: FichaMapa[] } {
+	const puntos: PuntoHogar[] = [];
+	const sinUbicar: FichaMapa[] = [];
+
+	for (const f of fichas) {
+		const base = {
+			hogar: f.radicado,
+			origen: 'sistema' as const,
+			barrio: f.barrio,
+			zona: f.zona,
+			direccion: f.direccion,
+			personas: f.personas,
+			estadoBien: f.estado_bien || 'No informa'
+		};
+
+		if (f.latitud !== null && f.longitud !== null) {
+			puntos.push({ ...base, lat: f.latitud, lon: f.longitud, precision: 'EXACTA' });
+			continue;
+		}
+
+		const u = ubicaciones[f.direccion.trim()];
+		if (!ubicable(u)) {
+			sinUbicar.push(f);
+			continue;
+		}
+
+		puntos.push({ ...base, lat: u.lat, lon: u.lon, precision: u.precision });
 	}
 
 	return { puntos, sinUbicar };

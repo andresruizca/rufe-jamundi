@@ -139,6 +139,7 @@ $router->post('/rufe/reportes/{id}/anonimizar', [$rufe, 'anonimizar'], $soloAdmi
 // Ubicaciones del mapa. Consultarlas es de lectura y lo hace cualquier usuario
 // con sesión; geocodificar gasta cupo de un servicio externo y lo lanza un
 // administrador desde su pantalla, por lotes, porque este hosting no tiene cron.
+$router->get('/mapa/fichas', [$mapa, 'fichas'], Auth::TODOS);
 $router->post('/mapa/ubicaciones', [$mapa, 'ubicaciones'], Auth::TODOS);
 $router->put('/mapa/ubicaciones/{clave}', [$mapa, 'corregir'], Auth::ESCRITURA);
 $router->get('/mapa/estado', [$mapa, 'estado'], $soloAdmin);

@@ -26,6 +26,8 @@
 		colorDe,
 		direccionesDe,
 		puntosDe,
+		puntosDeFichas,
+		type FichaMapa,
 		type PuntoHogar,
 		type Ubicacion
 	} from '$lib/mapa/datos';
@@ -37,7 +39,8 @@
 
 	let datos = $state<Dataset | null>(null);
 	let puntos = $state<PuntoHogar[]>([]);
-	let sinUbicar = $state<Hogar[]>([]);
+	let sinUbicar = $state<(Hogar | FichaMapa)[]>([]);
+	let delSistema = $state(0);
 
 	let verCalor = $state(true);
 	let verPredios = $state(true);
@@ -73,12 +76,20 @@
 
 	async function arrancar() {
 		try {
-			paso = 'Leyendo el censo…';
-			const dataset = await fetchLiveDataset();
+			paso = 'Leyendo el censo y las fichas…';
+
+			// Las dos fuentes en paralelo: el censo en papel digitalizado, que vive
+			// en las hojas, y las fichas levantadas con el formulario, que viven en
+			// la base del sistema. Si una falla, la otra debe poder dibujarse igual.
+			const [dataset, respuestaFichas] = await Promise.all([
+				fetchLiveDataset(),
+				mapaApi.fichas().catch(() => ({ fichas: [] as FichaMapa[] }))
+			]);
 			datos = dataset;
+			const fichas = respuestaFichas.fichas;
 
 			paso = 'Ubicando las direcciones…';
-			const direcciones = direccionesDe(dataset.hogares);
+			const direcciones = direccionesDe(dataset.hogares, fichas);
 
 			let ubicaciones: Record<string, Ubicacion> = {};
 			if (direcciones.length > 0) {
@@ -86,9 +97,12 @@
 				ubicaciones = respuesta.ubicaciones;
 			}
 
-			const cruce = puntosDe(dataset.hogares, ubicaciones);
-			puntos = cruce.puntos;
-			sinUbicar = cruce.sinUbicar;
+			const delCenso = puntosDe(dataset.hogares, ubicaciones);
+			const deFichas = puntosDeFichas(fichas, ubicaciones);
+
+			puntos = [...delCenso.puntos, ...deFichas.puntos];
+			sinUbicar = [...delCenso.sinUbicar, ...deFichas.sinUbicar];
+			delSistema = deFichas.puntos.length;
 
 			paso = 'Dibujando el mapa…';
 			await dibujar();
@@ -208,10 +222,15 @@
 			BARRIO: 'ubicación aproximada del sector'
 		}[p.precision as 'EXACTA' | 'CALLE' | 'BARRIO'];
 
+		const fuente =
+			p.origen === 'sistema'
+				? `Ficha ${escapar(p.hogar)} · registrada en el sistema`
+				: 'Censo en papel digitalizado';
+
 		return `<strong>${escapar(p.direccion)}</strong><br>
 			${escapar(p.barrio)} · ${escapar(p.zona)}<br>
 			${p.personas} ${p.personas === 1 ? 'persona' : 'personas'} · ${escapar(p.estadoBien)}<br>
-			<span style="opacity:.7">${comoSeUbico}</span>`;
+			<span style="opacity:.7">${fuente} · ${comoSeUbico}</span>`;
 	}
 
 	function encuadrar() {
@@ -315,6 +334,10 @@
 			{visibles.length === 1 ? 'predio ubicado' : 'predios ubicados'} ·
 			<strong>{personasVisibles}</strong>
 			{personasVisibles === 1 ? 'persona' : 'personas'}
+			{#if delSistema > 0}
+				· <strong>{delSistema}</strong>
+				{delSistema === 1 ? 'del formulario' : 'del formulario'}
+			{/if}
 			{#if sinUbicar.length > 0}
 				· <strong>{sinUbicar.length}</strong> sin ubicar
 			{/if}

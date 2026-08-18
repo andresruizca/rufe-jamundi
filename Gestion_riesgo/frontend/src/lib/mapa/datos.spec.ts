@@ -7,10 +7,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	calorDe,
+	puntosDeFichas,
 	colorDe,
 	direccionesDe,
 	puntosDe,
 	ubicable,
+	type FichaMapa,
 	type Ubicacion
 } from './datos';
 import type { Hogar } from '$lib/rufe/types';
@@ -145,5 +147,70 @@ describe('intensidad de la mancha de calor', () => {
 
 	it('sin puntos no revienta', () => {
 		expect(calorDe([])).toEqual([]);
+	});
+});
+
+describe('fichas del sistema en el mapa', () => {
+	function ficha(cambios: Partial<FichaMapa> = {}): FichaMapa {
+		return {
+			radicado: 'RUFE-2026-ABCD1234',
+			zona: 'Urbana',
+			barrio: 'Terranova',
+			direccion: 'Carrera 11 # 8-26',
+			personas: 4,
+			estado: 'Recibido',
+			estado_bien: 'Averiado',
+			tipo_bien: 'Vivienda',
+			latitud: null,
+			longitud: null,
+			precision_m: null,
+			...cambios
+		};
+	}
+
+	// El GPS del censador es el dato más preciso que puede haber: mejor que
+	// cualquier dirección escrita, y además no gasta cupo del geocodificador.
+	it('la ficha con GPS se dibuja sin geocodificar', () => {
+		const { puntos, sinUbicar } = puntosDeFichas(
+			[ficha({ latitud: 3.27, longitud: -76.55, precision_m: 8 })],
+			{}
+		);
+
+		expect(sinUbicar).toHaveLength(0);
+		expect(puntos[0]).toMatchObject({ lat: 3.27, lon: -76.55, precision: 'EXACTA', origen: 'sistema' });
+	});
+
+	it('sin GPS se ubica por su dirección', () => {
+		const { puntos } = puntosDeFichas([ficha()], {
+			'Carrera 11 # 8-26': { lat: 3.28, lon: -76.54, precision: 'CALLE', fuente: 'NOMINATIM' }
+		});
+
+		expect(puntos[0]).toMatchObject({ lat: 3.28, precision: 'CALLE', origen: 'sistema' });
+	});
+
+	it('sin GPS y sin dirección ubicable, cuenta como no ubicada', () => {
+		const { puntos, sinUbicar } = puntosDeFichas([ficha()], {});
+
+		expect(puntos).toHaveLength(0);
+		expect(sinUbicar).toHaveLength(1);
+	});
+
+	it('el radicado identifica el punto, para poder volver a la ficha', () => {
+		const { puntos } = puntosDeFichas([ficha({ latitud: 3.27, longitud: -76.55 })], {});
+		expect(puntos[0].hogar).toBe('RUFE-2026-ABCD1234');
+	});
+
+	// Una misma casa puede estar en el censo en papel y en una ficha nueva.
+	// Preguntar dos veces por ella gastaría el doble de cupo para nada.
+	it('las direcciones de las dos fuentes se piden una sola vez', () => {
+		const hogares = [hogar({ direccion: 'Carrera 11 # 8-26' })];
+		const fichas = [ficha({ direccion: 'Carrera 11 # 8-26' }), ficha({ direccion: 'Calle 3 # 2-10' })];
+
+		expect(direccionesDe(hogares, fichas).sort()).toEqual(['Calle 3 # 2-10', 'Carrera 11 # 8-26']);
+	});
+
+	it('una ficha con GPS no añade su dirección a la cola de geocodificación', () => {
+		const fichas = [ficha({ direccion: 'Ya ubicada', latitud: 3.27, longitud: -76.55 })];
+		expect(direccionesDe([], fichas)).toEqual([]);
 	});
 });
