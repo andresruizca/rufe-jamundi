@@ -398,6 +398,23 @@
 		height: clamp(22rem, 62vh, 40rem);
 		border: 1px solid var(--color-border);
 		border-radius: 10px;
+
+		/*
+		 * Encierra a Leaflet en su propio contexto de apilamiento.
+		 *
+		 * Leaflet numera sus capas internas de 400 a 800 —tejas, marcadores,
+		 * globos, controles— contando con ser lo único de la página. En este
+		 * sistema el menú lateral está en 60 y su velo en 55, así que el mapa se
+		 * dibujaba por encima de ambos: al abrir el menú, las tejas lo tapaban.
+		 *
+		 * Aislarlo hace que toda esa numeración se resuelva puertas adentro y que
+		 * el mapa entero cuente como un solo elemento frente al resto de la
+		 * página. Es preferible a rebajarle los números a Leaflet uno por uno,
+		 * que habría que rehacer con cada actualización suya.
+		 */
+		isolation: isolate;
+		position: relative;
+		z-index: 0;
 		/* Un poco de profundidad separa el mapa —que ahora tiene color propio— de
 		   la tarjeta que lo contiene. */
 		box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%);
