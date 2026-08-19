@@ -41,6 +41,8 @@
 	let puntos = $state<PuntoHogar[]>([]);
 	let sinUbicar = $state<(Hogar | FichaMapa)[]>([]);
 	let delSistema = $state(0);
+	/** Fuentes que no se pudieron leer, para decirlo en vez de callarlo. */
+	let problemas = $state<string[]>([]);
 
 	let verCalor = $state(true);
 	let verPredios = $state(true);
@@ -63,6 +65,8 @@
 	);
 
 	const personasVisibles = $derived(visibles.reduce((n, p) => n + p.personas, 0));
+	const conGps = $derived(visibles.filter((p) => p.ubicadoPor === 'gps').length);
+	const porSector = $derived(visibles.filter((p) => p.ubicadoPor === 'sector').length);
 	const estados = $derived([...new Set(puntos.map((p) => p.estadoBien))].sort());
 
 	onMount(() => {
@@ -78,18 +82,43 @@
 		try {
 			paso = 'Leyendo el censo y las fichas…';
 
-			// Las dos fuentes en paralelo: el censo en papel digitalizado, que vive
-			// en las hojas, y las fichas levantadas con el formulario, que viven en
-			// la base del sistema. Si una falla, la otra debe poder dibujarse igual.
-			const [dataset, respuestaFichas] = await Promise.all([
+			// Las dos fuentes van por separado y NINGUNA puede tumbar a la otra.
+			// Antes iban en un Promise.all: si la lectura de las hojas de Google
+			// fallaba —van por internet, a veces tardan o responden mal— se caía el
+			// mapa entero, incluidas las fichas del sistema que sí estaban bien.
+			//
+			// Y si algo falla se dice cuál: callarlo dejaba un mapa vacío sin
+			// ninguna pista de por qué.
+			const [resCenso, resFichas] = await Promise.allSettled([
 				fetchLiveDataset(),
-				mapaApi.fichas().catch(() => ({ fichas: [] as FichaMapa[] }))
+				mapaApi.fichas()
 			]);
-			datos = dataset;
-			const fichas = respuestaFichas.fichas;
+
+			const avisos: string[] = [];
+
+			let hogares: Hogar[] = [];
+			if (resCenso.status === 'fulfilled') {
+				datos = resCenso.value;
+				hogares = resCenso.value.hogares;
+			} else {
+				avisos.push('No se pudo leer el censo de las hojas de cálculo.');
+			}
+
+			let fichas: FichaMapa[] = [];
+			if (resFichas.status === 'fulfilled') {
+				fichas = resFichas.value.fichas;
+			} else {
+				avisos.push('No se pudieron leer las fichas registradas en el sistema.');
+			}
+
+			problemas = avisos;
+
+			if (hogares.length === 0 && fichas.length === 0 && avisos.length > 0) {
+				throw new Error(avisos.join(' '));
+			}
 
 			paso = 'Ubicando las direcciones…';
-			const direcciones = direccionesDe(dataset.hogares, fichas);
+			const direcciones = direccionesDe(hogares, fichas);
 
 			let ubicaciones: Record<string, Ubicacion> = {};
 			if (direcciones.length > 0) {
@@ -97,7 +126,7 @@
 				ubicaciones = respuesta.ubicaciones;
 			}
 
-			const delCenso = puntosDe(dataset.hogares, ubicaciones);
+			const delCenso = puntosDe(hogares, ubicaciones);
 			const deFichas = puntosDeFichas(fichas, ubicaciones);
 
 			puntos = [...delCenso.puntos, ...deFichas.puntos];
@@ -214,13 +243,15 @@
 		const escapar = (t: string) =>
 			t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-		// La precisión se dice siempre: no es lo mismo un punto sobre la casa que
-		// uno sobre la calle o sobre el barrio, y quien mire el mapa debe saberlo.
+		// Cómo se ubicó se dice siempre. No es lo mismo el GPS que tomó el censador
+		// delante de la casa que el centro de una vereda: ambos sirven para ver
+		// dónde se concentra la afectación, pero solo el primero sirve para ir a
+		// buscar el predio, y quien mire el mapa tiene que poder distinguirlo.
 		const comoSeUbico = {
-			EXACTA: 'ubicación exacta',
-			CALLE: 'ubicado sobre la vía',
-			BARRIO: 'ubicación aproximada del sector'
-		}[p.precision as 'EXACTA' | 'CALLE' | 'BARRIO'];
+			gps: 'ubicación tomada en campo con GPS',
+			direccion: 'ubicado por la dirección escrita',
+			sector: 'ubicación aproximada del sector, no del predio'
+		}[p.ubicadoPor];
 
 		const fuente =
 			p.origen === 'sistema'
@@ -265,6 +296,13 @@
 			{error}
 		</p>
 	{/if}
+
+	{#each problemas as aviso (aviso)}
+		<p class="aviso aviso--alerta" role="status">
+			<TriangleAlert size={15} aria-hidden="true" />
+			{aviso}
+		</p>
+	{/each}
 
 	{#if cargando}
 		<p class="cargando">
@@ -342,6 +380,20 @@
 				· <strong>{sinUbicar.length}</strong> sin ubicar
 			{/if}
 		</p>
+
+		{#if conGps > 0 || porSector > 0}
+			<!-- Decir con qué se ubicó cada grupo evita que el mapa se lea como si
+			     todos los puntos tuvieran la misma fiabilidad. -->
+			<p class="detalle-ubicacion">
+				{#if conGps > 0}
+					<strong>{conGps}</strong> con GPS tomado en campo.
+				{/if}
+				{#if porSector > 0}
+					<strong>{porSector}</strong> ubicados solo por su sector: el punto señala la vereda o el
+					barrio, no el predio.
+				{/if}
+			</p>
+		{/if}
 
 		{#if sinUbicar.length > 0}
 			<!-- Callarlo sería lo cómodo y lo peor: quien mire el mapa creería que
@@ -473,6 +525,12 @@
 		border: 2px solid #fff;
 		box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
 		flex: 0 0 auto;
+	}
+
+	.detalle-ubicacion {
+		margin: -0.3rem 0 0.6rem;
+		font-size: 0.82rem;
+		color: var(--color-muted);
 	}
 
 	.cobertura {

@@ -166,6 +166,12 @@ final class MapaController
                 'zona' => $f['zona'] === 'RURAL' ? 'Rural' : 'Urbana',
                 'barrio' => $f['vereda_sector_barrio'] ?: ($f['corregimiento'] ?: 'Sin especificar'),
                 'direccion' => $f['direccion'],
+                // Se devuelven por separado para poder intentar ubicar la ficha
+                // por su sector cuando la dirección no baste: «Caseta comunal 200
+                // metros» no la encuentra ningún geocodificador, pero «El cabullo,
+                // Jamundí» sí sitúa la vereda.
+                'corregimiento' => $f['corregimiento'] ?: '',
+                'vereda' => $f['vereda_sector_barrio'] ?: '',
                 'personas' => (int) $f['personas'],
                 'estado' => Catalogos::ESTADOS_REPORTE[$f['estado']] ?? $f['estado'],
                 'estado_bien' => Catalogos::ESTADOS_BIEN[$f['estado_bien']] ?? 'No informa',

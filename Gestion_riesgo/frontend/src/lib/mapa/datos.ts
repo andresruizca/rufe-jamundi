@@ -20,6 +20,8 @@ export type FichaMapa = {
 	zona: string;
 	barrio: string;
 	direccion: string;
+	corregimiento: string;
+	vereda: string;
 	personas: number;
 	estado: string;
 	estado_bien: string;
@@ -34,6 +36,8 @@ export type PuntoHogar = {
 	hogar: string;
 	/** De dónde salió: del censo en papel digitalizado o del formulario. */
 	origen: 'censo' | 'sistema';
+	/** Con qué se pudo ubicar: GPS, dirección o sector. */
+	ubicadoPor: Origen;
 	barrio: string;
 	zona: string;
 	direccion: string;
@@ -75,6 +79,27 @@ export function ubicable(u: Ubicacion | undefined): u is Ubicacion {
 }
 
 /**
+ * Cómo se ubicó un punto, para poder decirlo en pantalla.
+ *
+ * No es lo mismo el GPS que tomó el censador delante de la casa que el centro de
+ * una vereda. Ambos sirven para ver dónde se concentra la afectación, pero solo
+ * el primero sirve para ir a buscar el predio.
+ */
+export type Origen = 'gps' | 'direccion' | 'sector';
+
+/**
+ * El sitio con el que intentar ubicar algo cuando su dirección no basta.
+ *
+ * Es el tercer intento de la cascada: una dirección como «Caseta comunal 200
+ * metros» no la encuentra ningún geocodificador, pero la vereda o el
+ * corregimiento sí se sitúan. El punto queda aproximado —y así se dice—, pero un
+ * hogar en el sector correcto informa mucho más que un hogar invisible.
+ */
+export function sectorDe(f: { corregimiento?: string; vereda?: string; barrio?: string }): string {
+	return (f.corregimiento || f.vereda || f.barrio || '').trim();
+}
+
+/**
  * Las direcciones distintas que hay que preguntarle a la API.
  *
  * Se juntan las de las dos fuentes en una sola consulta: una misma casa puede
@@ -94,11 +119,60 @@ export function direccionesDe(hogares: Hogar[], fichas: FichaMapa[] = []): strin
 
 	for (const f of fichas) {
 		if (f.latitud !== null && f.longitud !== null) continue;
+
 		const d = f.direccion.trim();
 		if (d !== '') vistas.add(d);
+
+		// El sector también se pide: es el tercer intento cuando la dirección no
+		// se puede resolver, y pedirlo ahora evita otra vuelta al servidor.
+		const sector = sectorDe(f);
+		if (sector !== '') vistas.add(sector);
+	}
+
+	// Los sectores del censo en papel, por lo mismo.
+	for (const h of hogares) {
+		const sector = sectorDe({ barrio: h.barrio });
+		if (sector !== '') vistas.add(sector);
 	}
 
 	return [...vistas];
+}
+
+/**
+ * Los tres intentos para ubicar algo, en orden de calidad.
+ *
+ *   1. Las coordenadas que tomó el censador con el botón de ubicación. Es el
+ *      dato bueno: está delante de la casa y trae su margen de error.
+ *   2. La dirección escrita, geocodificada contra el municipio.
+ *   3. El sector —vereda o corregimiento—, cuando la dirección no se puede
+ *      resolver. El punto queda aproximado, y la pantalla lo dice.
+ *
+ * El orden importa: nunca se degrada un punto bueno por uno peor, y nunca se
+ * descarta un hogar por no tener la dirección bien escrita.
+ */
+export function ubicarEnCascada(
+	gps: { lat: number | null; lon: number | null },
+	direccion: string,
+	sector: string,
+	ubicaciones: Record<string, Ubicacion>
+): { lat: number; lon: number; precision: Ubicacion['precision']; origen: Origen } | null {
+	if (gps.lat !== null && gps.lon !== null) {
+		return { lat: gps.lat, lon: gps.lon, precision: 'EXACTA', origen: 'gps' };
+	}
+
+	const porDireccion = ubicaciones[direccion.trim()];
+	if (ubicable(porDireccion)) {
+		return { ...porDireccion, origen: 'direccion' };
+	}
+
+	const porSector = ubicaciones[sector.trim()];
+	if (ubicable(porSector)) {
+		// Se rebaja a BARRIO aunque el servicio dijera algo más fino: lo que se
+		// ubicó fue el sector, no este predio, y decir otra cosa sería mentir.
+		return { lat: porSector.lat, lon: porSector.lon, precision: 'BARRIO', origen: 'sector' };
+	}
+
+	return null;
 }
 
 /** Cruza los hogares con las ubicaciones conocidas. */
@@ -110,9 +184,14 @@ export function puntosDe(
 	const sinUbicar: Hogar[] = [];
 
 	for (const h of hogares) {
-		const u = ubicaciones[h.direccion.trim()];
+		const u = ubicarEnCascada(
+			{ lat: null, lon: null },
+			h.direccion,
+			sectorDe({ barrio: h.barrio }),
+			ubicaciones
+		);
 
-		if (!ubicable(u)) {
+		if (u === null) {
 			sinUbicar.push(h);
 			continue;
 		}
@@ -120,6 +199,7 @@ export function puntosDe(
 		puntos.push({
 			hogar: h.hogar,
 			origen: 'censo',
+			ubicadoPor: u.origen,
 			barrio: h.barrio,
 			zona: h.zona,
 			direccion: h.direccion,
@@ -160,18 +240,25 @@ export function puntosDeFichas(
 			estadoBien: f.estado_bien || 'No informa'
 		};
 
-		if (f.latitud !== null && f.longitud !== null) {
-			puntos.push({ ...base, lat: f.latitud, lon: f.longitud, precision: 'EXACTA' });
-			continue;
-		}
+		const u = ubicarEnCascada(
+			{ lat: f.latitud, lon: f.longitud },
+			f.direccion,
+			sectorDe(f),
+			ubicaciones
+		);
 
-		const u = ubicaciones[f.direccion.trim()];
-		if (!ubicable(u)) {
+		if (u === null) {
 			sinUbicar.push(f);
 			continue;
 		}
 
-		puntos.push({ ...base, lat: u.lat, lon: u.lon, precision: u.precision });
+		puntos.push({
+			...base,
+			ubicadoPor: u.origen,
+			lat: u.lat,
+			lon: u.lon,
+			precision: u.precision
+		});
 	}
 
 	return { puntos, sinUbicar };

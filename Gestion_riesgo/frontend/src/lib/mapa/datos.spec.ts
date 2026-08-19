@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	calorDe,
 	puntosDeFichas,
+	sectorDe,
+	ubicarEnCascada,
 	colorDe,
 	direccionesDe,
 	puntosDe,
@@ -108,11 +110,20 @@ describe('cruce de hogares con ubicaciones', () => {
 describe('direcciones a consultar', () => {
 	it('no repite la misma dirección', () => {
 		const d = direccionesDe([hogar({ hogar: '1' }), hogar({ hogar: '2' })]);
-		expect(d).toEqual(['Carrera 11 # 8-26']);
+		// La dirección una sola vez, y el barrio como respaldo por si no resuelve.
+		expect(d.filter((x) => x === 'Carrera 11 # 8-26')).toHaveLength(1);
 	});
 
-	it('descarta las vacías', () => {
-		expect(direccionesDe([hogar({ direccion: '' }), hogar({ direccion: '   ' })])).toEqual([]);
+	it('descarta las direcciones vacías', () => {
+		const d = direccionesDe([hogar({ direccion: '' }), hogar({ direccion: '   ' })]);
+		expect(d).not.toContain('');
+		expect(d).not.toContain('   ');
+	});
+
+	// Sin dirección utilizable queda el barrio: es el tercer intento de la
+	// cascada y evita perder el hogar del todo.
+	it('el barrio se pide como respaldo', () => {
+		expect(direccionesDe([hogar({ direccion: '', barrio: 'Terranova' })])).toEqual(['Terranova']);
 	});
 });
 
@@ -157,6 +168,8 @@ describe('fichas del sistema en el mapa', () => {
 			zona: 'Urbana',
 			barrio: 'Terranova',
 			direccion: 'Carrera 11 # 8-26',
+			corregimiento: '',
+			vereda: 'Terranova',
 			personas: 4,
 			estado: 'Recibido',
 			estado_bien: 'Averiado',
@@ -206,11 +219,77 @@ describe('fichas del sistema en el mapa', () => {
 		const hogares = [hogar({ direccion: 'Carrera 11 # 8-26' })];
 		const fichas = [ficha({ direccion: 'Carrera 11 # 8-26' }), ficha({ direccion: 'Calle 3 # 2-10' })];
 
-		expect(direccionesDe(hogares, fichas).sort()).toEqual(['Calle 3 # 2-10', 'Carrera 11 # 8-26']);
+		const d = direccionesDe(hogares, fichas);
+		// Cada texto una sola vez, aunque la casa esté en las dos fuentes.
+		expect(new Set(d).size).toBe(d.length);
+		expect(d).toContain('Carrera 11 # 8-26');
+		expect(d).toContain('Calle 3 # 2-10');
 	});
 
 	it('una ficha con GPS no añade su dirección a la cola de geocodificación', () => {
 		const fichas = [ficha({ direccion: 'Ya ubicada', latitud: 3.27, longitud: -76.55 })];
 		expect(direccionesDe([], fichas)).toEqual([]);
+	});
+});
+
+describe('los tres intentos para ubicar una ficha', () => {
+	const sinNada = {};
+
+	// 1. Lo mejor que hay: el censador estaba delante de la casa.
+	it('primero, las coordenadas tomadas en campo', () => {
+		const u = ubicarEnCascada({ lat: 3.2608449, lon: -76.5424246 }, 'Carrera 11 # 8 26', 'Juan de ampudia', {
+			'Carrera 11 # 8 26': { lat: 9, lon: 9, precision: 'EXACTA', fuente: 'GOOGLE' }
+		});
+
+		expect(u).toEqual({ lat: 3.2608449, lon: -76.5424246, precision: 'EXACTA', origen: 'gps' });
+	});
+
+	// 2. Sin GPS, la dirección escrita.
+	it('después, la dirección', () => {
+		const u = ubicarEnCascada({ lat: null, lon: null }, 'Carrera 11 # 8 26', 'Juan de ampudia', {
+			'Carrera 11 # 8 26': { lat: 3.26, lon: -76.54, precision: 'CALLE', fuente: 'NOMINATIM' }
+		});
+
+		expect(u).toMatchObject({ lat: 3.26, origen: 'direccion', precision: 'CALLE' });
+	});
+
+	// 3. El caso de la ficha 9: «Caseta comunal 200 metros» no la ubica nadie,
+	//    pero su corregimiento sí. Mejor un hogar en el sector correcto que un
+	//    hogar invisible.
+	it('por último, el sector', () => {
+		const u = ubicarEnCascada({ lat: null, lon: null }, 'Caseta comunal 200 metros', 'La Liberia', {
+			'La Liberia': { lat: 3.19, lon: -76.62, precision: 'CALLE', fuente: 'NOMINATIM' }
+		});
+
+		expect(u).toMatchObject({ lat: 3.19, origen: 'sector' });
+	});
+
+	// Se ubicó el sector, no el predio. Decir «CALLE» daría a entender que el
+	// punto está sobre la casa, y no lo está.
+	it('lo ubicado por sector se rebaja a aproximado aunque el servicio afine más', () => {
+		const u = ubicarEnCascada({ lat: null, lon: null }, 'no ubicable', 'La Liberia', {
+			'La Liberia': { lat: 3.19, lon: -76.62, precision: 'EXACTA', fuente: 'GOOGLE' }
+		});
+
+		expect(u?.precision).toBe('BARRIO');
+	});
+
+	it('sin nada que usar, devuelve null', () => {
+		expect(ubicarEnCascada({ lat: null, lon: null }, 'x', 'y', sinNada)).toBeNull();
+	});
+
+	it('un sector que solo resolvió al municipio no se usa', () => {
+		const u = ubicarEnCascada({ lat: null, lon: null }, 'no ubicable', 'La Liberia', {
+			'La Liberia': { lat: 3.2611, lon: -76.5423, precision: 'MUNICIPIO', fuente: 'NOMINATIM' }
+		});
+
+		expect(u).toBeNull();
+	});
+
+	it('el sector sale del corregimiento, y si no, de la vereda', () => {
+		expect(sectorDe({ corregimiento: 'La Liberia', vereda: 'El cabullo' })).toBe('La Liberia');
+		expect(sectorDe({ corregimiento: '', vereda: 'El cabullo' })).toBe('El cabullo');
+		expect(sectorDe({ barrio: 'Terranova' })).toBe('Terranova');
+		expect(sectorDe({})).toBe('');
 	});
 });
