@@ -34,6 +34,9 @@ use App\Rufe\Catalogos;
 use App\Rufe\Geocodificador;
 use App\Rufe\Radicado;
 use App\Rufe\Validador;
+use App\Inspeccion\BancoMateriales;
+use App\Inspeccion\Catalogos as CatalogosInspeccion;
+use App\Inspeccion\NivelDano;
 
 date_default_timezone_set('America/Bogota');
 
@@ -1121,6 +1124,293 @@ prueba('sin detalle de dirección se admite si cae en la caja', function (): voi
 prueba('fuera de la caja se descarta aunque diga Jamundí', function (): void {
     $r = ['lat' => '4.7110', 'lon' => '-74.0721', 'address' => ['county' => 'Jamundí']];
     afirmar(! Geocodificador::esDeJamundi($r), 'Bogotá no es Jamundí');
+});
+
+// ── Inspección de viviendas: Anexo 1 y niveles permitidos ────────────────────
+
+grupo('Inspección › niveles de daño (Anexo 1)');
+
+prueba('los niveles de cada elemento salen del anexo, no de una lista aparte', function (): void {
+    // Si algún día se escribieran en dos sitios, un elemento acabaría
+    // ofreciendo un nivel que el anexo no sabe describir.
+    foreach (NivelDano::SISTEMAS as $sistema) {
+        foreach (NivelDano::elementos($sistema) as $elemento) {
+            foreach (NivelDano::nivelesDe($sistema, $elemento) as $nivel) {
+                afirmar(
+                    NivelDano::descriptores($sistema, $elemento, $nivel) !== [],
+                    "{$sistema}/{$elemento}/{$nivel} se ofrece sin criterios que lo describan"
+                );
+            }
+        }
+    }
+});
+
+prueba('reproduce exactamente las casillas N/A del numeral 5.4', function (): void {
+    // Las cuatro casillas marcadas N/A en el papel. Que coincidan no es
+    // casualidad: son las que el Anexo 1 deja sin definir.
+    afirmar(! NivelDano::permite('MAMPOSTERIA', 'PLACA_PISO', 'LEVE'), 'placa de piso no tiene leve');
+    afirmar(! NivelDano::permite('MAMPOSTERIA', 'ELECTRICAS', 'LEVE'), 'eléctricas de mampostería no tienen leve');
+    afirmar(! NivelDano::permite('MADERA', 'MUROS_MADERA', 'LEVE'), 'muros en madera no tienen leve');
+    afirmar(! NivelDano::permite('MADERA', 'ELECTRICAS', 'LEVE'), 'eléctricas de madera no tienen leve');
+
+    // Y que no se pase de listo quitando de más.
+    afirmarIgual(4, count(NivelDano::nivelesDe('MAMPOSTERIA', 'VIGAS_COLUMNAS')));
+    afirmarIgual(3, count(NivelDano::nivelesDe('MAMPOSTERIA', 'PLACA_PISO')));
+});
+
+prueba('los elementos son los del formato, en su orden', function (): void {
+    afirmarIgual(
+        ['VIGAS_COLUMNAS', 'MUROS_CARGA', 'MUROS_DIVISORIOS', 'PLACA_PISO', 'CUBIERTA', 'HIDROSANITARIAS', 'ELECTRICAS'],
+        NivelDano::elementos('MAMPOSTERIA')
+    );
+    afirmarIgual(
+        ['VIGAS_COLUMNAS', 'ENTREPISOS', 'MUROS_MADERA', 'CUBIERTA', 'HIDROSANITARIAS', 'ELECTRICAS'],
+        NivelDano::elementos('MADERA')
+    );
+});
+
+prueba('los niveles se ordenan de leve a colapso, venga como venga el anexo', function (): void {
+    afirmarIgual(['MODERADO', 'SEVERO', 'COLAPSO_TOTAL'], NivelDano::nivelesDe('MADERA', 'ELECTRICAS'));
+});
+
+prueba('peor() ordena por gravedad y trata null como sin daño', function (): void {
+    afirmarIgual('SEVERO', NivelDano::peor('LEVE', 'SEVERO'));
+    afirmarIgual('SEVERO', NivelDano::peor('SEVERO', 'LEVE'));
+    afirmarIgual('COLAPSO_TOTAL', NivelDano::peor('SEVERO', 'COLAPSO_TOTAL'));
+    afirmarIgual('LEVE', NivelDano::peor(null, 'LEVE'));
+    afirmarIgual(null, NivelDano::peor(null, null));
+});
+
+prueba('el texto duplicado del original quedó corregido', function (): void {
+    $d = NivelDano::descriptores('MADERA', 'HIDROSANITARIAS', 'MODERADO');
+    afirmarIgual(['Fisuras o roturas en la tubería', 'Desacople de los accesorios de la tubería'], $d);
+});
+
+// ── Inspección de viviendas: el combo del numeral 6 ──────────────────────────
+
+grupo('Inspección › combo de materiales (numeral 6)');
+
+prueba('el combo lo fija el sistema estructural, no el peor daño de la casa', function (): void {
+    // El caso que la regla del formato existe para resolver: cubierta destruida
+    // sobre estructura apenas fisurada. Entregar un combo severo aquí sería
+    // entregar materiales que no se necesitan.
+    $r = BancoMateriales::determinar('MAMPOSTERIA', [
+        'VIGAS_COLUMNAS' => 'LEVE',
+        'MUROS_CARGA' => 'LEVE',
+        'CUBIERTA' => 'COLAPSO_TOTAL',
+        'HIDROSANITARIAS' => 'SEVERO',
+    ]);
+
+    afirmarIgual('COMBO_1', $r['combo']);
+    afirmarIgual('LEVE', $r['nivel']);
+});
+
+prueba('entre los estructurales manda el peor', function (): void {
+    $r = BancoMateriales::determinar('MAMPOSTERIA', ['VIGAS_COLUMNAS' => 'LEVE', 'MUROS_CARGA' => 'SEVERO']);
+
+    afirmarIgual('COMBO_3', $r['combo']);
+    afirmar(str_contains($r['motivo'], 'muros de carga'), "el motivo debe decir quién decidió: {$r['motivo']}");
+});
+
+prueba('cada sistema tiene sus propios combos', function (): void {
+    afirmarIgual('COMBO_2', BancoMateriales::determinar('MAMPOSTERIA', ['VIGAS_COLUMNAS' => 'MODERADO'])['combo']);
+    afirmarIgual('COMBO_5', BancoMateriales::determinar('MADERA', ['VIGAS_COLUMNAS' => 'MODERADO'])['combo']);
+});
+
+prueba('el colapso total manda sobre la tabla por elementos', function (): void {
+    // «Si la vivienda sufrió colapso estructural total, marque solo esta casilla».
+    $r = BancoMateriales::determinar('MAMPOSTERIA', ['VIGAS_COLUMNAS' => 'LEVE'], true);
+
+    afirmarIgual('COLAPSO_MAMPOSTERIA', $r['combo']);
+    afirmarIgual('COLAPSO_TOTAL', $r['nivel']);
+});
+
+prueba('sin daño estructural no corresponde combo', function (): void {
+    // Y se dice por qué, en vez de devolver un vacío que parezca un error.
+    $r = BancoMateriales::determinar('MADERA', ['CUBIERTA' => 'SEVERO']);
+
+    afirmarIgual(null, $r['combo']);
+    afirmar(str_contains($r['motivo'], 'no resultó afectado'), $r['motivo']);
+});
+
+prueba('en madera no se busca un muro de carga que no existe', function (): void {
+    $r = BancoMateriales::determinar('MADERA', ['MUROS_MADERA' => 'COLAPSO_TOTAL', 'VIGAS_COLUMNAS' => 'LEVE']);
+
+    afirmarIgual('COMBO_4', $r['combo']);
+});
+
+grupo('Inspección › lista de materiales (Anexo 2)');
+
+prueba('el nivel filtra los ítems que lleva cada kit', function (): void {
+    // Cotejado contra el impreso: en mampostería leve, el kit de estructura
+    // solo lleva cemento; las varillas aparecen desde moderado.
+    $leve = BancoMateriales::materiales('MAMPOSTERIA', 'LEVE');
+    $estructura = $leve['kits'][0];
+
+    afirmarIgual('Kit Estructura tipo concreto (Vigas, columnas, placas de piso)', $estructura['kit']);
+    afirmarIgual(1, count($estructura['items']));
+    afirmarIgual('Cemento Bulto 50 Kg', $estructura['items'][0]['descripcion']);
+    afirmarIgual('5', $estructura['items'][0]['cantidad']);
+});
+
+prueba('las cantidades del anexo se conservan al pie de la letra', function (): void {
+    $severo = BancoMateriales::materiales('MAMPOSTERIA', 'SEVERO');
+
+    // Se busca dentro de su kit, no en una lista aplanada: ver la prueba
+    // siguiente, que explica por qué aplanar pierde información.
+    $cantidad = static function (array $r, string $kit, string $item): ?string {
+        foreach ($r['kits'] as $k) {
+            if ($k['kit'] !== $kit) {
+                continue;
+            }
+            foreach ($k['items'] as $i) {
+                if ($i['descripcion'] === $item) {
+                    return $i['cantidad'];
+                }
+            }
+        }
+
+        return null;
+    };
+
+    afirmarIgual('2050', $cantidad($severo, 'Kit Mampostería adobe macizo', 'Ladrillo tolete común'));
+    afirmarIgual('67', $cantidad($severo, 'Kit Estructura tipo concreto (Vigas, columnas, placas de piso)', 'Varilla de 1/4" L=6M'));
+    afirmarIgual('50', $cantidad($severo, 'Kit Eléctrico', 'Cable 10 AWG - THW'));
+});
+
+prueba('el mismo material puede ir en dos kits con cantidades distintas', function (): void {
+    // El cemento aparece en el kit de estructura (25 bultos en severo) y otra
+    // vez en el de mampostería (21). Son partidas distintas del mismo anexo.
+    //
+    // Esto fija que la lista NO se puede aplanar por descripción: hacerlo
+    // borraría una de las dos y el almacén entregaría 21 bultos donde hacen
+    // falta 46. Lo descubrió esta misma prueba al escribirse mal la primera vez.
+    $severo = BancoMateriales::materiales('MAMPOSTERIA', 'SEVERO');
+    $cementos = [];
+
+    foreach ($severo['kits'] as $k) {
+        foreach ($k['items'] as $i) {
+            if ($i['descripcion'] === 'Cemento Bulto 50 Kg') {
+                $cementos[$k['kit']] = $i['cantidad'];
+            }
+        }
+    }
+
+    afirmarIgual(2, count($cementos), 'el cemento va en dos kits');
+    afirmarIgual('25', $cementos['Kit Estructura tipo concreto (Vigas, columnas, placas de piso)']);
+    afirmarIgual('21', $cementos['Kit Mampostería adobe macizo']);
+});
+
+prueba('el kit de cubierta se suma solo si se eligió', function (): void {
+    $sin = BancoMateriales::contarItems('MAMPOSTERIA', 'SEVERO');
+    $con = BancoMateriales::contarItems('MAMPOSTERIA', 'SEVERO', 'ZINC');
+
+    afirmarIgual(4, $con - $sin, 'el kit de zinc trae cuatro renglones');
+});
+
+prueba('un cero escrito en el original es «no lleva»', function (): void {
+    // En madera, el tanque de agua está como 0 en leve y moderado, y como 1 en
+    // severo. Un cero impreso en una orden de entrega se lee como error.
+    $nombres = static function (string $nivel): array {
+        $out = [];
+        foreach (BancoMateriales::materiales('MADERA', $nivel)['kits'] as $k) {
+            foreach ($k['items'] as $i) {
+                $out[] = $i['descripcion'];
+            }
+        }
+
+        return $out;
+    };
+
+    afirmar(! in_array('Tanque de agua 500 L', $nombres('LEVE'), true), 'no debe aparecer en leve');
+    afirmar(in_array('Tanque de agua 500 L', $nombres('SEVERO'), true), 'sí en severo');
+});
+
+prueba('en madera no se ofrece fibrocemento', function (): void {
+    // No es un olvido del anexo: el fibrocemento pesa más de lo que sostiene
+    // una estructura de madera de este tipo.
+    afirmarIgual(['ZINC'], array_keys(BancoMateriales::KITS_CUBIERTA['MADERA']));
+    afirmarIgual(0, BancoMateriales::contarItems('MADERA', 'SEVERO', 'FIBROCEMENTO')
+        - BancoMateriales::contarItems('MADERA', 'SEVERO'));
+});
+
+prueba('el colapso total se declara sin lista, no se rellena con la del severo', function (): void {
+    // El Anexo 2 solo trae columnas leve, moderado y severo. Inventar
+    // cantidades para el colapso pondría cifras falsas en una orden de entrega
+    // de materiales públicos, indistinguibles de las buenas al imprimirlas.
+    $r = BancoMateriales::materiales('MAMPOSTERIA', 'COLAPSO_TOTAL');
+
+    afirmarIgual([], $r['kits']);
+    afirmar($r['sin_lista'], 'debe declararse sin lista');
+    afirmar(str_contains($r['nota'], 'Anexo 2 no define'), $r['nota']);
+});
+
+grupo('Inspección › catálogos');
+
+prueba('el formulario se puede dibujar entero con una sola respuesta', function (): void {
+    // Tiene que caber en la caché del teléfono: en la vereda no hay segunda
+    // petición que valga.
+    $c = CatalogosInspeccion::paraApi();
+
+    foreach (['eventos', 'requisitos', 'convenciones', 'evaluacion', 'kits_cubierta', 'parentescos'] as $clave) {
+        afirmar(($c[$clave] ?? []) !== [], "falta «{$clave}» en los catálogos");
+    }
+
+    afirmar(strlen(json_encode($c)) < 60000, 'los catálogos no deberían pasar de unas decenas de KB');
+});
+
+prueba('la evaluación viaja con los criterios de cada nivel', function (): void {
+    $mamposteria = CatalogosInspeccion::paraApi()['evaluacion']['MAMPOSTERIA'];
+    $placa = null;
+
+    foreach ($mamposteria as $e) {
+        if ($e['codigo'] === 'PLACA_PISO') {
+            $placa = $e;
+        }
+    }
+
+    afirmar($placa !== null, 'debe venir la placa de piso');
+    afirmarIgual(3, count($placa['niveles']), 'la placa no tiene nivel leve');
+    afirmarIgual('MODERADO', $placa['niveles'][0]['codigo']);
+    afirmar($placa['niveles'][0]['criterios'] !== [], 'cada nivel viaja con sus criterios');
+    afirmar(! $placa['estructural'], 'la placa de piso no decide el combo');
+});
+
+prueba('los estructurales vienen marcados, que son los que deciden el combo', function (): void {
+    $marcados = [];
+    foreach (CatalogosInspeccion::paraApi()['evaluacion']['MAMPOSTERIA'] as $e) {
+        if ($e['estructural']) {
+            $marcados[] = $e['codigo'];
+        }
+    }
+
+    afirmarIgual(['VIGAS_COLUMNAS', 'MUROS_CARGA'], $marcados);
+});
+
+prueba('no se inventa un código de formato que la entidad no ha asignado', function (): void {
+    afirmarIgual('', CatalogosInspeccion::FORMATO_CODIGO);
+});
+
+prueba('el municipio y los corregimientos son los mismos del RUFE', function (): void {
+    // Dos listas de corregimientos acabarían teniendo una un sector que la otra
+    // no, y el mismo predio saldría en dos sitios distintos.
+    afirmarIgual(Catalogos::MUNICIPIO, CatalogosInspeccion::MUNICIPIO);
+    afirmarIgual(Catalogos::CORREGIMIENTOS, CatalogosInspeccion::paraApi()['corregimientos']);
+});
+
+prueba('el material de la cubierta sugiere su kit', function (): void {
+    afirmarIgual('ZINC', CatalogosInspeccion::KIT_SUGERIDO['Z']);
+    afirmarIgual('FIBROCEMENTO', CatalogosInspeccion::KIT_SUGERIDO['Ac']);
+    afirmar(! isset(CatalogosInspeccion::KIT_SUGERIDO['M']), 'una cubierta de madera no sugiere kit');
+});
+
+prueba('las convenciones distinguen madera de mampostería en estructura', function (): void {
+    // «M» es madera en las cuatro categorías; la mampostería es «Ma». Meterlas
+    // en una sola tabla de letras las confundiría.
+    afirmar(CatalogosInspeccion::esMaterialValido('ESTRUCTURA', 'Ma'), 'Ma es mampostería');
+    afirmar(CatalogosInspeccion::esMaterialValido('ESTRUCTURA', 'M'), 'M es madera');
+    afirmar(! CatalogosInspeccion::esMaterialValido('PISOS', 'Ma'), 'Ma no es un piso');
+    afirmar(! CatalogosInspeccion::esMaterialValido('MUROS_DIVISORIOS', 'Z'), 'Z no es un muro');
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────
