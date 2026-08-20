@@ -237,6 +237,19 @@ final class BancoMateriales
         ],    ];
 
     /**
+     * Las tablas que el navegador necesita para replicar el cálculo.
+     *
+     * Se le mandan en vez de que las lleve escritas: así lo único que existe
+     * dos veces es el algoritmo —una veintena de líneas, cubiertas por la misma
+     * tabla de casos en las dos suites— y nunca los datos. Una tabla duplicada
+     * es lo que un día dice cosas distintas en cada lado.
+     */
+    public static function combosParaApi(): array
+    {
+        return self::COMBOS;
+    }
+
+    /**
      * El nivel que manda: el peor entre los elementos estructurales.
      *
      * @param  array<string, string|null>  $danos  nivel por elemento; null o ausente es «sin daño»

@@ -178,6 +178,13 @@ final class Catalogos
                 ['codigo' => NivelDano::MADERA, 'etiqueta' => 'Madera'],
             ],
             'kits_cubierta' => BancoMateriales::KITS_CUBIERTA,
+            // Las tres tablas con las que el navegador replica el cálculo del
+            // combo: el orden de gravedad, qué elementos son estructurales y
+            // qué combo corresponde a cada nivel. Van desde aquí para que lo
+            // único duplicado sea el algoritmo, nunca los datos.
+            'niveles' => NivelDano::NIVELES,
+            'estructurales' => NivelDano::ESTRUCTURALES,
+            'combos' => BancoMateriales::combosParaApi(),
             // Elementos, niveles permitidos y los criterios del Anexo 1 para
             // cada uno: la tabla del 5.4 tiene que poder llenarse sin señal, y
             // pedir los criterios elemento por elemento no funcionaría en una

@@ -36,6 +36,7 @@ use App\Rufe\Radicado;
 use App\Rufe\Validador;
 use App\Inspeccion\BancoMateriales;
 use App\Inspeccion\Catalogos as CatalogosInspeccion;
+use App\Inspeccion\Validador as ValidadorInspeccion;
 use App\Inspeccion\NivelDano;
 
 date_default_timezone_set('America/Bogota');
@@ -1345,6 +1346,37 @@ prueba('el colapso total se declara sin lista, no se rellena con la del severo',
     afirmar(str_contains($r['nota'], 'Anexo 2 no define'), $r['nota']);
 });
 
+grupo('Inspección › tabla de casos compartida');
+
+prueba('el servidor resuelve los 21 casos de combos.json', function (): void {
+    // La MISMA tabla la ejecuta `frontend/src/lib/inspeccion-form/combo.spec.ts`.
+    // Si alguien cambia una implementación y no la otra, falla una de las dos
+    // suites. Sin esto divergirían en silencio, y de este cálculo depende una
+    // entrega de materiales públicos.
+    $ruta = __DIR__.'/fixtures/combos.json';
+    afirmar(is_file($ruta), 'falta la tabla de casos compartida');
+
+    $casos = json_decode((string) file_get_contents($ruta), true)['casos'];
+    afirmar(count($casos) >= 20, 'la tabla no debería encogerse');
+
+    foreach ($casos as $caso) {
+        $r = BancoMateriales::determinar(
+            $caso['sistema'],
+            $caso['danos'],
+            $caso['colapso_total'] ?? false
+        );
+        $e = $caso['espera'];
+
+        afirmarIgual($e['combo'], $r['combo'], $caso['nombre']);
+        afirmarIgual($e['nivel'], $r['nivel'], $caso['nombre'].' (nivel)');
+
+        $elemento = BancoMateriales::nivelEstructural($caso['sistema'], $caso['danos'])['elemento'];
+        if (! ($caso['colapso_total'] ?? false)) {
+            afirmarIgual($e['elemento'], $elemento, $caso['nombre'].' (quién decidió)');
+        }
+    }
+});
+
 grupo('Inspección › catálogos');
 
 prueba('el formulario se puede dibujar entero con una sola respuesta', function (): void {
@@ -1411,6 +1443,221 @@ prueba('las convenciones distinguen madera de mampostería en estructura', funct
     afirmar(CatalogosInspeccion::esMaterialValido('ESTRUCTURA', 'M'), 'M es madera');
     afirmar(! CatalogosInspeccion::esMaterialValido('PISOS', 'Ma'), 'Ma no es un piso');
     afirmar(! CatalogosInspeccion::esMaterialValido('MUROS_DIVISORIOS', 'Z'), 'Z no es un muro');
+});
+
+// ── Inspección de viviendas: el validador ────────────────────────────────────
+
+grupo('Inspección › validación');
+
+/** Una inspección mínima y válida, con los tres requisitos en sí. */
+function inspeccionBase(array $cambios = []): array
+{
+    return array_replace([
+        'fecha_evaluacion' => date('Y-m-d'),
+        'profesional_nombre' => 'Ana Ruiz',
+        'profesional_tarjeta' => 'CO-12345',
+        'profesional_profesion' => 'Ingeniera civil',
+        'profesional_documento' => '31234567',
+        'profesional_telefono' => '3151234567',
+        'propietario_nombres' => 'Pedro Pérez Gómez',
+        'propietario_documento' => '16234567',
+        'direccion_cabecera' => 'Carrera 11 # 8-26',
+        'requisitos' => ['NO_BENEFICIARIO' => true, 'PROPIETARIO' => true, 'NO_ALTO_RIESGO' => true],
+        'evento' => 'SISMO',
+        'sistema_constructivo' => 'MAMPOSTERIA',
+        'infraestructura' => ['MUROS_DIVISORIOS' => 'L', 'PISOS' => 'C', 'ESTRUCTURA' => 'Co', 'CUBIERTA' => 'Z'],
+        'danos' => [
+            'VIGAS_COLUMNAS' => ['afectado' => true, 'nivel' => 'MODERADO'],
+            'MUROS_CARGA' => ['afectado' => false],
+            'MUROS_DIVISORIOS' => ['afectado' => false],
+            'PLACA_PISO' => ['afectado' => false],
+            'CUBIERTA' => ['afectado' => true, 'nivel' => 'LEVE'],
+            'HIDROSANITARIAS' => ['afectado' => false],
+            'ELECTRICAS' => ['afectado' => false],
+        ],
+        'requiere_evacuacion' => false,
+        'kit_cubierta' => 'ZINC',
+        'informante_nombre' => 'María Pérez',
+        'informante_documento' => '1144567890',
+        'informante_parentesco' => 3,
+        'aprobacion_profesional' => 'Ana Ruiz',
+    ], $cambios);
+}
+
+function erroresInspeccion(array $entrada): array
+{
+    return ValidadorInspeccion::inspeccion($entrada)['errores'];
+}
+
+function datosInspeccion(array $entrada): array
+{
+    return ValidadorInspeccion::inspeccion($entrada)['datos'];
+}
+
+prueba('una inspección completa pasa sin errores', function (): void {
+    afirmarIgual([], erroresInspeccion(inspeccionBase()));
+});
+
+prueba('el combo se calcula aquí y no se acepta del cliente', function (): void {
+    // Aunque el navegador mande un combo distinto, manda el del servidor: de
+    // este número depende cuántos materiales recibe una familia.
+    $d = datosInspeccion(inspeccionBase(['combo' => 'COMBO_3', 'combo_nivel' => 'SEVERO']));
+
+    afirmarIgual('COMBO_2', $d['combo']);
+    afirmarIgual('MODERADO', $d['combo_nivel']);
+    afirmar(str_contains($d['combo_motivo'], 'vigas y columnas'), $d['combo_motivo']);
+});
+
+prueba('la lista de materiales queda resuelta en el expediente', function (): void {
+    $d = datosInspeccion(inspeccionBase());
+
+    afirmar($d['materiales']['kits'] !== [], 'debe traer los materiales del combo 2');
+    afirmar(! $d['materiales']['sin_lista'], 'el combo 2 sí tiene lista');
+});
+
+prueba('el numeral 4 se deriva, no se acepta', function (): void {
+    $d = datosInspeccion(inspeccionBase([
+        'requisitos' => ['NO_BENEFICIARIO' => true, 'PROPIETARIO' => false, 'NO_ALTO_RIESGO' => true],
+        'cumple_requisitos' => true,
+        'evento' => '', 'sistema_constructivo' => '', 'danos' => [], 'kit_cubierta' => '',
+        'informante_nombre' => '',
+        'acta_modalidad' => 'REHABILITACION',
+        'acta_nombre' => 'Pedro Pérez Gómez',
+        'acta_documento' => '16234567',
+    ]));
+
+    afirmarIgual(false, $d['cumple_requisitos']);
+});
+
+prueba('un requisito sin contestar no se toma por un no', function (): void {
+    // «Sin contestar» y «no cumple» son cosas distintas: la segunda cierra la
+    // puerta al banco de materiales y la primera solo significa que falta.
+    $e = erroresInspeccion(inspeccionBase([
+        'requisitos' => ['NO_BENEFICIARIO' => true, 'NO_ALTO_RIESGO' => true],
+    ]));
+
+    afirmar(isset($e['requisitos.PROPIETARIO']), 'debe pedir que se conteste');
+});
+
+prueba('sin cumplir requisitos no se admite evaluación técnica', function (): void {
+    // «No se continúa con la inspección de la vivienda, pasar al numeral 8».
+    $e = erroresInspeccion(inspeccionBase([
+        'requisitos' => ['NO_BENEFICIARIO' => true, 'PROPIETARIO' => false, 'NO_ALTO_RIESGO' => true],
+        'acta_modalidad' => 'REHABILITACION',
+        'acta_nombre' => 'Pedro Pérez Gómez',
+        'acta_documento' => '16234567',
+    ]));
+
+    afirmar(isset($e['sistema_constructivo']) || isset($e['evento']) || isset($e['danos']),
+        'la rama de inspección no debe aceptarse');
+});
+
+prueba('quien cumple no puede mandar además un acta', function (): void {
+    $e = erroresInspeccion(inspeccionBase(['acta_nombre' => 'Pedro Pérez Gómez']));
+
+    afirmar(isset($e['acta_nombre']), 'el acta no aplica cuando sí cumple');
+});
+
+prueba('un nivel que el Anexo 1 no define se rechaza aunque llegue a mano', function (): void {
+    // Cierra el círculo: la pantalla no lo ofrece, y si alguien se la salta el
+    // servidor tampoco lo acepta.
+    $base = inspeccionBase();
+    $base['danos']['PLACA_PISO'] = ['afectado' => true, 'nivel' => 'LEVE'];
+
+    afirmar(isset(erroresInspeccion($base)['danos.PLACA_PISO.nivel']), 'la placa de piso no tiene nivel leve');
+});
+
+prueba('decir que fue afectado sin decir cuánto no pasa', function (): void {
+    $base = inspeccionBase();
+    $base['danos']['MUROS_CARGA'] = ['afectado' => true];
+
+    afirmar(isset(erroresInspeccion($base)['danos.MUROS_CARGA.nivel']), 'falta el nivel');
+});
+
+prueba('cada elemento del sistema tiene que contestarse', function (): void {
+    $base = inspeccionBase();
+    unset($base['danos']['CUBIERTA']);
+
+    afirmar(isset(erroresInspeccion($base)['danos.CUBIERTA.afectado']), 'no se puede dejar sin contestar');
+});
+
+prueba('la tabla del otro sistema constructivo se rechaza', function (): void {
+    $base = inspeccionBase(['sistema_constructivo' => 'MADERA']);
+
+    afirmar(isset(erroresInspeccion($base)['danos']), 'trae elementos de mampostería');
+});
+
+prueba('con colapso total no se admite la tabla por elementos', function (): void {
+    // «Marque solo esta casilla». Una tabla llena al lado significa que alguien
+    // entendió mal el formato, y hay que decirlo antes de que se firme.
+    $e = erroresInspeccion(inspeccionBase(['colapso_total' => true]));
+
+    afirmar(isset($e['danos']), 'no se llena la tabla con colapso total');
+});
+
+prueba('el colapso total da su combo sin necesidad de la tabla', function (): void {
+    $d = datosInspeccion(inspeccionBase(['colapso_total' => true, 'danos' => []]));
+
+    afirmarIgual('COLAPSO_MAMPOSTERIA', $d['combo']);
+    afirmar($d['materiales']['sin_lista'], 'el Anexo 2 no lista materiales para colapso');
+});
+
+prueba('un kit de cubierta imposible en ese sistema se rechaza', function (): void {
+    $base = inspeccionBase([
+        'sistema_constructivo' => 'MADERA',
+        'kit_cubierta' => 'FIBROCEMENTO',
+        'danos' => [
+            'VIGAS_COLUMNAS' => ['afectado' => true, 'nivel' => 'LEVE'],
+            'ENTREPISOS' => ['afectado' => false],
+            'MUROS_MADERA' => ['afectado' => false],
+            'CUBIERTA' => ['afectado' => false],
+            'HIDROSANITARIAS' => ['afectado' => false],
+            'ELECTRICAS' => ['afectado' => false],
+        ],
+    ]);
+
+    afirmar(isset(erroresInspeccion($base)['kit_cubierta']), 'en madera no hay fibrocemento');
+});
+
+prueba('una convención que no es de esa categoría se rechaza', function (): void {
+    $base = inspeccionBase();
+    $base['infraestructura']['PISOS'] = 'Ma';
+
+    afirmar(isset(erroresInspeccion($base)['infraestructura.PISOS']), 'Ma no es un piso');
+});
+
+prueba('sin ninguna forma de ubicar la vivienda no se acepta', function (): void {
+    $e = erroresInspeccion(inspeccionBase(['direccion_cabecera' => '', 'corregimiento' => '', 'vereda' => '']));
+
+    afirmar(isset($e['direccion_cabecera']), 'hay que poder llegar al predio');
+});
+
+prueba('una vivienda rural se ubica por corregimiento y vereda', function (): void {
+    $e = erroresInspeccion(inspeccionBase([
+        'direccion_cabecera' => '',
+        'corregimiento' => Catalogos::CORREGIMIENTOS[0],
+        'vereda' => 'La Ventura',
+    ]));
+
+    afirmarIgual([], $e);
+});
+
+prueba('la fecha de evaluación no puede ser de mañana', function (): void {
+    $e = erroresInspeccion(inspeccionBase(['fecha_evaluacion' => date('Y-m-d', strtotime('+1 day'))]));
+
+    afirmar(isset($e['fecha_evaluacion']), 'no se inspecciona en el futuro');
+});
+
+prueba('el departamento y el municipio los pone el servidor', function (): void {
+    $d = datosInspeccion(inspeccionBase(['departamento' => 'Antioquia', 'municipio' => 'Medellín']));
+
+    afirmarIgual('Valle del Cauca', $d['departamento']);
+    afirmarIgual('Jamundí', $d['municipio']);
+});
+
+prueba('la aprobación del coordinador puede quedar para después', function (): void {
+    // Suele firmarse en la oficina; exigirla en campo dejaría la ficha sin cerrar.
+    afirmarIgual([], erroresInspeccion(inspeccionBase(['aprobacion_coordinador' => ''])));
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────
