@@ -58,7 +58,17 @@ const CACHE = `sgr-${version}`;
  * vista previa solo los usan buscadores y redes sociales, que necesitan internet
  * por definición.
  */
-const FUERA = ['.htaccess', '/robots.txt', '/og-sgr.jpg'];
+const FUERA = [
+	'.htaccess',
+	'/robots.txt',
+	'/og-sgr.jpg',
+	// El formato oficial en blanco pesa 290 KB y solo lo necesita quien descarga
+	// una ficha desde la bandeja, que es trabajo de escritorio. Descargarlo en la
+	// instalación le costaría esos datos a cada censador que solo va a levantar
+	// fichas. Se guarda igual la primera vez que alguien lo usa, así que a partir
+	// de ahí la descarga funciona sin conexión.
+	'/formatos/rufe-fr-1703-smd-69-v01.pdf'
+];
 
 const ARMAZON = [`${base}/`, ...build, ...files].filter(
 	(ruta) => !FUERA.some((f) => ruta.endsWith(f))

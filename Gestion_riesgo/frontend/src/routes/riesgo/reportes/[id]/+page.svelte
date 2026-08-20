@@ -19,6 +19,7 @@
 	import { ESCRITURA, SOLO_ADMIN } from '$lib/navigation';
 	import type { DetalleCompleto, EstadoReporte } from '$lib/rufe-form/tipos';
 	import { fechaHora, soloFecha } from '$lib/formato';
+	import BotonFichaPdf from '$lib/components/BotonFichaPdf.svelte';
 
 	let detalle = $state<DetalleCompleto | null>(null);
 	let cargando = $state(true);
@@ -147,7 +148,10 @@
 					Formato {r.formato_version === '01' ? 'FR-1703-SMD-69 v01' : r.formato_version}
 				</p>
 			</div>
-			<span class="pastilla pastilla--{r.estado.toLowerCase()}">{r.estado_etiqueta}</span>
+			<div class="encabezado__acciones">
+				<BotonFichaPdf id={r.id} radicado={r.radicado} />
+				<span class="pastilla pastilla--{r.estado.toLowerCase()}">{r.estado_etiqueta}</span>
+			</div>
 		</header>
 
 		{#if r.revision_prioritaria}
@@ -421,6 +425,13 @@
 		gap: 0.75rem;
 		flex-wrap: wrap;
 		margin-bottom: 1rem;
+	}
+
+	.encabezado__acciones {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
 	}
 
 	.radicado {

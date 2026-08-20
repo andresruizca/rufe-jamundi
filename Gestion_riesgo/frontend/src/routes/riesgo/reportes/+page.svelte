@@ -11,6 +11,7 @@
 	import { rufeApi, type FiltrosReportes } from '$lib/api/servicios';
 	import type { Paginacion, ReporteResumen } from '$lib/rufe-form/tipos';
 	import { fechaHora, soloFecha } from '$lib/formato';
+	import BotonFichaPdf from '$lib/components/BotonFichaPdf.svelte';
 
 	let reportes = $state<ReporteResumen[]>([]);
 	let paginacion = $state<Paginacion | null>(null);
@@ -163,6 +164,7 @@
 						<th scope="col">Personas</th>
 						<th scope="col">Estado</th>
 						<th scope="col">Recibido</th>
+						<th scope="col">Ficha oficial</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -202,6 +204,9 @@
 							</td>
 							<td><span class={claseEstado(reporte.estado)}>{reporte.estado_etiqueta}</span></td>
 							<td>{fechaHora(reporte.creado_en)}</td>
+						<td>
+							<BotonFichaPdf id={reporte.id} radicado={reporte.radicado} />
+						</td>
 						</tr>
 					{/each}
 				</tbody>

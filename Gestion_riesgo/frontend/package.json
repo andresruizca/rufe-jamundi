@@ -37,6 +37,7 @@
     "browser-image-compression": "^2.0.2",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
-    "papaparse": "^5.6.0"
+    "papaparse": "^5.6.0",
+    "pdf-lib": "^1.17.1"
   }
 }
