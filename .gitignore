@@ -20,6 +20,7 @@ build/
 # Configuración de producción del backend: contiene la contraseña de MySQL.
 # La plantilla versionada es backend/config.example.php.
 Gestion_riesgo/backend/config.php
+VIVE-HELP-MANAGER/backend/config.php
 
 # Sistema operativo / editor
 .DS_Store

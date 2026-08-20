@@ -116,14 +116,26 @@ describe('títulos', () => {
 });
 
 describe('rutas que funcionan sin conexión', () => {
-	it('son exactamente las dos del trabajo de campo', () => {
+	it('son exactamente las del trabajo de campo', () => {
 		// Ampliar esta lista abre una pantalla sin que el servidor haya confirmado
-		// la sesión. Que obligue a tocar la prueba es justamente la intención.
-		expect(RUTAS_SIN_CONEXION).toEqual(['/riesgo/reportar', '/riesgo/pendientes']);
+		// la sesión. Que obligue a tocar la prueba es justamente la intención: la
+		// inspección se sumó a conciencia, porque su formato entero —criterios del
+		// Anexo 1 y materiales del Anexo 2— viaja en los catálogos guardados.
+		expect(RUTAS_SIN_CONEXION).toEqual([
+			'/riesgo/reportar',
+			'/riesgo/pendientes',
+			'/riesgo/inspeccionar'
+		]);
 	});
 
 	it('las secciones que leen del servidor no están', () => {
-		for (const ruta of ['/dashboard', '/riesgo/reportes', '/riesgo/mapas', '/admin/usuarios']) {
+		for (const ruta of [
+			'/dashboard',
+			'/riesgo/reportes',
+			'/riesgo/inspecciones',
+			'/riesgo/mapas',
+			'/admin/usuarios'
+		]) {
 			expect(funcionaSinConexion(ruta)).toBe(false);
 		}
 	});

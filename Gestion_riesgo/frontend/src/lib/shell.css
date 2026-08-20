@@ -656,6 +656,15 @@ h3 {
 	border-color: var(--aviso-info-borde);
 }
 
+/* Aviso de advertencia: algo que hay que saber pero que no impide seguir. Usa
+   los tokens de alerta, que sí están definidos en los tres temas —claro,
+   oscuro y el del sistema—, no colores escritos a mano. */
+.aviso--alerta {
+	background: var(--aviso-alerta-fondo);
+	color: var(--aviso-alerta-texto);
+	border-color: var(--aviso-alerta-borde);
+}
+
 .vacio {
 	text-align: center;
 	padding: 2.5rem 1rem;

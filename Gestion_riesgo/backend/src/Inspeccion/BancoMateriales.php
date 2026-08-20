@@ -250,6 +250,18 @@ final class BancoMateriales
     }
 
     /**
+     * El Anexo 2 entero, para que el teléfono pueda armar la lista sin señal.
+     *
+     * Se manda completo y no filtrado porque el combo cambia mientras se llena
+     * la tabla del 5.4, y pedir la lista al servidor en cada cambio no funciona
+     * en una vereda. Son unos pocos KB.
+     */
+    public static function anexo2ParaApi(): array
+    {
+        return self::MATERIALES;
+    }
+
+    /**
      * El nivel que manda: el peor entre los elementos estructurales.
      *
      * @param  array<string, string|null>  $danos  nivel por elemento; null o ausente es «sin daño»

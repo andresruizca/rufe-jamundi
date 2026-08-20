@@ -10,6 +10,7 @@
 // la puerta al banco de materiales.
 
 import type { TablasCombo } from './combo';
+import type { Anexo2 } from './materiales';
 
 export type Sistema = 'MAMPOSTERIA' | 'MADERA';
 
@@ -58,6 +59,8 @@ export type Catalogos = TablasCombo & {
 	sistemas: Opcion[];
 	kits_cubierta: Record<string, Record<string, string>>;
 	evaluacion: Record<string, ElementoEvaluable[]>;
+	/** El Anexo 2 entero, para armar la lista de materiales sin señal. */
+	anexo2: Anexo2;
 };
 
 /** Una fila de la tabla del numeral 5.4. */

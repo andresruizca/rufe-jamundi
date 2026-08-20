@@ -9,12 +9,13 @@
 // nombres, cédulas y direcciones de hogares damnificados, y servirlas rancias
 // desde un teléfono perdido o prestado sería un problema serio.
 //
-// La única excepción son los catálogos del formulario —listas de opciones,
-// límites y el código del formato oficial—, que no contienen dato personal
-// alguno y sin los cuales el formulario no se puede ni dibujar.
+// Las únicas excepciones son los catálogos de los dos formatos —listas de
+// opciones, límites, los criterios del Anexo 1 y el banco de materiales del
+// Anexo 2—, que no contienen dato personal alguno y sin los cuales los
+// formularios no se pueden ni dibujar.
 
 /** Rutas de la API que sí se guardan, comparadas COMPLETAS. */
-export const API_CACHEABLE = ['/api/rufe/catalogos'];
+export const API_CACHEABLE = ['/api/rufe/catalogos', '/api/inspeccion/catalogos'];
 
 /**
  * ¿Se guarda esta ruta de la API?

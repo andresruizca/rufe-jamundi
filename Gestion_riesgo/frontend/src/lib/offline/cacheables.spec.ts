@@ -10,6 +10,7 @@ import { API_CACHEABLE, seGuardaDeLaApi } from './cacheables';
 describe('seGuardaDeLaApi', () => {
 	it('guarda los catálogos, sin los cuales no hay formulario sin señal', () => {
 		expect(seGuardaDeLaApi('/api/rufe/catalogos')).toBe(true);
+		expect(seGuardaDeLaApi('/api/inspeccion/catalogos')).toBe(true);
 	});
 
 	it('NO guarda nada que lleve datos de personas', () => {
@@ -18,6 +19,9 @@ describe('seGuardaDeLaApi', () => {
 			'/api/rufe/reportes/9',
 			'/api/usuarios',
 			'/api/mapa/fichas',
+			'/api/inspeccion/fichas',
+			'/api/inspeccion/fichas/3',
+			'/api/inspeccion/duplicados',
 			'/api/auth/me',
 			'/api/rufe/reportes?buscar=cedula'
 		]) {
@@ -35,6 +39,8 @@ describe('seGuardaDeLaApi', () => {
 	it('la lista se mantiene mínima a propósito', () => {
 		// Que crecer la lista obligue a tocar esta prueba es el punto: cada entrada
 		// nueva es una decisión sobre datos personales, no un detalle técnico.
-		expect(API_CACHEABLE).toEqual(['/api/rufe/catalogos']);
+		// Las dos que hay son catálogos de formato: opciones, límites y los anexos
+		// de la norma. Ninguna trae el nombre de nadie.
+		expect(API_CACHEABLE).toEqual(['/api/rufe/catalogos', '/api/inspeccion/catalogos']);
 	});
 });

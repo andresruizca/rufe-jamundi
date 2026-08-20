@@ -1410,6 +1410,35 @@ prueba('el servidor resuelve los 21 casos de combos.json', function (): void {
     }
 });
 
+prueba('los fixtures del Anexo 2 siguen al día', function () use ($raiz): void {
+    // Cierra el círculo con la prueba del navegador
+    // (`frontend/src/lib/inspeccion-form/materiales.spec.ts`), que comprueba su
+    // filtro contra estos mismos archivos:
+    //
+    //   • si se toca el anexo en PHP y no se regeneran, falla AQUÍ;
+    //   • si se regeneran y el filtro del navegador no coincide, falla ALLÁ.
+    //
+    // Sin esto, el teléfono podría mostrar una lista de materiales y el
+    // expediente guardar otra, y nadie se enteraría hasta el almacén.
+    $anexo = (string) file_get_contents($raiz.'/tests/fixtures/anexo2.json');
+    afirmarIgual(
+        json_decode($anexo, true),
+        BancoMateriales::anexo2ParaApi(),
+        'regenere tests/fixtures/anexo2.json'
+    );
+
+    $esperado = json_decode((string) file_get_contents($raiz.'/tests/fixtures/materiales.json'), true);
+
+    foreach ($esperado['casos'] as $caso) {
+        $r = BancoMateriales::materiales($caso['sistema'], $caso['nivel'], $caso['kit']);
+        $total = array_sum(array_map(static fn (array $k): int => count($k['items']), $r['kits']));
+
+        afirmarIgual($caso['total'], $total, "{$caso['sistema']}/{$caso['nivel']}");
+        afirmarIgual($caso['sin_lista'], $r['sin_lista'], "{$caso['sistema']}/{$caso['nivel']} sin_lista");
+        afirmarIgual($caso['kits'], array_map(static fn (array $k): string => $k['kit'], $r['kits']));
+    }
+});
+
 grupo('Inspección › catálogos');
 
 prueba('el formulario se puede dibujar entero con una sola respuesta', function (): void {

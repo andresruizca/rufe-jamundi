@@ -1,3 +1,5 @@
+import type { Catalogos as CatalogosInspeccion } from '$lib/inspeccion-form/tipos';
+import type { DetalleInspeccion } from '$lib/inspeccion-form/detalle';
 import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
 import type {
@@ -131,6 +133,50 @@ export const rufeApi = {
  * direcciones que ya están resueltas. Geocodificar tiene cupo por segundo,
  * puede costar dinero y necesita una clave que no debe viajar hasta aquí.
  */
+/**
+ * Inspección de viviendas afectadas (formato NGRD).
+ *
+ * El censo dice quién quedó afectado; esto evalúa la vivienda y determina qué
+ * materiales le corresponden. Van por su propio prefijo y no bajo `/rufe`
+ * porque son documentos distintos con permisos y ciclos de vida distintos.
+ *
+ * Las fotos del numeral 11 reutilizan `rufeApi.abrirCarga`: la maquinaria de
+ * subida es la misma y el servidor decide a qué expediente adopta la carga
+ * según por dónde llegue el envío.
+ */
+export const inspeccionApi = {
+	catalogos: () => api.get<CatalogosInspeccion>('/inspeccion/catalogos'),
+	enviar: (cuerpo: Record<string, unknown>) =>
+		api.post<{ numero: string; recibido_en: string; combo: string | null; combo_motivo: string | null; reintento?: boolean }>(
+			'/inspeccion/fichas',
+			cuerpo
+		),
+
+	/** ¿Ya se inspeccionó esta vivienda? Avisa, no impide: puede ser legítimo. */
+	duplicados: (documento: string) =>
+		api.get<{ inspecciones: { numero: string; fecha_evaluacion: string; combo: string | null; cumple_requisitos: number }[] }>(
+			`/inspeccion/duplicados?documento=${encodeURIComponent(documento)}`
+		),
+
+	listar: (filtros: Record<string, string | number> = {}) => {
+		const p = new URLSearchParams();
+		for (const [clave, valor] of Object.entries(filtros)) {
+			if (valor !== undefined && valor !== '') p.set(clave, String(valor));
+		}
+		const consulta = p.toString();
+
+		return api.get<{
+			inspecciones: Record<string, unknown>[];
+			total: number;
+			pagina: number;
+			por_pagina: number;
+		}>(`/inspeccion/fichas${consulta ? `?${consulta}` : ''}`);
+	},
+	ver: (id: number) => api.get<DetalleInspeccion>(`/inspeccion/fichas/${id}`),
+	cambiarEstado: (id: number, estado: string, nota: string) =>
+		api.put<{ estado: string }>(`/inspeccion/fichas/${id}/estado`, { estado, nota })
+};
+
 export const mapaApi = {
 	fichas: () => api.get<{ fichas: FichaMapa[] }>('/mapa/fichas'),
 

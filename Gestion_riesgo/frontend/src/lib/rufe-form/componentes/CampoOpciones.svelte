@@ -5,12 +5,18 @@
 	// lector de pantalla anunciando "Urbano, botón de opción" sin decir nunca de
 	// qué pregunta se trata.
 
-	type Opcion = { valor: string | number; etiqueta: string; nota?: string };
+	// El booleano existe para las preguntas de sí/no del formato de inspección,
+	// donde la respuesta es un sí o un no de verdad y no un código. Guardar 'SI'
+	// y 'NO' como texto obligaría a traducirlos en cada sitio que los lea, y
+	// tarde o temprano uno se traduciría mal.
+	type Valor = string | number | boolean;
+
+	type Opcion = { valor: Valor; etiqueta: string; nota?: string };
 
 	type Props = {
 		id: string;
 		etiqueta: string;
-		valor: string | number | null;
+		valor: Valor | null;
 		opciones: Opcion[];
 		error?: string;
 		ayuda?: string;

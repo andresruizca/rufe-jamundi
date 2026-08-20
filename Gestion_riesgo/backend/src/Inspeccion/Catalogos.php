@@ -185,6 +185,7 @@ final class Catalogos
             'niveles' => NivelDano::NIVELES,
             'estructurales' => NivelDano::ESTRUCTURALES,
             'combos' => BancoMateriales::combosParaApi(),
+            'anexo2' => BancoMateriales::anexo2ParaApi(),
             // Elementos, niveles permitidos y los criterios del Anexo 1 para
             // cada uno: la tabla del 5.4 tiene que poder llenarse sin señal, y
             // pedir los criterios elemento por elemento no funcionaría en una
