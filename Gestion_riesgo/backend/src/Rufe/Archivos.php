@@ -137,7 +137,7 @@ final class Archivos
         $filas = Db::all(
             'SELECT id, tipo, nombre_original, tamano_bytes, mime
                FROM rufe_evidencias
-              WHERE carga_hash = :c AND reporte_id IS NULL
+              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL
               ORDER BY id',
             ['c' => $cargaHash]
         );
@@ -158,7 +158,7 @@ final class Archivos
     {
         $fila = Db::first(
             'SELECT id, ruta_relativa FROM rufe_evidencias
-              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL',
+              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
             ['i' => $id, 'c' => $cargaHash]
         );
 
@@ -183,9 +183,39 @@ final class Archivos
      */
     public static function adoptar(string $cargaHash, int $reporteId): int
     {
+        return self::adoptarPara($cargaHash, 'reporte_id', $reporteId, 'rufe');
+    }
+
+    /**
+     * Lo mismo, para el registro fotográfico del formato de inspección.
+     *
+     * La maquinaria de subida —validación, compresión, caducidad, purga— es la
+     * misma y no se duplica: solo cambia a qué expediente se adopta la foto y en
+     * qué carpeta acaba. Duplicar este módulo para tener dos copias que
+     * mantener sería peor que una tabla cuyo nombre ya no describe del todo su
+     * contenido.
+     *
+     * @return int cuántos archivos se adoptaron
+     */
+    public static function adoptarInspeccion(string $cargaHash, int $inspeccionId): int
+    {
+        return self::adoptarPara($cargaHash, 'inspeccion_id', $inspeccionId, 'inspeccion');
+    }
+
+    /**
+     * @param  string  $columna  la columna dueña; NO viene de la petición
+     */
+    private static function adoptarPara(string $cargaHash, string $columna, int $duenoId, string $carpetaBase): int
+    {
+        // La columna es una constante del código, nunca entrada del usuario: si
+        // algún día llegara de fuera, esto sería una inyección de SQL.
+        if (! in_array($columna, ['reporte_id', 'inspeccion_id'], true)) {
+            throw new RuntimeException('Columna de adopción no permitida.');
+        }
+
         $filas = Db::all(
             'SELECT id, nombre_guardado, ruta_relativa FROM rufe_evidencias
-              WHERE carga_hash = :c AND reporte_id IS NULL',
+              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
             ['c' => $cargaHash]
         );
 
@@ -193,7 +223,7 @@ final class Archivos
             return 0;
         }
 
-        $carpeta = sprintf('rufe/%s/%d', date('Y/m'), $reporteId);
+        $carpeta = sprintf('%s/%s/%d', $carpetaBase, date('Y/m'), $duenoId);
         self::asegurarDirectorio(self::base().'/'.$carpeta);
 
         foreach ($filas as $fila) {
@@ -206,10 +236,10 @@ final class Archivos
             }
 
             Db::exec(
-                'UPDATE rufe_evidencias
-                    SET reporte_id = :r, ruta_relativa = :rr, carga_hash = NULL, expira_en = NULL
-                  WHERE id = :i',
-                ['r' => $reporteId, 'rr' => $nueva, 'i' => (int) $fila['id']]
+                "UPDATE rufe_evidencias
+                    SET {$columna} = :r, ruta_relativa = :rr, carga_hash = NULL, expira_en = NULL
+                  WHERE id = :i",
+                ['r' => $duenoId, 'rr' => $nueva, 'i' => (int) $fila['id']]
             );
         }
 
@@ -226,7 +256,8 @@ final class Archivos
     {
         $filas = Db::all(
             'SELECT id, ruta_relativa, carga_hash FROM rufe_evidencias
-              WHERE reporte_id IS NULL AND expira_en IS NOT NULL AND expira_en < NOW()
+              WHERE reporte_id IS NULL AND inspeccion_id IS NULL
+                AND expira_en IS NOT NULL AND expira_en < NOW()
               LIMIT 200'
         );
 

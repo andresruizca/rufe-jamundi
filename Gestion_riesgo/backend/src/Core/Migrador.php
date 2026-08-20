@@ -26,6 +26,9 @@ final class Migrador
         'rufe_02_evidencias_y_envio.sql',
         'sistema_01_despliegues.sql',
         'mapa_01_geocodificacion.sql',
+        // Va después de rufe.sql: declara una clave foránea contra
+        // `rufe_reportes` y añade columnas a `rufe_evidencias`.
+        'inspeccion_01_viviendas.sql',
     ];
 
     /**

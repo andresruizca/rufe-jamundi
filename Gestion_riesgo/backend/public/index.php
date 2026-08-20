@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
+use App\Controllers\InspeccionCapturaController;
+use App\Controllers\InspeccionController;
 use App\Controllers\MapaController;
 use App\Controllers\RufeController;
 use App\Controllers\SistemaController;
@@ -89,6 +91,8 @@ $rufeCaptura = new RufeCapturaController;
 $rufe = new RufeController;
 $sistema = new SistemaController;
 $mapa = new MapaController;
+$inspeccionCaptura = new InspeccionCapturaController;
+$inspeccion = new InspeccionController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -145,6 +149,17 @@ $router->put('/mapa/ubicaciones/{clave}', [$mapa, 'corregir'], Auth::ESCRITURA);
 $router->get('/mapa/estado', [$mapa, 'estado'], $soloAdmin);
 $router->post('/mapa/geocodificar', [$mapa, 'geocodificar'], $soloAdmin);
 $router->post('/mapa/reubicar', [$mapa, 'reubicar'], $soloAdmin);
+
+// Inspección de viviendas afectadas (formato NGRD). El censo dice quién quedó
+// afectado; esto evalúa la vivienda y determina qué materiales le corresponden.
+// Capturar es de escritura; consultar lo hace cualquiera con sesión, igual que
+// en el RUFE.
+$router->get('/inspeccion/catalogos', [$inspeccionCaptura, 'catalogos'], Auth::ESCRITURA);
+$router->get('/inspeccion/duplicados', [$inspeccionCaptura, 'duplicados'], Auth::ESCRITURA);
+$router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::ESCRITURA);
+$router->get('/inspeccion/fichas', [$inspeccion, 'listar'], Auth::TODOS);
+$router->get('/inspeccion/fichas/{id}', [$inspeccion, 'ver'], Auth::TODOS);
+$router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], Auth::ESCRITURA);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);

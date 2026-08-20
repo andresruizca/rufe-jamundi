@@ -37,6 +37,7 @@ use App\Rufe\Validador;
 use App\Inspeccion\BancoMateriales;
 use App\Inspeccion\Catalogos as CatalogosInspeccion;
 use App\Inspeccion\Validador as ValidadorInspeccion;
+use App\Inspeccion\Numero;
 use App\Inspeccion\NivelDano;
 
 date_default_timezone_set('America/Bogota');
@@ -803,6 +804,38 @@ prueba('rufe.sql es idempotente: todo CREATE lleva IF NOT EXISTS', function () u
             afirmar(str_contains($s, 'IF NOT EXISTS'), 'un CREATE TABLE sin IF NOT EXISTS: '.substr($s, 0, 60));
         }
     }
+});
+
+prueba('todos los .sql del Migrador se trocean y son idempotentes', function () use ($raiz): void {
+    // Se recorre la lista real del Migrador y no una escrita a mano: un archivo
+    // que se añada allí y no aquí se aplicaría en producción sin que nada lo
+    // hubiera mirado. El hosting no tiene consola — si una migración falla a
+    // medias, se arregla por FTP.
+    foreach (Migrador::ARCHIVOS as $archivo) {
+        $ruta = $raiz.'/database/'.$archivo;
+        afirmar(is_file($ruta), "falta database/{$archivo}");
+
+        $sentencias = Migrador::sentencias((string) file_get_contents($ruta));
+        afirmar($sentencias !== [], "{$archivo} no produjo ninguna sentencia");
+
+        foreach ($sentencias as $s) {
+            if (str_starts_with($s, 'CREATE TABLE')) {
+                afirmar(str_contains($s, 'IF NOT EXISTS'), "{$archivo}: CREATE TABLE sin IF NOT EXISTS");
+            }
+            afirmar(! str_contains($s, '--'), "{$archivo}: quedó un comentario dentro de una sentencia");
+        }
+    }
+});
+
+prueba('la inspección se aplica después del RUFE, del que depende', function (): void {
+    // Declara una foránea contra rufe_reportes y añade columnas a
+    // rufe_evidencias: al revés, la migración reventaría en el primer despliegue.
+    $orden = array_flip(Migrador::ARCHIVOS);
+
+    afirmar(
+        $orden['inspeccion_01_viviendas.sql'] > $orden['rufe.sql'],
+        'inspeccion_01_viviendas.sql tiene que ir después de rufe.sql'
+    );
 });
 
 prueba('rufe_revertir.sql borra exactamente lo que crea rufe.sql', function () use ($raiz): void {
@@ -1658,6 +1691,82 @@ prueba('el departamento y el municipio los pone el servidor', function (): void 
 prueba('la aprobación del coordinador puede quedar para después', function (): void {
     // Suele firmarse en la oficina; exigirla en campo dejaría la ficha sin cerrar.
     afirmarIgual([], erroresInspeccion(inspeccionBase(['aprobacion_coordinador' => ''])));
+});
+
+grupo('Inspección › número de ficha');
+
+prueba('el formato es INSP-AAAA-XXXXXXXX y se distingue del radicado', function (): void {
+    $n = Numero::componer(2026);
+
+    afirmar(Numero::esValido($n), $n);
+    afirmarIgual(18, strlen($n));
+    afirmar(str_starts_with($n, 'INSP-2026-'), $n);
+    afirmar(! Radicado::esValido($n), 'no debe pasar por un radicado del censo');
+});
+
+prueba('no usa letras que se confunden al dictarlas', function (): void {
+    // Crockford Base32: sin I, L, O ni U. Estos números se dictan por teléfono.
+    for ($i = 0; $i < 60; $i++) {
+        $sufijo = substr(Numero::componer(), 10);
+        afirmar(preg_match('/[ILOU]/', $sufijo) === 0, "salió una letra confundible: {$sufijo}");
+    }
+});
+
+prueba('no es correlativo: dos seguidos no se parecen', function (): void {
+    // Un consecutivo diría cuántas inspecciones lleva el municipio y dejaría
+    // adivinar el número de la vivienda de al lado.
+    $vistos = [];
+    for ($i = 0; $i < 50; $i++) {
+        $vistos[] = Numero::componer();
+    }
+
+    afirmarIgual(50, count(array_unique($vistos)), 'salieron números repetidos');
+});
+
+prueba('la huella ignora mayúsculas y espacios de más en la dirección', function (): void {
+    $a = Numero::huella('2026-08-20', 'Carrera 11 # 8-26', '16234567');
+    $b = Numero::huella('2026-08-20', '  carrera   11 # 8-26 ', '16234567');
+
+    afirmarIgual($a, $b, 'la misma vivienda debe dar la misma huella');
+});
+
+prueba('la huella distingue propietario y fecha', function (): void {
+    $base = Numero::huella('2026-08-20', 'Carrera 11 # 8-26', '16234567');
+
+    afirmar($base !== Numero::huella('2026-09-01', 'Carrera 11 # 8-26', '16234567'), 'otra fecha, otra huella');
+    afirmar($base !== Numero::huella('2026-08-20', 'Carrera 11 # 8-26', '99999999'), 'otro propietario, otra huella');
+});
+
+grupo('Rutas › que ninguna apunte a un método inexistente');
+
+prueba('todas las rutas resuelven a un método que existe', function () use ($raiz): void {
+    // Esto no es celo de más: el 18 de agosto de 2026 una ruta quedó registrada
+    // contra un método que no llegó a escribirse, y el TypeError al construir el
+    // router tumbó TODAS las peticiones de la API, no solo la suya. El sitio
+    // entero devolvió 500 hasta que se quitó la línea.
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+
+    // Qué controlador hay detrás de cada variable: `$rufe = new RufeController;`
+    preg_match_all('/\$(\w+)\s*=\s*new\s+(\w+);/', $php, $vars, PREG_SET_ORDER);
+    $clase = [];
+    foreach ($vars as $v) {
+        $clase[$v[1]] = 'App\\Controllers\\'.$v[2];
+    }
+
+    // Y qué método pide cada ruta: `[$rufe, 'listar']`
+    preg_match_all("/\[\\\$(\w+),\s*'(\w+)'\]/", $php, $rutas, PREG_SET_ORDER);
+    afirmar(count($rutas) >= 30, 'se esperaban al menos 30 rutas, se leyeron '.count($rutas));
+
+    foreach ($rutas as $r) {
+        [$todo, $variable, $metodo] = $r;
+
+        afirmar(isset($clase[$variable]), "la ruta usa \${$variable}, que no se instancia");
+        afirmar(class_exists($clase[$variable]), "no existe la clase {$clase[$variable]}");
+        afirmar(
+            method_exists($clase[$variable], $metodo),
+            "{$clase[$variable]}::{$metodo}() no existe — registrarla tumbaría TODA la API"
+        );
+    }
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────
