@@ -41,13 +41,35 @@ type Pincel = {
 	negrita: PDFFont;
 };
 
-export async function generarFichaPdf(detalle: DetalleCompleto): Promise<Blob> {
-	const plantilla = await fetch(RUTA_PLANTILLA);
-	if (!plantilla.ok) {
-		throw new Error('No se encontró el formato oficial para generar la ficha.');
-	}
+/**
+ * La plantilla, traída una sola vez.
+ *
+ * Al descargar un lote de cincuenta fichas, volver a pedirla cincuenta veces
+ * serían quince megas de datos para bajar siempre el mismo archivo. Se guarda la
+ * promesa, no el resultado, para que dos descargas simultáneas tampoco la pidan
+ * dos veces.
+ */
+let plantillaEnCurso: Promise<ArrayBuffer> | null = null;
 
-	const pdf = await PDFDocument.load(await plantilla.arrayBuffer());
+export function plantillaOficial(): Promise<ArrayBuffer> {
+	plantillaEnCurso ??= (async () => {
+		const res = await fetch(RUTA_PLANTILLA);
+		if (!res.ok) {
+			// Si falla no se guarda el fallo: el siguiente intento vuelve a probar.
+			plantillaEnCurso = null;
+			throw new Error('No se encontró el formato oficial para generar la ficha.');
+		}
+
+		return res.arrayBuffer();
+	})();
+
+	return plantillaEnCurso;
+}
+
+export async function generarFichaPdf(detalle: DetalleCompleto): Promise<Blob> {
+	// Se copia: `PDFDocument.load` puede quedarse con el búfer, y el original
+	// tiene que seguir intacto para las demás fichas del lote.
+	const pdf = await PDFDocument.load((await plantillaOficial()).slice(0));
 	const pincel: Pincel = {
 		pagina: pdf.getPages()[0],
 		fuente: await pdf.embedFont(StandardFonts.Helvetica),
