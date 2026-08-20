@@ -33,14 +33,29 @@
 		return browser && window.matchMedia('(max-width: 1100px)').matches;
 	}
 
+	/** Hay una versión nueva guardada y esperando a que se recargue. */
+	let versionNueva = $state(false);
+
 	onMount(() => {
 		void sesion.restaurar();
+
+		// El Service Worker avisa cuando terminó de guardar una versión nueva. Se
+		// muestra un aviso en vez de recargar por sorpresa: recargar a alguien a
+		// mitad de una ficha sería peor que dejarle con la versión anterior.
+		const alMensaje = (e: MessageEvent) => {
+			if (e.data?.origen === 'sgr-sw' && e.data.tipo === 'version-nueva') {
+				versionNueva = true;
+			}
+		};
+		navigator.serviceWorker?.addEventListener('message', alMensaje);
 
 		// El estado del menú se recuerda entre visitas, pero nunca se abre solo
 		// en pantallas estrechas: ahí tapa todo el contenido.
 		if (!esEstrecha() && window.localStorage.getItem(CLAVE_MENU) === '1') {
 			menuAbierto = true;
 		}
+
+		return () => navigator.serviceWorker?.removeEventListener('message', alMensaje);
 	});
 
 	function alternarMenu() {
@@ -177,6 +192,15 @@
 					<span class="miga__actual">{titulo}</span>
 				</nav>
 			</header>
+
+			{#if versionNueva}
+				<p class="aviso-version" role="status">
+					<span>Hay una versión nueva del sistema.</span>
+					<button type="button" class="boton boton--suave" onclick={() => location.reload()}>
+						Recargar
+					</button>
+				</p>
+			{/if}
 
 			<main class="pagina" class:pagina--sin-relleno={ruta === '/dashboard'}>
 				{@render children?.()}

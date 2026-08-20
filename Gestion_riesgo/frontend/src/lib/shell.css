@@ -903,3 +903,19 @@ h3 {
 	color: var(--color-muted);
 	margin-top: 0.1rem;
 }
+
+/* Aviso de versión nueva. Va bajo la barra, sin taparla: informa, no interrumpe.
+   Recargar es decisión de quien está usando el sistema, que puede estar a mitad
+   de una ficha. */
+.aviso-version {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+	margin: 0;
+	padding: 0.55rem 1rem;
+	background: var(--aviso-info-fondo, var(--color-surface-alt));
+	border-bottom: 1px solid var(--color-border);
+	font-size: 0.85rem;
+}

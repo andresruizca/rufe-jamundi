@@ -22,7 +22,7 @@
 // .htaccess: sin ella, quien entre por http:// se queda sin envío en segundo
 // plano y sin enterarse.
 
-import { version } from '$service-worker';
+import { base, build, files, version } from '$service-worker';
 import { baseApi, ErrorDeRed, subirFotosDe } from '$lib/rufe-form/subida';
 import {
 	ETIQUETA_SYNC,
@@ -37,15 +37,148 @@ import {
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-sw.addEventListener('install', () => {
-	// Se activa de inmediato: no hay caché vieja que preservar, y esperar a que
-	// se cierren las pestañas solo retrasaría el envío de fichas pendientes.
-	void sw.skipWaiting();
+// ── La aplicación guardada en el teléfono ────────────────────────────────────
+//
+// Sin esto el sistema tenía una contradicción: se podía levantar una ficha sin
+// señal, pero solo si la aplicación YA estaba abierta cuando se cayó la
+// conexión. Un censador que la cerrara, o que llegara a una vereda sin datos, no
+// tenía de dónde cargarla y no veía nada.
+//
+// El nombre de la caché lleva la versión del build. Al desplegar una versión
+// nueva se crea otra caché y se borran las anteriores, así que es imposible
+// quedarse servido de archivos viejos para siempre.
+
+const CACHE = `sgr-${version}`;
+
+/**
+ * El armazón: lo que hay que tener guardado para que la aplicación arranque.
+ *
+ * Se deja fuera lo que no sirve sin conexión o que el servidor ni siquiera
+ * entrega: `.htaccess` lo deniega Apache siempre, y `robots.txt` y la imagen de
+ * vista previa solo los usan buscadores y redes sociales, que necesitan internet
+ * por definición.
+ */
+const FUERA = ['.htaccess', '/robots.txt', '/og-sgr.jpg'];
+
+const ARMAZON = [`${base}/`, ...build, ...files].filter(
+	(ruta) => !FUERA.some((f) => ruta.endsWith(f))
+);
+
+sw.addEventListener('install', (evento) => {
+	const e = evento as ExtendableEvent;
+
+	e.waitUntil(
+		(async () => {
+			const cache = await caches.open(CACHE);
+
+			// Uno a uno y tolerando fallos: con `addAll`, un solo archivo que no
+			// responda aborta la instalación entera y el teléfono se queda sin
+			// aplicación guardada.
+			await Promise.all(
+				ARMAZON.map(async (ruta) => {
+					try {
+						const res = await fetch(ruta, { cache: 'no-cache' });
+						if (res.ok) await cache.put(ruta, res);
+					} catch {
+						// Se seguirá pidiendo a la red cuando haga falta.
+					}
+				})
+			);
+
+			// Se activa de inmediato: esperar a que se cierren las pestañas solo
+			// retrasaría el envío de las fichas pendientes.
+			await sw.skipWaiting();
+		})()
+	);
 });
 
 sw.addEventListener('activate', (evento) => {
-	evento.waitUntil(sw.clients.claim());
+	const e = evento as ExtendableEvent;
+
+	e.waitUntil(
+		(async () => {
+			// Fuera las cachés de versiones anteriores.
+			await Promise.all(
+				(await caches.keys())
+					.filter((n) => n.startsWith('sgr-') && n !== CACHE)
+					.map((n) => caches.delete(n))
+			);
+
+			await sw.clients.claim();
+
+			// Se avisa a las pestañas abiertas en vez de recargarlas por sorpresa:
+			// recargar a alguien a mitad de una ficha sería peor que dejarle con la
+			// versión anterior un rato más.
+			await avisarALaPagina({ tipo: 'version-nueva', version });
+		})()
+	);
 });
+
+/**
+ * De dónde sale cada cosa cuando el teléfono pide algo.
+ *
+ * Las reglas son distintas por tipo, y la más importante es la que NO cachea:
+ * `/api/` lleva datos personales de hogares damnificados y no puede servirse
+ * rancio. Sin señal falla, y de los envíos ya se encarga la cola.
+ */
+sw.addEventListener('fetch', (evento) => {
+	const e = evento as FetchEvent;
+	const peticion = e.request;
+
+	if (peticion.method !== 'GET') return;
+
+	const url = new URL(peticion.url);
+
+	// Solo lo propio. Las hojas de Google y las tejas del mapa son de otros
+	// dominios y necesitan datos frescos; que pasen de largo.
+	if (url.origin !== sw.location.origin) return;
+
+	// La API nunca se guarda.
+	if (url.pathname.startsWith('/api/')) return;
+
+	e.respondWith(responder(peticion, url));
+});
+
+async function responder(peticion: Request, url: URL): Promise<Response> {
+	const cache = await caches.open(CACHE);
+
+	// Los archivos con hash en el nombre no cambian nunca: si cambia el
+	// contenido, cambia el nombre. Se sirven de la caché sin preguntar.
+	if (build.includes(url.pathname)) {
+		const guardado = await cache.match(url.pathname);
+		if (guardado) return guardado;
+	}
+
+	// Navegar a cualquier ruta devuelve el armazón. Se intenta primero la red
+	// —así una versión nueva se ve en cuanto hay señal— y si no hay, el guardado.
+	if (peticion.mode === 'navigate') {
+		try {
+			const red = await fetch(peticion);
+			if (red.ok) return red;
+		} catch {
+			// Sin señal: se sigue con lo guardado.
+		}
+
+		const armazon = (await cache.match(`${base}/`)) ?? (await cache.match('/200.html'));
+		if (armazon) return armazon;
+	}
+
+	try {
+		const red = await fetch(peticion);
+
+		// Lo que se descargue bien se guarda para la próxima vez sin señal.
+		if (red.ok && (build.includes(url.pathname) || files.includes(url.pathname))) {
+			void cache.put(url.pathname, red.clone());
+		}
+
+		return red;
+	} catch {
+		const guardado = await cache.match(url.pathname);
+		if (guardado) return guardado;
+
+		throw new Error('Sin conexión y sin copia guardada.');
+	}
+}
 
 sw.addEventListener('sync', (evento) => {
 	const e = evento as ExtendableEvent & { tag: string };
