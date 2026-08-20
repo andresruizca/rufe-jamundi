@@ -1082,6 +1082,47 @@ prueba('se respeta el segundo entre peticiones que exige OpenStreetMap', functio
     afirmar(Geocodificador::PAUSA_SEGUNDOS >= 1, 'su política no admite más de una por segundo');
 });
 
+prueba('un acierto en otro municipio se descarta aunque caiga en la caja', function (): void {
+    // ESTE era el fallo que ponía predios donde no van. La caja de coordenadas es
+    // un rectángulo y Jamundí no lo es: roza Cali por el norte y Villa Rica por
+    // el sur, así que por caja sola se colaban aciertos de municipios vecinos y
+    // se pintaban como propios.
+    $enCali = [
+        'lat' => '3.4200', 'lon' => '-76.5200',
+        'address' => ['city' => 'Cali', 'state' => 'Valle del Cauca'],
+    ];
+    afirmar(Geocodificador::dentroDeJamundi(3.42, -76.52), 'la caja sí lo admite');
+    afirmar(! Geocodificador::esDeJamundi($enCali), 'pero no es de Jamundí');
+});
+
+prueba('un acierto en Jamundí se acepta, con o sin tilde', function (): void {
+    foreach (['Jamundí', 'Jamundi', 'JAMUNDÍ', 'Municipio de Jamundí'] as $nombre) {
+        $r = ['lat' => '3.2700', 'lon' => '-76.5500', 'address' => ['county' => $nombre]];
+        afirmar(Geocodificador::esDeJamundi($r), "«{$nombre}» debía aceptarse");
+    }
+});
+
+prueba('el municipio se busca en la clave que traiga', function (): void {
+    // Nominatim lo mete en una u otra según el tipo de lugar.
+    foreach (['county', 'city', 'town', 'municipality', 'village'] as $clave) {
+        $r = ['lat' => '3.2700', 'lon' => '-76.5500', 'address' => [$clave => 'Jamundí']];
+        afirmar(Geocodificador::esDeJamundi($r), "no se miró la clave «{$clave}»");
+    }
+});
+
+prueba('sin detalle de dirección se admite si cae en la caja', function (): void {
+    // No se puede comprobar el nombre; la caja es lo único que queda.
+    afirmar(
+        Geocodificador::esDeJamundi(['lat' => '3.2700', 'lon' => '-76.5500']),
+        'sin detalle, la caja debía bastar'
+    );
+});
+
+prueba('fuera de la caja se descarta aunque diga Jamundí', function (): void {
+    $r = ['lat' => '4.7110', 'lon' => '-74.0721', 'address' => ['county' => 'Jamundí']];
+    afirmar(! Geocodificador::esDeJamundi($r), 'Bogotá no es Jamundí');
+});
+
 // ── Resumen ──────────────────────────────────────────────────────────────────
 
 echo "\n".str_repeat('─', 60)."\n";

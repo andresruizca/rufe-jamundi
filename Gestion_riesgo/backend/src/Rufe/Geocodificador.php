@@ -134,6 +134,52 @@ final class Geocodificador
         return preg_match('/\d/u', $normal) === 1 || count(explode(' ', $normal)) >= 2;
     }
 
+    /**
+     * ¿El resultado está de verdad en Jamundí?
+     *
+     * Se comprueba por el nombre del municipio que devuelve el servicio, no solo
+     * por coordenadas. La caja de coordenadas es un rectángulo y Jamundí no lo
+     * es: roza Cali por el norte y Villa Rica y Puerto Tejada por el sur, así que
+     * por caja sola se colaban aciertos de municipios vecinos y se pintaban como
+     * propios.
+     *
+     * @param  array<string,mixed>  $candidato  Respuesta de Nominatim
+     */
+    public static function esDeJamundi(array $candidato): bool
+    {
+        $lat = isset($candidato['lat']) ? (float) $candidato['lat'] : null;
+        $lon = isset($candidato['lon']) ? (float) $candidato['lon'] : null;
+
+        if ($lat === null || $lon === null || ! self::dentroDeJamundi($lat, $lon)) {
+            return false;
+        }
+
+        $direccion = $candidato['address'] ?? null;
+        if (! is_array($direccion)) {
+            // Sin detalle no se puede comprobar el nombre; queda la caja, que ya
+            // se comprobó arriba.
+            return true;
+        }
+
+        // Nominatim mete el municipio en una clave u otra según el tipo de lugar.
+        foreach (['county', 'city', 'town', 'municipality', 'village', 'city_district'] as $clave) {
+            $valor = $direccion[$clave] ?? null;
+            if (is_string($valor) && self::esNombreDeJamundi($valor)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Compara sin tildes ni mayúsculas: llega «Jamundí» y también «Jamundi». */
+    private static function esNombreDeJamundi(string $valor): bool
+    {
+        $sinTildes = strtr(mb_strtolower($valor, 'UTF-8'), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']);
+
+        return str_contains($sinTildes, 'jamundi');
+    }
+
     /** ¿Cae el punto dentro del municipio? */
     public static function dentroDeJamundi(float $lat, float $lon): bool
     {
@@ -234,12 +280,28 @@ final class Geocodificador
     /** @return array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}|null */
     private static function enOpenStreetMap(string $consulta): ?array
     {
+        // Tres cosas que hacen la diferencia entre ubicar bien y ubicar en otro
+        // municipio:
+        //
+        //   viewbox + bounded=1  Restringen la BÚSQUEDA a Jamundí. Sin esto,
+        //     «Carrera 11 # 8 26» se busca en toda Colombia —esa dirección existe
+        //     en cientos de pueblos— y el servicio devuelve la que le parece
+        //     mejor, que suele estar a cientos de kilómetros.
+        //   addressdetails=1     Permite comprobar que el resultado está de
+        //     verdad en Jamundí. La caja de coordenadas sola no basta: roza Cali,
+        //     Villa Rica y Puerto Tejada, así que un acierto en el sur de Cali la
+        //     pasaría y se pintaría como si fuera de aquí.
+        //   limit=5              El primer resultado no siempre es el bueno. Se
+        //     piden varios y se escoge el primero que esté realmente en Jamundí.
         $url = 'https://nominatim.openstreetmap.org/search?'.http_build_query([
             'q' => $consulta,
             'format' => 'jsonv2',
-            'limit' => 1,
+            'limit' => 5,
             'countrycodes' => 'co',
-            'addressdetails' => 0,
+            'addressdetails' => 1,
+            'viewbox' => self::CAJA['lon_min'].','.self::CAJA['lat_max']
+                .','.self::CAJA['lon_max'].','.self::CAJA['lat_min'],
+            'bounded' => 1,
         ]);
 
         // La política de Nominatim exige identificarse con algo que permita
@@ -254,24 +316,47 @@ final class Geocodificador
         }
 
         $datos = json_decode($cuerpo, true);
-        if (! is_array($datos) || $datos === [] || ! isset($datos[0]['lat'], $datos[0]['lon'])) {
+        if (! is_array($datos) || $datos === []) {
             return null;
         }
 
-        $primero = $datos[0];
-        $crudo = [
-            'lat' => (float) $primero['lat'],
-            'lon' => (float) $primero['lon'],
-            'tipo' => (string) ($primero['type'] ?? $primero['category'] ?? ''),
-        ];
+        // Se recorren los candidatos y se escoge el primero que esté de verdad en
+        // Jamundí y que además sirva para pintar. Quedarse con el primero sin
+        // mirar era lo que traía predios de otros municipios.
+        $mejor = null;
 
-        return [
-            'lat' => $crudo['lat'],
-            'lon' => $crudo['lon'],
-            'precision' => self::clasificar($crudo),
-            'fuente' => 'NOMINATIM',
-            'etiqueta' => mb_substr((string) ($primero['display_name'] ?? ''), 0, 255),
-        ];
+        foreach ($datos as $candidato) {
+            if (! isset($candidato['lat'], $candidato['lon'])) {
+                continue;
+            }
+            if (! self::esDeJamundi($candidato)) {
+                continue;
+            }
+
+            $crudo = [
+                'lat' => (float) $candidato['lat'],
+                'lon' => (float) $candidato['lon'],
+                'tipo' => (string) ($candidato['type'] ?? $candidato['category'] ?? ''),
+            ];
+
+            $resultado = [
+                'lat' => $crudo['lat'],
+                'lon' => $crudo['lon'],
+                'precision' => self::clasificar($crudo),
+                'fuente' => 'NOMINATIM',
+                'etiqueta' => mb_substr((string) ($candidato['display_name'] ?? ''), 0, 255),
+            ];
+
+            // El primero que sirva para pintar gana; si ninguno sirve, se guarda
+            // el primero válido para poder informar de por qué no se pudo.
+            if (self::pintable($resultado['precision'])) {
+                return $resultado;
+            }
+
+            $mejor ??= $resultado;
+        }
+
+        return $mejor;
     }
 
     /** @return array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}|null */

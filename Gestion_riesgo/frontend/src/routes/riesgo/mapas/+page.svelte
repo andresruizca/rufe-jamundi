@@ -56,6 +56,7 @@
 	let mapa: any = null;
 	let capaCalor: any = null;
 	let capaPredios: any = null;
+	let observador: ResizeObserver | null = null;
 
 	const visibles = $derived(
 		puntos.filter(
@@ -74,6 +75,10 @@
 	});
 
 	onDestroy(() => {
+		// Sin desconectar el observador y destruir el mapa, cada visita a esta
+		// pantalla dejaría atrás un mapa vivo escuchando eventos.
+		observador?.disconnect();
+		observador = null;
 		mapa?.remove();
 		mapa = null;
 	});
@@ -150,6 +155,11 @@
 	async function dibujar() {
 		if (!browser || !contenedor) return;
 
+		// Guarda contra una segunda inicialización. Leaflet lanza «Map container is
+		// already initialized» y deja el contenedor inservible, así que más vale no
+		// llegar ahí.
+		if (mapa) return;
+
 		const leaflet = await import('leaflet');
 		await import('leaflet/dist/leaflet.css');
 		await import('leaflet.heat');
@@ -193,6 +203,20 @@
 
 		refrescarCapas();
 		encuadrar();
+
+		// Leaflet calcula la posición de cada teja y de cada marcador a partir del
+		// tamaño que tenía el contenedor al crearse. Si ese tamaño cambia después
+		// —al cargar la tipografía, al aparecer un aviso encima, al girar el
+		// teléfono— todo queda desplazado respecto al fondo: los puntos aparecen
+		// corridos de donde deberían estar.
+		//
+		// `invalidateSize` le hace recalcular. Se llama tras ceder el hilo, cuando
+		// el navegador ya asentó la maquetación.
+		requestAnimationFrame(() => mapa?.invalidateSize());
+
+		// Y lo mismo cada vez que el contenedor cambie de tamaño mientras se usa.
+		observador = new ResizeObserver(() => mapa?.invalidateSize());
+		observador.observe(contenedor);
 	}
 
 	function refrescarCapas() {
