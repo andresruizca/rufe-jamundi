@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { borrarSesionGuardada } from '$lib/stores/sesionCache';
 
 /**
  * Cliente HTTP de la API.
@@ -31,6 +32,11 @@ export function guardarToken(token: string): void {
 
 export function borrarToken(): void {
 	if (browser) window.localStorage.removeItem(CLAVE_TOKEN);
+
+	// El espejo del usuario se va con el token, siempre. Separarlos dejaría al
+	// sistema arrancando sin conexión con una identidad cuya credencial ya no
+	// existe: el formulario se dibujaría y el envío fallaría después.
+	borrarSesionGuardada();
 }
 
 /** Error de la API con el estado HTTP y los errores por campo. */

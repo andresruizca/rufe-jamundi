@@ -919,3 +919,56 @@ h3 {
 	border-bottom: 1px solid var(--color-border);
 	font-size: 0.85rem;
 }
+
+/* Franja de «sin conexión». Va bajo la barra, como el aviso de versión, y con
+   los tonos de alerta —no de error—: quedarse sin señal en una vereda es lo
+   esperado, no una avería. Lo que tiene que transmitir es que se puede seguir
+   trabajando. */
+.aviso-sin-red {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin: 0;
+	padding: 0.55rem 1rem;
+	background: var(--aviso-alerta-fondo);
+	color: var(--aviso-alerta-texto);
+	border-bottom: 1px solid var(--aviso-alerta-borde);
+	font-size: 0.85rem;
+	text-align: center;
+}
+
+/* Pantalla de las secciones que sí necesitan servidor. Explica y ofrece salida:
+   dejar a alguien en un callejón sin fondo fue justo el fallo que esto corrige. */
+.sin-red {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.7rem;
+	max-width: 32rem;
+	margin: 3rem auto;
+	padding: 0 1rem;
+	text-align: center;
+	color: var(--color-muted);
+}
+
+.sin-red h2 {
+	margin: 0;
+	font-size: 1.05rem;
+	color: var(--color-text);
+}
+
+.sin-red p {
+	margin: 0;
+	font-size: 0.9rem;
+	line-height: 1.5;
+}
+
+.sin-red__nota {
+	font-size: 0.83rem;
+}
+
+.sin-red .boton {
+	margin-top: 0.4rem;
+}

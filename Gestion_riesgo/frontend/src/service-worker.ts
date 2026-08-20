@@ -3,26 +3,28 @@
 
 // Service Worker del Sistema de Gestión del Riesgo.
 //
-// Hace una sola cosa, y a propósito: enviar las fichas RUFE que quedaron en cola
-// cuando vuelve la señal, aunque el censador ya haya cerrado el navegador. Ese
-// es el escenario real de campo — se levanta la ficha en una vereda sin
-// cobertura, se guarda el teléfono en el bolsillo y la señal vuelve tres horas
-// después, camino al casco urbano.
+// Existe por un escenario concreto de campo: se levanta la ficha en una vereda
+// sin cobertura, se guarda el teléfono en el bolsillo y la señal vuelve tres
+// horas después, camino al casco urbano.
 //
-// Lo que NO hace, y por qué:
+// Hace tres cosas para que eso funcione:
 //
-// - NO cachea la aplicación para uso sin conexión. Sería la siguiente
-//   funcionalidad natural, pero cachear mal es peor que no cachear: un
-//   funcionario trabajando con una versión vieja del formulario, sin saberlo, es
-//   un problema difícil de diagnosticar. Va aparte, con su propia decisión.
-// - NO intercepta peticiones. Sin `fetch` no puede degradar nada que hoy
-//   funcione.
+// - Guarda la aplicación al instalarse, para que se pueda abrir sin señal.
+// - Guarda los catálogos del formulario, sin los cuales no hay nada que dibujar.
+// - Envía las fichas de la cola cuando vuelve la conexión, aunque el censador ya
+//   haya cerrado el navegador.
+//
+// Lo que sigue SIN guardarse, y esa es la regla que ordena todo: cualquier otra
+// respuesta de la API. Llevan nombres, cédulas y direcciones de hogares
+// damnificados, y servir eso rancio desde un teléfono sería un problema serio.
 //
 // El Service Worker solo corre en contexto seguro. De ahí la cabecera HSTS del
 // .htaccess: sin ella, quien entre por http:// se queda sin envío en segundo
 // plano y sin enterarse.
 
 import { base, build, files, version } from '$service-worker';
+import { RUTA_PLANTILLA } from '$lib/ficha-pdf/coordenadas';
+import { seGuardaDeLaApi } from '$lib/offline/cacheables';
 import { baseApi, ErrorDeRed, subirFotosDe } from '$lib/rufe-form/subida';
 import {
 	ETIQUETA_SYNC,
@@ -51,6 +53,15 @@ const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `sgr-${version}`;
 
 /**
+ * Caché aparte para las respuestas de la API que sí se pueden guardar.
+ *
+ * Hoy es UNA sola: los catálogos del formulario. Va separada del armazón para
+ * que se vea de un vistazo qué datos vive el teléfono y para poder vaciarla sin
+ * tocar la aplicación guardada.
+ */
+const CACHE_DATOS = `sgr-datos-${version}`;
+
+/**
  * El armazón: lo que hay que tener guardado para que la aplicación arranque.
  *
  * Se deja fuera lo que no sirve sin conexión o que el servidor ni siquiera
@@ -67,7 +78,7 @@ const FUERA = [
 	// instalación le costaría esos datos a cada censador que solo va a levantar
 	// fichas. Se guarda igual la primera vez que alguien lo usa, así que a partir
 	// de ahí la descarga funciona sin conexión.
-	'/formatos/rufe-fr-1703-smd-69-v01.pdf'
+	RUTA_PLANTILLA
 ];
 
 const ARMAZON = [`${base}/`, ...build, ...files].filter(
@@ -110,7 +121,7 @@ sw.addEventListener('activate', (evento) => {
 			// Fuera las cachés de versiones anteriores.
 			await Promise.all(
 				(await caches.keys())
-					.filter((n) => n.startsWith('sgr-') && n !== CACHE)
+					.filter((n) => n.startsWith('sgr-') && n !== CACHE && n !== CACHE_DATOS)
 					.map((n) => caches.delete(n))
 			);
 
@@ -143,11 +154,41 @@ sw.addEventListener('fetch', (evento) => {
 	// dominios y necesitan datos frescos; que pasen de largo.
 	if (url.origin !== sw.location.origin) return;
 
-	// La API nunca se guarda.
-	if (url.pathname.startsWith('/api/')) return;
+	if (url.pathname.startsWith('/api/')) {
+		// De la API solo se guarda lo que está en la lista, y nada más.
+		if (seGuardaDeLaApi(url.pathname)) {
+			e.respondWith(responderCatalogos(peticion, url));
+		}
+
+		return;
+	}
 
 	e.respondWith(responder(peticion, url));
 });
+
+/**
+ * Los catálogos: primero la red, y si no hay, la copia guardada.
+ *
+ * En ese orden porque un catálogo nuevo —un corregimiento que se suma, un tipo
+ * de bien que se corrige— debe verse en cuanto haya señal. La copia es la red de
+ * seguridad para la vereda, no la fuente habitual.
+ */
+async function responderCatalogos(peticion: Request, url: URL): Promise<Response> {
+	const cache = await caches.open(CACHE_DATOS);
+
+	try {
+		const red = await fetch(peticion);
+
+		if (red.ok) void cache.put(url.pathname, red.clone());
+
+		return red;
+	} catch {
+		const guardado = await cache.match(url.pathname);
+		if (guardado) return guardado;
+
+		throw new Error('Sin conexión y sin catálogos guardados.');
+	}
+}
 
 async function responder(peticion: Request, url: URL): Promise<Response> {
 	const cache = await caches.open(CACHE);

@@ -24,11 +24,12 @@ import {
 	MARCAS,
 	PAGINA,
 	PIE,
+	RUTA_PLANTILLA,
 	UBICACION
 } from './coordenadas';
 import { ajustar, anioCompleto, enLineas, paraPdf, partirFecha } from './texto';
 
-export const RUTA_PLANTILLA = '/formatos/rufe-fr-1703-smd-69-v01.pdf';
+export { RUTA_PLANTILLA };
 
 const TINTA = rgb(0.05, 0.09, 0.15);
 

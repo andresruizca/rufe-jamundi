@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	NAV_ITEMS,
 	RUTAS_PUBLICAS,
+	RUTAS_SIN_CONEXION,
 	esRutaPublica,
+	funcionaSinConexion,
 	menuParaRol,
 	puedeAcceder,
 	resolverTitulo
@@ -110,5 +112,27 @@ describe('títulos', () => {
 		);
 		expect(resolverTitulo('/riesgo/pendientes')).toBe('Fichas pendientes de enviar');
 		expect(resolverTitulo('/riesgo/reportes')).toBe('Fichas RUFE registradas');
+	});
+});
+
+describe('rutas que funcionan sin conexión', () => {
+	it('son exactamente las dos del trabajo de campo', () => {
+		// Ampliar esta lista abre una pantalla sin que el servidor haya confirmado
+		// la sesión. Que obligue a tocar la prueba es justamente la intención.
+		expect(RUTAS_SIN_CONEXION).toEqual(['/riesgo/reportar', '/riesgo/pendientes']);
+	});
+
+	it('las secciones que leen del servidor no están', () => {
+		for (const ruta of ['/dashboard', '/riesgo/reportes', '/riesgo/mapas', '/admin/usuarios']) {
+			expect(funcionaSinConexion(ruta)).toBe(false);
+		}
+	});
+
+	it('toda ruta sin conexión existe en el menú', () => {
+		// Una entrada mal escrita aquí no rompería nada visible: simplemente el
+		// censador se encontraría con «necesita conexión» en plena vereda.
+		for (const ruta of RUTAS_SIN_CONEXION) {
+			expect(NAV_ITEMS.some((i) => i.href === ruta)).toBe(true);
+		}
 	});
 });

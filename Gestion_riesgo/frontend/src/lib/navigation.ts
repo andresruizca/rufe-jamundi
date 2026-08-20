@@ -46,6 +46,28 @@ export function esRutaPublica(ruta: string): boolean {
 	return RUTAS_PUBLICAS.includes(ruta);
 }
 
+/**
+ * Rutas que siguen funcionando sin conexión, con la sesión guardada en el
+ * teléfono y sin que el servidor la haya confirmado.
+ *
+ * Son exactamente las dos del trabajo de campo: levantar una ficha y vigilar las
+ * que aún no salieron. Ambas trabajan contra el teléfono —el formulario, sus
+ * catálogos guardados y la cola en IndexedDB—, así que sin señal tienen todo lo
+ * que necesitan.
+ *
+ * El resto del sistema lee del servidor: el tablero, la bandeja, el mapa y la
+ * administración no tendrían nada que mostrar. Ahí se avisa, en vez de fingir.
+ *
+ * La lista vive aquí, junto a `RUTAS_PUBLICAS`, por la misma razón: ampliar lo
+ * que se abre sin comprobar contra el servidor debe ser una decisión visible en
+ * un solo archivo, no un `if` escondido en el layout.
+ */
+export const RUTAS_SIN_CONEXION: string[] = ['/riesgo/reportar', '/riesgo/pendientes'];
+
+export function funcionaSinConexion(ruta: string): boolean {
+	return RUTAS_SIN_CONEXION.includes(ruta);
+}
+
 export const ROLES = {
 	ADMINISTRADOR: 'ADMINISTRADOR',
 	GESTOR: 'GESTOR',

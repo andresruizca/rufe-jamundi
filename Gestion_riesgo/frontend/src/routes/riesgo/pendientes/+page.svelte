@@ -12,7 +12,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
-		CheckCircle2, CloudOff, LoaderCircle, RefreshCw, Trash2, TriangleAlert
+		CheckCircle2, CloudOff, LoaderCircle, RefreshCw, Trash2, TriangleAlert, DownloadCloud, Smartphone
 	} from '@lucide/svelte';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import {
@@ -24,6 +24,8 @@
 	} from '$lib/rufe-form/cola';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 	import { tamanoLegible } from '$lib/rufe-form/imagen';
+	import { preparacion } from '$lib/offline/estado.svelte';
+	import { estaInstalada } from '$lib/offline/preparar';
 
 	let fichas = $state<FichaEnCola[]>([]);
 	let fotosPorFicha = $state<Record<string, number>>({});
@@ -31,12 +33,20 @@
 	let enLinea = $state(true);
 	let espacio = $state<{ usado: number; total: number } | null>(null);
 	let confirmandoBorrado = $state<string | null>(null);
+	let instalada = $state(true);
 
 	const envio = new GestorEnvio();
 	let detener: (() => void) | null = null;
 
 	onMount(() => {
 		enLinea = navigator.onLine;
+		instalada = estaInstalada();
+
+		// Se comprueba al entrar, no solo cuando alguien pulsa un botón: esta es la
+		// pantalla que se mira antes de salir a campo, y la pregunta que trae quien
+		// la abre es «¿puedo irme ya?».
+		void preparacion.ejecutar();
+
 		const conectar = () => {
 			enLinea = true;
 			void refrescar();
@@ -242,6 +252,73 @@
 			recuperarla, porque nunca llegó a la Alcaldía.
 		</p>
 	{/if}
+</div>
+
+<!-- Preparación para trabajar sin internet.
+     Va antes de «Cómo funciona» porque no es teoría: es la respuesta a si se
+     puede salir ya a la vereda o todavía falta descargar algo. -->
+<div class="tarjeta">
+	<h2 class="tarjeta__titulo">Trabajar sin internet</h2>
+
+	{#if preparacion.trabajando}
+		<p class="cargando">
+			<LoaderCircle size={18} class="girando" aria-hidden="true" />
+			Descargando lo necesario para trabajar sin señal…
+		</p>
+	{:else if preparacion.parte?.listo}
+		<p class="aviso aviso--ok" role="status">
+			<CheckCircle2 size={15} aria-hidden="true" />
+			Listo para trabajar sin internet. El formulario está guardado en este teléfono.
+		</p>
+	{:else if preparacion.parte}
+		<p class="aviso aviso--error" role="status">
+			<TriangleAlert size={15} aria-hidden="true" />
+			Todavía falta descargar {preparacion.parte.faltantes.join(', ')}. Con señal, pulse «Preparar
+			este teléfono».
+		</p>
+	{:else if !enLinea}
+		<p class="aviso aviso--info" role="status">
+			<CloudOff size={15} aria-hidden="true" />
+			Sin señal no se puede comprobar la preparación. Vuelva a abrir esta pantalla con conexión.
+		</p>
+	{/if}
+
+	<ul class="explicacion">
+		<li>
+			El formulario, sus listas de opciones y la aplicación quedan guardados en el teléfono.
+		</li>
+		<li>
+			Las fichas y sus fotos se guardan aquí y se envían solas al recuperar la señal.
+		</li>
+		<li>
+			<strong>Las consultas no funcionan sin señal:</strong> el tablero, Reportes RUFE y el mapa
+			leen del servidor.
+		</li>
+	</ul>
+
+	{#if !instalada}
+		<p class="aviso aviso--info" role="status">
+			<Smartphone size={15} aria-hidden="true" />
+			Instale la aplicación desde el menú lateral. Sin instalar, el teléfono puede borrar lo
+			guardado —fichas incluidas— cuando le falte espacio.
+		</p>
+	{/if}
+
+	<div class="acciones">
+		<button
+			type="button"
+			class="boton"
+			onclick={() => preparacion.ejecutar()}
+			disabled={!enLinea || preparacion.trabajando}
+		>
+			<DownloadCloud size={15} aria-hidden="true" />
+			Preparar este teléfono
+		</button>
+
+		{#if !enLinea}
+			<span class="acciones__nota">Necesita conexión para descargar lo que falte.</span>
+		{/if}
+	</div>
 </div>
 
 <div class="tarjeta">

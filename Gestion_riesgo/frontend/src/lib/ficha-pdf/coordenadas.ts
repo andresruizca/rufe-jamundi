@@ -11,6 +11,15 @@
 // dibujar. Mezclar los dos sistemas es la forma más fácil de que todo quede
 // desplazado sin entender por qué.
 
+/**
+ * Dónde vive el formato oficial en blanco.
+ *
+ * Está aquí, y no junto al código que dibuja, porque lo necesitan tres sitios
+ * que no deben cargar la librería de PDF: el Service Worker, que decide si lo
+ * guarda, y la preparación para trabajar sin conexión, que lo descarga.
+ */
+export const RUTA_PLANTILLA = '/formatos/rufe-fr-1703-smd-69-v01.pdf';
+
 /** Tamaño de la página del formato: Carta horizontal. */
 export const PAGINA = { ancho: 792, alto: 612 };
 

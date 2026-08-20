@@ -3,13 +3,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { Menu, LoaderCircle } from '@lucide/svelte';
+	import { Menu, LoaderCircle, WifiOff } from '@lucide/svelte';
 	import '$lib/theme.css';
 	import '$lib/shell.css';
 	import MenuLateral from '$lib/components/layout/MenuLateral.svelte';
 	import BotonArriba from '$lib/components/layout/BotonArriba.svelte';
 	import escudo from '$lib/assets/logo-jamundi.svg';
-	import { resolverTitulo, puedeAcceder, esRutaPublica } from '$lib/navigation';
+	import { resolverTitulo, puedeAcceder, esRutaPublica, funcionaSinConexion } from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
 
 	let { children } = $props();
@@ -36,6 +36,25 @@
 	/** Hay una versión nueva guardada y esperando a que se recargue. */
 	let versionNueva = $state(false);
 
+	/**
+	 * A dónde llevar a alguien que entró sin conexión.
+	 *
+	 * Al formulario, que es lo único que puede hacer; y si su rol no lo deja
+	 * escribir, al tablero, que al menos le explicará que necesita conexión.
+	 */
+	const inicioSinConexion = $derived(
+		puedeAcceder('/riesgo/reportar', sesion.rol) ? '/riesgo/reportar' : '/dashboard'
+	);
+
+	/**
+	 * Esta pantalla lee del servidor y la sesión no está confirmada: no hay nada
+	 * que mostrar. Se avisa aquí en vez de dejar que la página pida datos y
+	 * enseñe su propio error, que sonaría a avería del sistema.
+	 */
+	const necesitaConexion = $derived(
+		sesion.autenticado && !sesion.verificada && !funcionaSinConexion(ruta)
+	);
+
 	onMount(() => {
 		void sesion.restaurar();
 
@@ -49,13 +68,27 @@
 		};
 		navigator.serviceWorker?.addEventListener('message', alMensaje);
 
+		// Al recuperar la señal, lo primero es confirmar la sesión: mientras siga
+		// sin verificar, el sistema tiene medio menú cerrado, y quien acaba de
+		// llegar al casco urbano no tiene por qué recargar a mano para recuperarlo.
+		// De paso se le pide al Service Worker que vacíe la cola sin esperar a su
+		// propio evento, que puede tardar minutos.
+		const alVolverLaRed = () => {
+			void sesion.restaurar();
+			navigator.serviceWorker?.controller?.postMessage({ tipo: 'enviar-pendientes' });
+		};
+		window.addEventListener('online', alVolverLaRed);
+
 		// El estado del menú se recuerda entre visitas, pero nunca se abre solo
 		// en pantallas estrechas: ahí tapa todo el contenido.
 		if (!esEstrecha() && window.localStorage.getItem(CLAVE_MENU) === '1') {
 			menuAbierto = true;
 		}
 
-		return () => navigator.serviceWorker?.removeEventListener('message', alMensaje);
+		return () => {
+			navigator.serviceWorker?.removeEventListener('message', alMensaje);
+			window.removeEventListener('online', alVolverLaRed);
+		};
 	});
 
 	function alternarMenu() {
@@ -92,7 +125,9 @@
 		// Quien ya tiene sesión no debe quedarse en el login. Va antes que la
 		// excepción pública porque /login también está en esa lista.
 		if (sesion.autenticado && esLogin) {
-			void goto('/dashboard', { replaceState: true });
+			// Sin conexión no se manda a nadie al tablero: no puede cargar nada y la
+			// primera impresión sería que el sistema está roto.
+			void goto(sesion.verificada ? '/dashboard' : inicioSinConexion, { replaceState: true });
 
 			return;
 		}
@@ -193,6 +228,21 @@
 				</nav>
 			</header>
 
+			{#if sesion.sinConexion}
+				<!--
+					La franja se queda mientras dure la falta de señal. Es lo que
+					sostiene la confianza en campo: sin ella, el censador no sabe si lo
+					que está escribiendo se está guardando en alguna parte.
+				-->
+				<p class="aviso-sin-red" role="status">
+					<WifiOff size={15} aria-hidden="true" />
+					<span>
+						Sin conexión. Las fichas se guardan en el teléfono y se envían solas cuando vuelva la
+						señal.
+					</span>
+				</p>
+			{/if}
+
 			{#if versionNueva}
 				<p class="aviso-version" role="status">
 					<span>Hay una versión nueva del sistema.</span>
@@ -202,8 +252,25 @@
 				</p>
 			{/if}
 
-			<main class="pagina" class:pagina--sin-relleno={ruta === '/dashboard'}>
-				{@render children?.()}
+			<main class="pagina" class:pagina--sin-relleno={ruta === '/dashboard' && !necesitaConexion}>
+				{#if necesitaConexion}
+					<div class="sin-red">
+						<WifiOff size={28} aria-hidden="true" />
+						<h2>Esta sección necesita conexión</h2>
+						<p>
+							{titulo} lee la información del servidor, así que sin señal no hay nada que mostrar.
+						</p>
+						<p class="sin-red__nota">
+							Lo que sí funciona sin internet es levantar fichas: se guardan en el teléfono y se
+							envían solas cuando vuelva la señal.
+						</p>
+						{#if puedeAcceder('/riesgo/reportar', sesion.rol)}
+							<a class="boton boton--principal" href="/riesgo/reportar">Registrar una ficha</a>
+						{/if}
+					</div>
+				{:else}
+					{@render children?.()}
+				{/if}
 			</main>
 
 			<!-- Con el menú abierto no se muestra: quedaría flotando sobre el velo y
