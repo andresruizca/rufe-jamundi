@@ -693,10 +693,28 @@ h3 {
 	position: fixed;
 	inset: 0;
 	background: rgb(6 20 40 / 55%);
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	padding: 1rem;
 	z-index: 80;
+}
+
+/*
+ * En el teléfono la ventana se mide de otra forma.
+ *
+ * `vh` se refiere SIEMPRE a la pantalla con la barra del navegador escondida,
+ * aunque esté a la vista. Así que un modal de `90vh` puede ser más alto que lo
+ * que de verdad se ve, y lo primero que se pierde por abajo son los botones de
+ * Guardar y Cancelar: el formulario parecía no tener salida.
+ *
+ * `dvh` mide lo que hay de verdad en cada momento, barra incluida y teclado
+ * incluido. Se deja `vh` primero como respaldo para navegadores viejos.
+ */
+@supports (height: 100dvh) {
+	.modal-fondo {
+		height: 100dvh;
+	}
 }
 
 .modal {
@@ -705,14 +723,29 @@ h3 {
 	width: min(520px, 100%);
 	max-height: 90vh;
 	overflow-y: auto;
+
+	/* Sin esto, al llegar al final del modal el desplazamiento sigue en la página
+	   de detrás: se cierra el teclado y uno acaba en otro punto de la pantalla. */
+	overscroll-behavior: contain;
+
 	padding: 1.35rem;
 	box-shadow: 0 18px 50px rgb(10 30 60 / 28%);
+}
+
+@supports (max-height: 90dvh) {
+	.modal {
+		max-height: 90dvh;
+	}
 }
 
 .modal__titulo {
 	margin: 0 0 1rem;
 	font-size: 1.1rem;
 	font-weight: 700;
+
+	/* «Editar a Fulanito de Tal y Tal» o un correo largo desbordaban el modal a lo
+	   ancho en una pantalla estrecha. */
+	overflow-wrap: anywhere;
 }
 
 .modal__acciones {
@@ -721,6 +754,24 @@ h3 {
 	justify-content: flex-end;
 	margin-top: 1.2rem;
 	flex-wrap: wrap;
+}
+
+/* En pantalla estrecha los botones ocupan el ancho y se apilan, en vez de
+   quedar apretados en una esquina donde es fácil pulsar el que no es. */
+@media (max-width: 480px) {
+	.modal {
+		padding: 1.1rem;
+	}
+
+	.modal__acciones {
+		flex-direction: column-reverse;
+		gap: 0.5rem;
+	}
+
+	.modal__acciones .boton {
+		width: 100%;
+		justify-content: center;
+	}
 }
 
 /* ── Formularios largos (RUFE ciudadano) ─────────────────────────────────────

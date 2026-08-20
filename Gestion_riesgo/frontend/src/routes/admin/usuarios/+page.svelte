@@ -65,6 +65,31 @@
 		modo = { tipo: 'cerrado' };
 	}
 
+	/**
+	 * Escape cierra el modal, salvo mientras se está guardando: cortar a mitad de
+	 * un guardado deja al usuario sin saber si el cambio se aplicó.
+	 */
+	function alPulsar(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || modo.tipo === 'cerrado' || guardando) return;
+
+		cerrar();
+		e.preventDefault();
+	}
+
+	// Con el modal abierto, la página de detrás no debe desplazarse. En el
+	// teléfono era especialmente confuso: al aparecer el teclado, el fondo se
+	// movía y el formulario parecía irse de la pantalla.
+	$effect(() => {
+		if (modo.tipo === 'cerrado') return;
+
+		const previo = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+
+		return () => {
+			document.body.style.overflow = previo;
+		};
+	});
+
 	/** Traduce cualquier fallo de la API a los mensajes del formulario. */
 	function manejarError(e: unknown, porDefecto: string) {
 		if (e instanceof ApiError) {
@@ -244,6 +269,8 @@
 		</div>
 	</div>
 {/if}
+
+<svelte:window onkeydown={alPulsar} />
 
 <!-- ── Ventanas modales ── -->
 {#if modo.tipo === 'crear' || modo.tipo === 'editar'}
