@@ -304,6 +304,49 @@ final class MapaController
     }
 
     /**
+     * Vuelve a poner en cola todas las direcciones para ubicarlas otra vez.
+     *
+     * Hace falta cuando el geocodificador mejora: lo ya guardado se calculó con
+     * las reglas viejas y no se recalcula solo, porque la caché existe justamente
+     * para no volver a preguntar. Sin esto, una corrección del buscador no arregla
+     * ni uno solo de los puntos que ya están mal.
+     *
+     * Las corregidas a mano NO se tocan. Son trabajo de una persona que miró el
+     * mapa y movió el punto al sitio correcto; volver a preguntarle al servicio lo
+     * desharía, y en ese caso el servicio ya demostró que se equivocaba.
+     *
+     * Las filas no se borran: se les quitan las coordenadas y se pone el contador
+     * de intentos a cero. Así se conserva el texto de la dirección y no hay que
+     * volver a recogerlo del censo.
+     */
+    public function reubicar(Request $req): void
+    {
+        $usuario = Auth::exigirUsuario($req);
+
+        $manuales = (int) (Db::first(
+            "SELECT COUNT(*) AS t FROM rufe_geocodificacion WHERE fuente = 'MANUAL'"
+        )['t'] ?? 0);
+
+        $afectadas = Db::exec(
+            "UPDATE rufe_geocodificacion
+                SET latitud = NULL, longitud = NULL, precision_geo = 'FALLIDA',
+                    fuente = NULL, etiqueta = NULL, intentos = 0, ultimo_intento = NULL
+              WHERE fuente IS NULL OR fuente <> 'MANUAL'"
+        );
+
+        Auditoria::registrar(
+            $req,
+            'mapa.ubicaciones_reencoladas',
+            $usuario,
+            'rufe_geocodificacion',
+            null,
+            $afectadas.' reencoladas, '.$manuales.' corregidas a mano conservadas'
+        );
+
+        Response::ok(['reencoladas' => $afectadas, 'conservadas' => $manuales]);
+    }
+
+    /**
      * Corrige a mano un punto mal ubicado.
      *
      * Con direcciones de censo escritas a la carrera esto no es un caso raro

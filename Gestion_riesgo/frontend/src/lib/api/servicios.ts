@@ -157,6 +157,9 @@ export const mapaApi = {
 			{}
 		),
 
+	reubicar: () =>
+		api.post<{ reencoladas: number; conservadas: number }>('/mapa/reubicar', {}),
+
 	corregir: (clave: string, latitud: number, longitud: number) =>
 		api.put<{ clave: string }>(`/mapa/ubicaciones/${clave}`, { latitud, longitud })
 };

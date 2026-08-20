@@ -8,7 +8,7 @@
 	// esté abierta.
 
 	import { onDestroy, onMount } from 'svelte';
-	import { LoaderCircle, MapPinned, Play, Square, TriangleAlert } from '@lucide/svelte';
+	import { LoaderCircle, MapPinned, Play, RefreshCw, Square, TriangleAlert } from '@lucide/svelte';
 	import { mapaApi } from '$lib/api/servicios';
 	import { ApiError } from '$lib/api/client';
 
@@ -28,6 +28,9 @@
 	let ubicadas = $state(0);
 
 	let detener = false;
+	let confirmandoRehacer = $state(false);
+	let rehaciendo = $state(false);
+	let resultadoRehacer = $state<string | null>(null);
 
 	const ETIQUETA: Record<string, string> = {
 		EXACTA: 'Ubicación exacta',
@@ -62,6 +65,31 @@
 			error = e instanceof ApiError ? e.message : 'No se pudo leer el estado.';
 		} finally {
 			cargando = false;
+		}
+	}
+
+	/**
+	 * Vuelve a poner todas las direcciones en cola.
+	 *
+	 * Hace falta cuando el buscador mejora: lo ya guardado se calculó con las
+	 * reglas viejas y no se recalcula solo, porque la caché existe justamente para
+	 * no volver a preguntar.
+	 */
+	async function rehacer() {
+		rehaciendo = true;
+		error = null;
+
+		try {
+			const r = await mapaApi.reubicar();
+			resultadoRehacer =
+				`${r.reencoladas} direcciones vuelven a la cola.` +
+				(r.conservadas > 0 ? ` Se conservan ${r.conservadas} corregidas a mano.` : '');
+			confirmandoRehacer = false;
+			await refrescar();
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : 'No se pudieron reencolar.';
+		} finally {
+			rehaciendo = false;
 		}
 	}
 
@@ -125,6 +153,41 @@
 			</div>
 		</div>
 
+		{#if confirmandoRehacer}
+			<div class="aviso aviso--alerta">
+				<p>
+					<strong>Se vuelven a ubicar todas las direcciones desde cero.</strong> Es lo que hay que
+					hacer cuando el buscador mejora: lo ya guardado se calculó con las reglas anteriores y no
+					se recalcula solo.
+				</p>
+				<p>
+					Las <strong>corregidas a mano no se tocan</strong>. Después habrá que volver a pulsar
+					«Ubicar las pendientes», y tardará lo mismo que la primera vez.
+				</p>
+				<div class="acciones">
+					<button type="button" class="boton" onclick={rehacer} disabled={rehaciendo}>
+						{#if rehaciendo}
+							<LoaderCircle size={15} class="girando" aria-hidden="true" />
+							Reencolando…
+						{:else}
+							Sí, rehacer todas
+						{/if}
+					</button>
+					<button
+						type="button"
+						class="boton boton--suave"
+						onclick={() => (confirmandoRehacer = false)}
+					>
+						Cancelar
+					</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if resultadoRehacer}
+			<p class="aviso aviso--ok" role="status">{resultadoRehacer}</p>
+		{/if}
+
 		<table class="tabla">
 			<thead>
 				<tr><th>Resultado</th><th class="num">Direcciones</th></tr>
@@ -140,6 +203,18 @@
 		</table>
 
 		<div class="acciones">
+			{#if !corriendo && !confirmandoRehacer}
+				<button
+					type="button"
+					class="boton boton--suave"
+					onclick={() => (confirmandoRehacer = true)}
+					disabled={rehaciendo}
+				>
+					<RefreshCw size={15} aria-hidden="true" />
+					Rehacer todas
+				</button>
+			{/if}
+
 			{#if corriendo}
 				<button type="button" class="boton boton--suave" onclick={() => (detener = true)}>
 					<Square size={15} aria-hidden="true" />

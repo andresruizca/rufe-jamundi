@@ -144,6 +144,7 @@ $router->post('/mapa/ubicaciones', [$mapa, 'ubicaciones'], Auth::TODOS);
 $router->put('/mapa/ubicaciones/{clave}', [$mapa, 'corregir'], Auth::ESCRITURA);
 $router->get('/mapa/estado', [$mapa, 'estado'], $soloAdmin);
 $router->post('/mapa/geocodificar', [$mapa, 'geocodificar'], $soloAdmin);
+$router->post('/mapa/reubicar', [$mapa, 'reubicar'], $soloAdmin);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
