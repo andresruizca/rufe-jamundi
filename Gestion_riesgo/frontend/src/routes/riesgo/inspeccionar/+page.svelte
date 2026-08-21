@@ -41,6 +41,7 @@
 		type IdPaso
 	} from '$lib/inspeccion-form/esquema';
 	import { determinarCombo, motivoDelCombo } from '$lib/inspeccion-form/combo';
+	import { explicarCombo } from '$lib/inspeccion-form/explicacion';
 	import { materialesDe } from '$lib/inspeccion-form/materiales';
 	import { pasoDelError, validarPaso, validarTodo, hoy } from '$lib/inspeccion-form/validacion';
 	import {
@@ -104,6 +105,21 @@
 							.find((n) => n.codigo === c)?.etiqueta ?? c
 				)
 			: ''
+	);
+
+	// De dónde sale el combo, para el desplegable de auditoría. No recalcula
+	// nada: toma `resultado` como un hecho y lo reordena para enseñarlo.
+	const explicacion = $derived(
+		catalogos
+			? explicarCombo(
+					catalogos,
+					datos.sistema_constructivo,
+					elementosDe(datos, catalogos),
+					nivelesPorElemento(datos),
+					resultado,
+					datos.colapso_total
+				)
+			: { regla: '', colapsoTotal: false, filas: [], escala: [], mapa: [] }
 	);
 
 	// Los materiales salen del Anexo 2 que vino en los catálogos, así que la
@@ -726,6 +742,7 @@
 					<ResultadoCombo
 						{resultado}
 						{motivo}
+						{explicacion}
 						{materiales}
 						kits={kitsCubiertaDe(datos, catalogos)}
 						bind:kitCubierta={datos.kit_cubierta}

@@ -15,14 +15,17 @@
 	// calcula el servidor. Coinciden porque las dos implementaciones ejecutan la
 	// misma tabla de casos.
 
-	import { Info, PackageCheck, TriangleAlert } from '@lucide/svelte';
+	import { Info, PackageCheck, Scale, TriangleAlert } from '@lucide/svelte';
 	import CampoOpciones from '$lib/rufe-form/componentes/CampoOpciones.svelte';
 	import type { ResultadoCombo } from '../combo';
+	import type { Explicacion } from '../explicacion';
 	import type { ListaMateriales } from '../detalle';
 
 	type Props = {
 		resultado: ResultadoCombo;
 		motivo: string;
+		/** La cadena de razonamiento, para el desplegable de auditoría. */
+		explicacion: Explicacion;
 		materiales: ListaMateriales | null;
 		kits: { codigo: string; etiqueta: string }[];
 		kitCubierta: string;
@@ -34,6 +37,7 @@
 	let {
 		resultado,
 		motivo,
+		explicacion,
 		materiales,
 		kits,
 		kitCubierta = $bindable(''),
@@ -65,6 +69,143 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+<!--
+	De dónde sale la decisión, para quien la revisa.
+
+	Va cerrado: lo primero que hay que ver sigue siendo el combo. Pero de aquí
+	sale una entrega de materiales públicos, y una decisión que reparte recursos
+	sin poder auditarse se parece demasiado a una decisión arbitraria.
+
+	Se muestra TAMBIÉN cuando no corresponde combo, que es cuando más falta hace:
+	esa es la familia que va a preguntar por qué no le dan nada.
+
+	`<details>` nativo y no el patrón de botón + `{#if}` de `TablaEvaluacion`:
+	aquí no hay que recordar el estado de varios desplegables a la vez, y el
+	elemento nativo ya trae teclado y semántica sin una línea de código.
+-->
+{#if explicacion.mapa.length > 0}
+	<details class="porque">
+		<summary class="porque__resumen">
+			<Scale size={15} aria-hidden="true" />
+			<span>¿De dónde sale esta decisión?</span>
+		</summary>
+
+		<div class="porque__cuerpo">
+			<!-- La norma, citada. Quien revisa tiene que ver la regla, no mi resumen. -->
+			<blockquote class="regla">
+				{explicacion.regla}
+				<cite>Numeral 6 del formato</cite>
+			</blockquote>
+
+			{#if explicacion.colapsoTotal}
+				<p class="porque__nota">
+					Se marcó <strong>colapso estructural total</strong>. El formato indica marcar solo esa
+					casilla, así que la tabla por elementos del numeral 5.4 no se diligencia y el combo sale
+					directamente de ahí.
+				</p>
+			{:else}
+				<section class="bloque">
+					<h4 class="bloque__titulo">Hasta dónde llegó el daño estructural</h4>
+					<ol class="escala">
+						{#each explicacion.escala as peldano (peldano.codigo)}
+							<li
+								class="escala__paso escala__paso--{peldano.codigo.toLowerCase()}"
+								class:escala__paso--alcanzado={peldano.alcanzado}
+								class:escala__paso--marcado={peldano.esElNivel}
+								aria-current={peldano.esElNivel ? 'step' : undefined}
+							>
+								<span class="escala__barra" aria-hidden="true"></span>
+								<span class="escala__nombre">{peldano.etiqueta}</span>
+								{#if peldano.esElNivel}
+									<span class="escala__alcance">{peldano.alcance}</span>
+								{/if}
+							</li>
+						{/each}
+					</ol>
+				</section>
+
+				<section class="bloque">
+					<h4 class="bloque__titulo">Lo que se evaluó, elemento por elemento</h4>
+					<div class="desliza">
+						<table class="detalle">
+							<thead>
+								<tr>
+									<th scope="col">Elemento</th>
+									<th scope="col">Nivel</th>
+									<th scope="col">¿Decide?</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each explicacion.filas as fila (fila.codigo)}
+									<tr class:detalle__fila--decide={fila.decide}>
+										<td>
+											{fila.etiqueta}
+											{#if fila.estructural}
+												<span class="marca">estructural</span>
+											{/if}
+										</td>
+										<td>
+											{#if fila.nivel}
+												<span class="chip chip--{fila.nivel.toLowerCase()}">{fila.nivelEtiqueta}</span>
+											{:else}
+												<span class="detalle__sin">No afectado</span>
+											{/if}
+										</td>
+										<td>
+											{#if fila.decide}
+												<strong class="detalle__decide">Fija el combo</strong>
+											{:else if fila.estructural}
+												<span class="detalle__sin">No es el peor</span>
+											{:else}
+												<span class="detalle__sin">No decide</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<p class="porque__nota">
+						Los elementos <strong>no estructurales</strong> se registran y quedan en el expediente,
+						pero no cambian el combo: una cubierta destruida sobre una estructura intacta no
+						convierte el caso en severo. Entregar de más ahí dejaría sin materiales otra vivienda
+						donde la estructura sí cedió.
+					</p>
+				</section>
+			{/if}
+
+			<section class="bloque">
+				<h4 class="bloque__titulo">Qué combo corresponde a cada nivel</h4>
+				<div class="desliza">
+					<table class="detalle">
+						<thead>
+							<tr>
+								<th scope="col">Nivel estructural</th>
+								<th scope="col">Combo</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each explicacion.mapa as fila (fila.nivel)}
+								<tr class:detalle__fila--decide={fila.esElResultado}>
+									<td>
+										<span class="chip chip--{fila.nivel.toLowerCase()}">{fila.nivelEtiqueta}</span>
+									</td>
+									<td>
+										{fila.combo}
+										{#if fila.esElResultado}
+											<strong class="detalle__decide">← el de esta vivienda</strong>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		</div>
+	</details>
 {/if}
 
 {#if kits.length > 0}
@@ -164,6 +305,228 @@
 		margin: 0.15rem 0 0;
 		font-size: 0.83rem;
 		line-height: 1.4;
+	}
+
+	/* ── El desplegable del porqué ─────────────────────────────────────────── */
+
+	.porque {
+		margin: -0.6rem 0 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.6rem;
+		background: var(--color-surface);
+		overflow: hidden;
+	}
+
+	.porque__resumen {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		min-height: 2.6rem;
+		padding: 0.5rem 0.7rem;
+		background: var(--color-surface-alt);
+		font-size: 0.83rem;
+		font-weight: 600;
+		color: var(--color-text);
+		cursor: pointer;
+		list-style: none;
+	}
+
+	/* Safari dibuja su propio triángulo y descoloca la fila. */
+	.porque__resumen::-webkit-details-marker {
+		display: none;
+	}
+
+	.porque__resumen::after {
+		content: '▾';
+		margin-left: auto;
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+
+	.porque[open] .porque__resumen::after {
+		content: '▴';
+	}
+
+	.porque__cuerpo {
+		padding: 0.8rem 0.7rem 0.9rem;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.regla {
+		margin: 0 0 1rem;
+		padding: 0.55rem 0.75rem;
+		border-left: 3px solid var(--color-primary);
+		background: var(--color-surface-alt);
+		font-size: 0.83rem;
+		line-height: 1.5;
+		font-style: italic;
+	}
+
+	.regla cite {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.72rem;
+		font-style: normal;
+		color: var(--color-muted);
+	}
+
+	.bloque + .bloque {
+		margin-top: 1.1rem;
+	}
+
+	.bloque__titulo {
+		margin: 0 0 0.5rem;
+		font-size: 0.76rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--color-muted);
+	}
+
+	/* La escala de gravedad: cuatro peldaños, apagados los que no se alcanzaron.
+	   Se lee de un vistazo hasta dónde llegó el daño de la estructura. */
+	.escala {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.escala__paso {
+		min-width: 0;
+	}
+
+	.escala__barra {
+		display: block;
+		height: 0.4rem;
+		border-radius: 999px;
+		background: var(--color-border);
+	}
+
+	.escala__nombre {
+		display: block;
+		margin-top: 0.3rem;
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		overflow-wrap: break-word;
+	}
+
+	.escala__alcance {
+		display: block;
+		font-size: 0.7rem;
+		color: var(--color-muted);
+	}
+
+	/* Los colores del anexo impreso, los mismos que la tabla del 5.4: quien viene
+	   del papel reconoce la escala sin leerla. */
+	.escala__paso--alcanzado.escala__paso--leve .escala__barra {
+		background: var(--nivel-leve);
+	}
+	.escala__paso--alcanzado.escala__paso--moderado .escala__barra {
+		background: var(--nivel-moderado);
+	}
+	.escala__paso--alcanzado.escala__paso--severo .escala__barra {
+		background: var(--nivel-severo);
+	}
+	.escala__paso--alcanzado.escala__paso--colapso_total .escala__barra {
+		background: var(--nivel-colapso);
+	}
+
+	.escala__paso--marcado .escala__nombre {
+		color: var(--color-text);
+		font-weight: 700;
+	}
+
+	/* En un teléfono estrecho la tabla se desplaza sola en vez de estirar la
+	   página entera. */
+	.desliza {
+		overflow-x: auto;
+	}
+
+	.detalle {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8rem;
+	}
+
+	.detalle th,
+	.detalle td {
+		padding: 0.4rem 0.5rem;
+		text-align: left;
+		vertical-align: top;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.detalle th {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+
+	.detalle tbody tr:last-child td {
+		border-bottom: 0;
+	}
+
+	.detalle__fila--decide {
+		background: var(--color-info-bg);
+	}
+
+	.detalle__decide {
+		color: var(--aviso-info-texto);
+		font-size: 0.76rem;
+		white-space: nowrap;
+	}
+
+	.detalle__sin {
+		color: var(--color-muted);
+	}
+
+	.marca {
+		display: inline-block;
+		margin-left: 0.3rem;
+		padding: 0.05rem 0.35rem;
+		border-radius: 999px;
+		background: var(--color-info-bg);
+		color: var(--aviso-info-texto);
+		font-size: 0.63rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		white-space: nowrap;
+	}
+
+	.chip {
+		display: inline-block;
+		padding: 0.05rem 0.4rem;
+		border: 1px solid currentcolor;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.chip--leve {
+		color: var(--nivel-leve);
+	}
+	.chip--moderado {
+		color: var(--nivel-moderado);
+	}
+	.chip--severo {
+		color: var(--nivel-severo);
+	}
+	.chip--colapso_total {
+		color: var(--nivel-colapso);
+	}
+
+	.porque__nota {
+		margin: 0.55rem 0 0;
+		font-size: 0.76rem;
+		line-height: 1.5;
+		color: var(--color-muted);
 	}
 
 	.materiales {

@@ -271,16 +271,16 @@
 	/* Los mismos colores del anexo impreso: amarillo, naranja, rojo y gris.
 	   Quien viene del papel reconoce la escala sin leerla. */
 	.nivel__nombre--leve {
-		color: #8a6d00;
+		color: var(--nivel-leve);
 	}
 	.nivel__nombre--moderado {
-		color: #a85700;
+		color: var(--nivel-moderado);
 	}
 	.nivel__nombre--severo {
-		color: var(--color-danger);
+		color: var(--nivel-severo);
 	}
 	.nivel__nombre--colapso_total {
-		color: var(--color-muted);
+		color: var(--nivel-colapso);
 	}
 
 	/* Colgado bajo su opción y sangrado a la altura del texto, para que se lea
