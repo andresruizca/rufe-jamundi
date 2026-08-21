@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	PASOS,
+	muestraProfesionOtra,
 	cumpleRequisitos,
 	danoVacio,
 	elementosDe,
@@ -295,5 +296,24 @@ describe('danoVacio', () => {
 	it('empieza sin contestar, no en «no afectado»', () => {
 		// Arrancar en «no» daría por evaluada una vivienda que nadie miró.
 		expect(danoVacio()).toEqual({ afectado: null, nivel: null });
+	});
+});
+
+describe('la profesión «Otra»', () => {
+	it('solo pide el texto cuando se elige «Otra»', () => {
+		expect(muestraProfesionOtra(form({ profesional_profesion: 'ARQUITECTO' }))).toBe(false);
+		expect(muestraProfesionOtra(form({ profesional_profesion: 'OTRA' }))).toBe(true);
+	});
+
+	it('cambiar de «Otra» a una de la lista no deja el texto escondido', () => {
+		// Si no, el expediente guardaría una profesión que el formulario ya no
+		// muestra y que nadie podría corregir.
+		const d = form({
+			requisitos: TRES_SI,
+			profesional_profesion: 'ARQUITECTO',
+			profesional_profesion_otra: 'Ingeniera sanitaria'
+		});
+
+		expect(limpiarCondicionales(d, CATALOGOS).profesional_profesion_otra).toBe('');
 	});
 });

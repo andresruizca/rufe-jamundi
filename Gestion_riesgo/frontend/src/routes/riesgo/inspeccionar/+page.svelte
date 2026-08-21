@@ -29,6 +29,7 @@
 		kitsCubiertaDe,
 		limpiarCondicionales,
 		muestraEventoOtro,
+		muestraProfesionOtra,
 		muestraTablaDanos,
 		nivelesPorElemento,
 		pasosConProgreso,
@@ -47,7 +48,6 @@
 	} from '$lib/inspeccion-form/borrador.svelte';
 	import type { Catalogos, FormularioInspeccion } from '$lib/inspeccion-form/tipos';
 	import type { ListaMateriales } from '$lib/inspeccion-form/detalle';
-	import { sesion } from '$lib/stores/sesion.svelte';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 
 	let catalogos = $state<Catalogos | null>(null);
@@ -116,6 +116,9 @@
 			: null
 	);
 
+	const opcionesProfesion = $derived(
+		(catalogos?.profesiones ?? []).map((p) => ({ valor: p.codigo, etiqueta: p.etiqueta }))
+	);
 	const opcionesEvento = $derived(
 		(catalogos?.eventos ?? []).map((e) => ({ valor: e.codigo, etiqueta: e.etiqueta }))
 	);
@@ -162,11 +165,13 @@
 			hayBorradorPrevio = true;
 			borrador.clave = previo.clave;
 		} else {
-			// La fecha de la visita es hoy en el 99 % de los casos, y el nombre del
-			// profesional es quien tiene la sesión abierta. Dos campos menos.
+			// Solo la fecha, que es hoy en el 99 % de los casos.
+			//
+			// El nombre NO se precarga con el de la sesión: quien tiene la
+			// aplicación abierta —un administrador, o quien prestó el teléfono— no
+			// es necesariamente el profesional que firma la inspección, y un
+			// nombre ya escrito se acepta sin leerlo.
 			datos.fecha_evaluacion = hoy();
-			datos.profesional_nombre = sesion.usuario?.nombre ?? '';
-			datos.aprobacion_profesional = sesion.usuario?.nombre ?? '';
 		}
 
 		cargando = false;
@@ -189,8 +194,6 @@
 		enviado = null;
 		datos = formularioVacio();
 		datos.fecha_evaluacion = hoy();
-		datos.profesional_nombre = sesion.usuario?.nombre ?? '';
-		datos.aprobacion_profesional = sesion.usuario?.nombre ?? '';
 		indice = 0;
 		hayBorradorPrevio = false;
 		errores = {};
@@ -329,538 +332,577 @@
 
 <svelte:head><title>Inspección de vivienda · SGR Jamundí</title></svelte:head>
 
-{#if cargando}
-	<p class="cargando">
-		<LoaderCircle size={20} class="girando" aria-hidden="true" />
-		Cargando el formato…
-	</p>
-{:else if errorCarga}
-	<p class="aviso aviso--error" role="alert">
-		<TriangleAlert size={16} aria-hidden="true" />
-		{errorCarga}
-	</p>
-{:else if enviado}
-	<div class="tarjeta cierre">
-		<CheckCircle2 size={40} aria-hidden="true" />
-		{#if enCola}
-			<h2>Inspección guardada</h2>
-			<p class="cierre__motivo">
-				No hay señal. Quedó guardada en este teléfono y se enviará sola en cuanto vuelva la
-				conexión. Puede verla en <a href="/riesgo/pendientes">Pendientes</a>.
-			</p>
-		{:else}
-			<h2>Inspección registrada</h2>
-			<p class="cierre__numero">{enviado.numero}</p>
-		{/if}
-
-		{#if enviado.combo && !enCola}
-			<p class="cierre__combo">
-				Corresponde <strong>{enviado.combo.replace('_', ' ').toLowerCase()}</strong>.
-			</p>
-			<p class="cierre__motivo">{enviado.motivo}</p>
-		{:else if !enCola}
-			<p class="cierre__motivo">{enviado.motivo}</p>
-		{/if}
-
-		<div class="cierre__acciones">
-			<button type="button" class="boton boton--principal" onclick={empezarDeNuevo}>
-				Inspeccionar otra vivienda
-			</button>
-			<a class="boton boton--suave" href="/riesgo/inspecciones">Ver las inspecciones</a>
-		</div>
-	</div>
-{:else if catalogos && paso}
-	{#if hayBorradorPrevio}
-		<div class="tarjeta">
-			<h2 class="tarjeta__titulo">Hay una inspección sin terminar</h2>
-			<p class="tarjeta__nota">
-				Se guardó en este teléfono y todavía no se ha enviado. Puede continuarla o empezar de nuevo.
-			</p>
-			<div class="acciones">
-				<button type="button" class="boton boton--principal" onclick={continuarBorrador}>
-					Continuar
-				</button>
-				<button type="button" class="boton boton--suave" onclick={empezarDeNuevo}>
-					Empezar de nuevo
-				</button>
-			</div>
-		</div>
-	{:else}
-		<div class="tarjeta">
-			<header class="cabecera">
-				<div>
-					<h2 class="tarjeta__titulo">{paso.titulo}</h2>
-					<p class="tarjeta__nota">{paso.ayuda}</p>
-				</div>
-				{#if avance > 0}
-					<span class="cabecera__paso">Paso {avance} de {conProgreso.length}</span>
-				{/if}
-			</header>
-
-			{#if borrador.estado !== 'sin-cambios'}
-				<p class="autoguardado" class:autoguardado--error={borrador.estado === 'error'}>
-					{describirEstado(borrador.estado, borrador.guardadoEn)}
+<div class="contenedor">
+	{#if cargando}
+		<p class="cargando">
+			<LoaderCircle size={20} class="girando" aria-hidden="true" />
+			Cargando el formato…
+		</p>
+	{:else if errorCarga}
+		<p class="aviso aviso--error" role="alert">
+			<TriangleAlert size={16} aria-hidden="true" />
+			{errorCarga}
+		</p>
+	{:else if enviado}
+		<div class="tarjeta cierre">
+			<CheckCircle2 size={40} aria-hidden="true" />
+			{#if enCola}
+				<h2>Inspección guardada</h2>
+				<p class="cierre__motivo">
+					No hay señal. Quedó guardada en este teléfono y se enviará sola en cuanto vuelva la
+					conexión. Puede verla en <a href="/riesgo/pendientes">Pendientes</a>.
 				</p>
+			{:else}
+				<h2>Inspección registrada</h2>
+				<p class="cierre__numero">{enviado.numero}</p>
 			{/if}
 
-			{#if paso.id === 'inicio'}
-				<div class="intro">
-					<p>
-						Este formato evalúa la vivienda para determinar qué le corresponde del <strong
-							>banco de materiales</strong
-						>. Lo diligencia el profesional responsable de la inspección.
-					</p>
-					<ul>
-						<li>Se guarda solo en este teléfono mientras lo llena.</li>
-						<li>
-							Los criterios del <strong>Anexo 1</strong> aparecen al elegir cada nivel de daño: no
-							hace falta la hoja impresa.
-						</li>
-						<li>El combo de materiales lo calcula el sistema a partir de su evaluación.</li>
-					</ul>
-				</div>
-			{:else if paso.id === 'profesional'}
-				<CampoTexto
-					id="fecha_evaluacion"
-					etiqueta="Fecha de la evaluación"
-					tipo="date"
-					bind:valor={datos.fecha_evaluacion}
-					error={errores.fecha_evaluacion}
-					requerido
-					max={hoy()}
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_nombre"
-					etiqueta="Nombre del profesional responsable"
-					bind:valor={datos.profesional_nombre}
-					error={errores.profesional_nombre}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_profesion"
-					etiqueta="Profesión"
-					bind:valor={datos.profesional_profesion}
-					error={errores.profesional_profesion}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_tarjeta"
-					etiqueta="Tarjeta profesional"
-					bind:valor={datos.profesional_tarjeta}
-					error={errores.profesional_tarjeta}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_documento"
-					etiqueta="Cédula"
-					modoTeclado="numeric"
-					bind:valor={datos.profesional_documento}
-					error={errores.profesional_documento}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_documento_de"
-					etiqueta="Expedida en"
-					bind:valor={datos.profesional_documento_de}
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_telefono"
-					etiqueta="Teléfono"
-					tipo="tel"
-					modoTeclado="tel"
-					bind:valor={datos.profesional_telefono}
-					error={errores.profesional_telefono}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="profesional_direccion"
-					etiqueta="Dirección"
-					bind:valor={datos.profesional_direccion}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'propietario'}
-				<CampoTexto
-					id="propietario_nombres"
-					etiqueta="Nombres y apellidos"
-					bind:valor={datos.propietario_nombres}
-					error={errores.propietario_nombres}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="propietario_documento"
-					etiqueta="Cédula"
-					modoTeclado="numeric"
-					bind:valor={datos.propietario_documento}
-					error={errores.propietario_documento}
-					requerido
-					alCambiar={() => {
-						alCambiar();
-						void revisarDuplicado();
-					}}
-				/>
+			{#if enviado.combo && !enCola}
+				<p class="cierre__combo">
+					Corresponde <strong>{enviado.combo.replace('_', ' ').toLowerCase()}</strong>.
+				</p>
+				<p class="cierre__motivo">{enviado.motivo}</p>
+			{:else if !enCola}
+				<p class="cierre__motivo">{enviado.motivo}</p>
+			{/if}
 
-				{#if avisoDuplicado}
-					<p class="aviso aviso--alerta" role="status">
-						<TriangleAlert size={15} aria-hidden="true" />
-						{avisoDuplicado}
+			<div class="cierre__acciones">
+				<button type="button" class="boton boton--principal" onclick={empezarDeNuevo}>
+					Inspeccionar otra vivienda
+				</button>
+				<a class="boton boton--suave" href="/riesgo/inspecciones">Ver las inspecciones</a>
+			</div>
+		</div>
+	{:else if catalogos && paso}
+		{#if hayBorradorPrevio}
+			<div class="tarjeta">
+				<h2 class="tarjeta__titulo">Hay una inspección sin terminar</h2>
+				<p class="tarjeta__nota">
+					Se guardó en este teléfono y todavía no se ha enviado. Puede continuarla o empezar de nuevo.
+				</p>
+				<div class="acciones">
+					<button type="button" class="boton boton--principal" onclick={continuarBorrador}>
+						Continuar
+					</button>
+					<button type="button" class="boton boton--suave" onclick={empezarDeNuevo}>
+						Empezar de nuevo
+					</button>
+				</div>
+			</div>
+		{:else}
+			<div class="tarjeta">
+				<header class="cabecera">
+					<div>
+						<h2 class="tarjeta__titulo">{paso.titulo}</h2>
+						<p class="tarjeta__nota">{paso.ayuda}</p>
+					</div>
+					{#if avance > 0}
+						<span class="cabecera__paso">Paso {avance} de {conProgreso.length}</span>
+					{/if}
+				</header>
+
+				{#if borrador.estado !== 'sin-cambios'}
+					<p class="autoguardado" class:autoguardado--error={borrador.estado === 'error'}>
+						{describirEstado(borrador.estado, borrador.guardadoEn)}
 					</p>
 				{/if}
 
-				<CampoTexto
-					id="propietario_documento_de"
-					etiqueta="Expedida en"
-					bind:valor={datos.propietario_documento_de}
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="propietario_telefono"
-					etiqueta="Teléfono"
-					tipo="tel"
-					modoTeclado="tel"
-					bind:valor={datos.propietario_telefono}
-					error={errores.propietario_telefono}
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="propietario_direccion"
-					etiqueta="Dirección"
-					bind:valor={datos.propietario_direccion}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'localizacion'}
-				<p class="fijos">
-					{catalogos.fijos.departamento} · {catalogos.fijos.municipio}
-				</p>
-				<CampoTexto
-					id="direccion_cabecera"
-					etiqueta="Dirección de la vivienda en cabecera municipal"
-					bind:valor={datos.direccion_cabecera}
-					error={errores.direccion_cabecera}
-					ayuda="Si la vivienda es rural, deje esto vacío y llene corregimiento y vereda."
-					alCambiar={alCambiar}
-				/>
-				<CampoSelect
-					id="corregimiento"
-					etiqueta="Corregimiento"
-					bind:valor={datos.corregimiento}
-					opciones={opcionesCorregimiento}
-					error={errores.corregimiento}
-					vacio="Ninguno (zona urbana)"
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="vereda"
-					etiqueta="Vereda"
-					bind:valor={datos.vereda}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'requisitos'}
-				<p class="tarjeta__nota">
-					Los tres requisitos del numeral 3. De ellos depende que continúe la inspección.
-				</p>
-
-				{#each catalogos.requisitos as requisito (requisito.codigo)}
-					<CampoOpciones
-						id={`req-${requisito.codigo}`}
-						etiqueta={requisito.etiqueta}
-						bind:valor={datos.requisitos[requisito.codigo]}
-						opciones={SI_NO}
-						error={errores[`requisitos.${requisito.codigo}`]}
+				{#if paso.id === 'inicio'}
+					<div class="intro">
+						<p>
+							Este formato evalúa la vivienda para determinar qué le corresponde del <strong
+								>banco de materiales</strong
+							>. Lo diligencia el profesional responsable de la inspección.
+						</p>
+						<ul>
+							<li>Se guarda solo en este teléfono mientras lo llena.</li>
+							<li>
+								Los criterios del <strong>Anexo 1</strong> aparecen al elegir cada nivel de daño: no
+								hace falta la hoja impresa.
+							</li>
+							<li>El combo de materiales lo calcula el sistema a partir de su evaluación.</li>
+						</ul>
+					</div>
+				{:else if paso.id === 'profesional'}
+					<CampoTexto
+						id="fecha_evaluacion"
+						etiqueta="Fecha de la evaluación"
+						tipo="date"
+						bind:valor={datos.fecha_evaluacion}
+						error={errores.fecha_evaluacion}
+						requerido
+						max={hoy()}
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="profesional_nombre"
+						etiqueta="Nombre del profesional responsable"
+						marcador="Ej.: Ana María Ruiz Cadavid"
+						bind:valor={datos.profesional_nombre}
+						error={errores.profesional_nombre}
 						requerido
 						alCambiar={alCambiar}
 					/>
-				{/each}
+					<CampoSelect
+						id="profesional_profesion"
+						etiqueta="Profesión"
+						bind:valor={datos.profesional_profesion}
+						opciones={opcionesProfesion}
+						error={errores.profesional_profesion}
+						requerido
+						ayuda="Debe ser una profesión con tarjeta profesional que habilite para evaluar daño estructural."
+						alCambiar={alCambiar}
+					/>
+					{#if muestraProfesionOtra(datos)}
+						<CampoTexto
+							id="profesional_profesion_otra"
+							etiqueta="¿Cuál?"
+							bind:valor={datos.profesional_profesion_otra}
+							error={errores.profesional_profesion_otra}
+							requerido
+							maximo={120}
+							marcador="Ej.: Ingeniera sanitaria"
+							alCambiar={alCambiar}
+						/>
+					{/if}
+					<CampoTexto
+						id="profesional_tarjeta"
+						etiqueta="Tarjeta profesional"
+						marcador="Ej.: 76202-123456 VLL"
+						bind:valor={datos.profesional_tarjeta}
+						error={errores.profesional_tarjeta}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="profesional_documento"
+						etiqueta="Cédula"
+						modoTeclado="numeric"
+						bind:valor={datos.profesional_documento}
+						error={errores.profesional_documento}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="profesional_documento_de"
+						etiqueta="Expedida en"
+						marcador="Ej.: Cali"
+						bind:valor={datos.profesional_documento_de}
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="profesional_telefono"
+						etiqueta="Teléfono"
+						tipo="tel"
+						modoTeclado="tel"
+						bind:valor={datos.profesional_telefono}
+						error={errores.profesional_telefono}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="profesional_direccion"
+						etiqueta="Dirección"
+						marcador="Ej.: Calle 10 # 4-55"
+						bind:valor={datos.profesional_direccion}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'propietario'}
+					<CampoTexto
+						id="propietario_nombres"
+						etiqueta="Nombres y apellidos"
+						marcador="Ej.: Pedro Antonio Pérez Gómez"
+						bind:valor={datos.propietario_nombres}
+						error={errores.propietario_nombres}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="propietario_documento"
+						etiqueta="Cédula"
+						modoTeclado="numeric"
+						bind:valor={datos.propietario_documento}
+						error={errores.propietario_documento}
+						requerido
+						alCambiar={() => {
+							alCambiar();
+							void revisarDuplicado();
+						}}
+					/>
 
-				{#if cumple === false}
+					{#if avisoDuplicado}
+						<p class="aviso aviso--alerta" role="status">
+							<TriangleAlert size={15} aria-hidden="true" />
+							{avisoDuplicado}
+						</p>
+					{/if}
+
+					<CampoTexto
+						id="propietario_documento_de"
+						etiqueta="Expedida en"
+						marcador="Ej.: Jamundí"
+						bind:valor={datos.propietario_documento_de}
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="propietario_telefono"
+						etiqueta="Teléfono"
+						tipo="tel"
+						modoTeclado="tel"
+						bind:valor={datos.propietario_telefono}
+						error={errores.propietario_telefono}
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="propietario_direccion"
+						etiqueta="Dirección"
+						marcador="Ej.: Carrera 11 # 8-26"
+						bind:valor={datos.propietario_direccion}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'localizacion'}
+					<p class="fijos">
+						{catalogos.fijos.departamento} · {catalogos.fijos.municipio}
+					</p>
+					<CampoTexto
+						id="direccion_cabecera"
+						etiqueta="Dirección de la vivienda en cabecera municipal"
+						marcador="Ej.: Carrera 11 # 8-26"
+						bind:valor={datos.direccion_cabecera}
+						error={errores.direccion_cabecera}
+						ayuda="Si la vivienda es rural, deje esto vacío y llene corregimiento y vereda."
+						alCambiar={alCambiar}
+					/>
+					<CampoSelect
+						id="corregimiento"
+						etiqueta="Corregimiento"
+						bind:valor={datos.corregimiento}
+						opciones={opcionesCorregimiento}
+						error={errores.corregimiento}
+						vacio="Ninguno (zona urbana)"
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="vereda"
+						etiqueta="Vereda"
+						marcador="Ej.: La Ventura"
+						bind:valor={datos.vereda}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'requisitos'}
+					<p class="tarjeta__nota">
+						Los tres requisitos del numeral 3. De ellos depende que continúe la inspección.
+					</p>
+
+					{#each catalogos.requisitos as requisito (requisito.codigo)}
+						<CampoOpciones
+							id={`req-${requisito.codigo}`}
+							etiqueta={requisito.etiqueta}
+							bind:valor={datos.requisitos[requisito.codigo]}
+							opciones={SI_NO}
+							error={errores[`requisitos.${requisito.codigo}`]}
+							requerido
+							alCambiar={alCambiar}
+						/>
+					{/each}
+
+					{#if cumple === false}
+						<div class="aviso aviso--alerta" role="status">
+							<TriangleAlert size={15} aria-hidden="true" />
+							<span>
+								<strong>No cumple los requisitos</strong> por:
+								{incumplidos.join(' · ')}.
+								<br />
+								Según el formato, no se continúa con la inspección: se levanta el acta del numeral 8.
+							</span>
+						</div>
+					{:else if cumple === true}
+						<p class="aviso aviso--ok" role="status">
+							<CheckCircle2 size={15} aria-hidden="true" />
+							Cumple los requisitos. Continúa la inspección de la vivienda.
+						</p>
+					{/if}
+				{:else if paso.id === 'evento'}
+					<CampoOpciones
+						id="evento"
+						etiqueta="Tipo de evento que afectó la vivienda"
+						bind:valor={datos.evento}
+						opciones={opcionesEvento}
+						error={errores.evento}
+						requerido
+						columnas
+						alCambiar={alCambiar}
+					/>
+					{#if muestraEventoOtro(datos)}
+						<CampoTexto
+							id="evento_otro"
+							etiqueta="¿Cuál?"
+							bind:valor={datos.evento_otro}
+							error={errores.evento_otro}
+							requerido
+							maximo={120}
+							alCambiar={alCambiar}
+						/>
+					{/if}
+				{:else if paso.id === 'sistema'}
+					<CampoOpciones
+						id="sistema_constructivo"
+						etiqueta="Sistema constructivo de la vivienda"
+						bind:valor={datos.sistema_constructivo}
+						opciones={opcionesSistema}
+						error={errores.sistema_constructivo}
+						requerido
+						ayuda="Decide qué elementos se evalúan y qué combos de materiales aplican."
+						alCambiar={alCambiar}
+					/>
+
+					<p class="seccion">Infraestructura actual (numeral 5.3)</p>
+
+					{#each Object.entries(catalogos.convenciones) as [categoria, conv] (categoria)}
+						<CampoSelect
+							id={`infra-${categoria}`}
+							etiqueta={conv.etiqueta}
+							bind:valor={datos.infraestructura[categoria]}
+							opciones={Object.entries(conv.opciones).map(([codigo, etiqueta]) => ({
+								valor: codigo,
+								etiqueta: `(${codigo}) ${etiqueta}`
+							}))}
+							error={errores[`infraestructura.${categoria}`]}
+							requerido
+							alCambiar={() => {
+								if (categoria === 'CUBIERTA') alElegirCubierta();
+								else alCambiar();
+							}}
+						/>
+					{/each}
+				{:else if paso.id === 'evaluacion'}
+					<CampoOpciones
+						id="colapso_total"
+						etiqueta="¿La vivienda sufrió colapso estructural total?"
+						bind:valor={datos.colapso_total}
+						opciones={SI_NO}
+						ayuda="Si es así, no se llena la tabla por elementos: el formato dice marcar solo esta casilla."
+						alCambiar={alCambiar}
+					/>
+
+					{#if muestraTablaDanos(datos)}
+						<p class="seccion">Evaluación por elemento (numeral 5.4)</p>
+						<TablaEvaluacion
+							elementos={elementosDe(datos, catalogos)}
+							bind:danos={datos.danos}
+							{errores}
+							alCambiar={alCambiar}
+						/>
+					{/if}
+
+					<CampoOpciones
+						id="requiere_evacuacion"
+						etiqueta="¿Requiere evacuación la vivienda?"
+						bind:valor={datos.requiere_evacuacion}
+						opciones={SI_NO}
+						error={errores.requiere_evacuacion}
+						requerido
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'materiales'}
+					<ResultadoCombo
+						{resultado}
+						{motivo}
+						{materiales}
+						kits={kitsCubiertaDe(datos, catalogos)}
+						bind:kitCubierta={datos.kit_cubierta}
+						sugerido={kitSugerido(datos, catalogos)}
+						error={errores.kit_cubierta}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'informante'}
+					<p class="tarjeta__nota">
+						Si el propietario no estaba en la vivienda, quien informa debe ser un familiar mayor de
+						edad.
+					</p>
+					<CampoTexto
+						id="informante_nombre"
+						etiqueta="Nombre"
+						marcador="Ej.: María Elena Pérez"
+						bind:valor={datos.informante_nombre}
+						error={errores.informante_nombre}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="informante_documento"
+						etiqueta="Cédula"
+						modoTeclado="numeric"
+						bind:valor={datos.informante_documento}
+						error={errores.informante_documento}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoSelect
+						id="informante_parentesco"
+						etiqueta="Parentesco con el propietario"
+						bind:valor={datos.informante_parentesco}
+						opciones={opcionesParentesco}
+						error={errores.informante_parentesco}
+						requerido
+						numerico
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="informante_telefono"
+						etiqueta="Teléfono"
+						tipo="tel"
+						modoTeclado="tel"
+						bind:valor={datos.informante_telefono}
+						error={errores.informante_telefono}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'fotos'}
+					<p class="aviso aviso--info" role="status">
+						El registro fotográfico se adjunta desde la ficha una vez guardada.
+					</p>
+				{:else if paso.id === 'acta'}
 					<div class="aviso aviso--alerta" role="status">
 						<TriangleAlert size={15} aria-hidden="true" />
 						<span>
-							<strong>No cumple los requisitos</strong> por:
-							{incumplidos.join(' · ')}.
-							<br />
-							Según el formato, no se continúa con la inspección: se levanta el acta del numeral 8.
+							No se cumplen los requisitos ({incumplidos.join(' · ')}), así que no puede accederse al
+							apoyo en banco de materiales. Queda constancia con estos datos.
 						</span>
 					</div>
-				{:else if cumple === true}
-					<p class="aviso aviso--ok" role="status">
-						<CheckCircle2 size={15} aria-hidden="true" />
-						Cumple los requisitos. Continúa la inspección de la vivienda.
-					</p>
-				{/if}
-			{:else if paso.id === 'evento'}
-				<CampoOpciones
-					id="evento"
-					etiqueta="Tipo de evento que afectó la vivienda"
-					bind:valor={datos.evento}
-					opciones={opcionesEvento}
-					error={errores.evento}
-					requerido
-					columnas
-					alCambiar={alCambiar}
-				/>
-				{#if muestraEventoOtro(datos)}
+
+					<CampoOpciones
+						id="acta_modalidad"
+						etiqueta="El apoyo solicitado era para"
+						bind:valor={datos.acta_modalidad}
+						opciones={[
+							{ valor: 'REHABILITACION', etiqueta: 'Rehabilitación de vivienda' },
+							{ valor: 'CONSTRUCCION', etiqueta: 'Construcción de vivienda' }
+						]}
+						error={errores.acta_modalidad}
+						requerido
+						alCambiar={alCambiar}
+					/>
 					<CampoTexto
-						id="evento_otro"
-						etiqueta="¿Cuál?"
-						bind:valor={datos.evento_otro}
-						error={errores.evento_otro}
+						id="acta_nombre"
+						etiqueta="Nombre de quien queda enterado"
+						marcador="Ej.: Pedro Antonio Pérez Gómez"
+						bind:valor={datos.acta_nombre}
+						error={errores.acta_nombre}
 						requerido
-						maximo={120}
 						alCambiar={alCambiar}
 					/>
-				{/if}
-			{:else if paso.id === 'sistema'}
-				<CampoOpciones
-					id="sistema_constructivo"
-					etiqueta="Sistema constructivo de la vivienda"
-					bind:valor={datos.sistema_constructivo}
-					opciones={opcionesSistema}
-					error={errores.sistema_constructivo}
-					requerido
-					ayuda="Decide qué elementos se evalúan y qué combos de materiales aplican."
-					alCambiar={alCambiar}
-				/>
-
-				<p class="seccion">Infraestructura actual (numeral 5.3)</p>
-
-				{#each Object.entries(catalogos.convenciones) as [categoria, conv] (categoria)}
-					<CampoSelect
-						id={`infra-${categoria}`}
-						etiqueta={conv.etiqueta}
-						bind:valor={datos.infraestructura[categoria]}
-						opciones={Object.entries(conv.opciones).map(([codigo, etiqueta]) => ({
-							valor: codigo,
-							etiqueta: `(${codigo}) ${etiqueta}`
-						}))}
-						error={errores[`infraestructura.${categoria}`]}
+					<CampoTexto
+						id="acta_documento"
+						etiqueta="Cédula"
+						modoTeclado="numeric"
+						bind:valor={datos.acta_documento}
+						error={errores.acta_documento}
 						requerido
-						alCambiar={() => {
-							if (categoria === 'CUBIERTA') alElegirCubierta();
-							else alCambiar();
-						}}
-					/>
-				{/each}
-			{:else if paso.id === 'evaluacion'}
-				<CampoOpciones
-					id="colapso_total"
-					etiqueta="¿La vivienda sufrió colapso estructural total?"
-					bind:valor={datos.colapso_total}
-					opciones={SI_NO}
-					ayuda="Si es así, no se llena la tabla por elementos: el formato dice marcar solo esta casilla."
-					alCambiar={alCambiar}
-				/>
-
-				{#if muestraTablaDanos(datos)}
-					<p class="seccion">Evaluación por elemento (numeral 5.4)</p>
-					<TablaEvaluacion
-						elementos={elementosDe(datos, catalogos)}
-						bind:danos={datos.danos}
-						{errores}
 						alCambiar={alCambiar}
 					/>
-				{/if}
-
-				<CampoOpciones
-					id="requiere_evacuacion"
-					etiqueta="¿Requiere evacuación la vivienda?"
-					bind:valor={datos.requiere_evacuacion}
-					opciones={SI_NO}
-					error={errores.requiere_evacuacion}
-					requerido
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'materiales'}
-				<ResultadoCombo
-					{resultado}
-					{motivo}
-					{materiales}
-					kits={kitsCubiertaDe(datos, catalogos)}
-					bind:kitCubierta={datos.kit_cubierta}
-					sugerido={kitSugerido(datos, catalogos)}
-					error={errores.kit_cubierta}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'informante'}
-				<p class="tarjeta__nota">
-					Si el propietario no estaba en la vivienda, quien informa debe ser un familiar mayor de
-					edad.
-				</p>
-				<CampoTexto
-					id="informante_nombre"
-					etiqueta="Nombre"
-					bind:valor={datos.informante_nombre}
-					error={errores.informante_nombre}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="informante_documento"
-					etiqueta="Cédula"
-					modoTeclado="numeric"
-					bind:valor={datos.informante_documento}
-					error={errores.informante_documento}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoSelect
-					id="informante_parentesco"
-					etiqueta="Parentesco con el propietario"
-					bind:valor={datos.informante_parentesco}
-					opciones={opcionesParentesco}
-					error={errores.informante_parentesco}
-					requerido
-					numerico
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="informante_telefono"
-					etiqueta="Teléfono"
-					tipo="tel"
-					modoTeclado="tel"
-					bind:valor={datos.informante_telefono}
-					error={errores.informante_telefono}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'fotos'}
-				<p class="aviso aviso--info" role="status">
-					El registro fotográfico se adjunta desde la ficha una vez guardada.
-				</p>
-			{:else if paso.id === 'acta'}
-				<div class="aviso aviso--alerta" role="status">
-					<TriangleAlert size={15} aria-hidden="true" />
-					<span>
-						No se cumplen los requisitos ({incumplidos.join(' · ')}), así que no puede accederse al
-						apoyo en banco de materiales. Queda constancia con estos datos.
-					</span>
-				</div>
-
-				<CampoOpciones
-					id="acta_modalidad"
-					etiqueta="El apoyo solicitado era para"
-					bind:valor={datos.acta_modalidad}
-					opciones={[
-						{ valor: 'REHABILITACION', etiqueta: 'Rehabilitación de vivienda' },
-						{ valor: 'CONSTRUCCION', etiqueta: 'Construcción de vivienda' }
-					]}
-					error={errores.acta_modalidad}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="acta_nombre"
-					etiqueta="Nombre de quien queda enterado"
-					bind:valor={datos.acta_nombre}
-					error={errores.acta_nombre}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="acta_documento"
-					etiqueta="Cédula"
-					modoTeclado="numeric"
-					bind:valor={datos.acta_documento}
-					error={errores.acta_documento}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="acta_telefono"
-					etiqueta="Teléfono"
-					tipo="tel"
-					modoTeclado="tel"
-					bind:valor={datos.acta_telefono}
-					error={errores.acta_telefono}
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'aprobacion'}
-				<p class="tarjeta__nota">
-					El formato se imprime con las líneas de firma en blanco, para firmarlo a mano.
-				</p>
-				<CampoTexto
-					id="aprobacion_profesional"
-					etiqueta="Profesional responsable de la inspección"
-					bind:valor={datos.aprobacion_profesional}
-					error={errores.aprobacion_profesional}
-					requerido
-					alCambiar={alCambiar}
-				/>
-				<CampoTexto
-					id="aprobacion_coordinador"
-					etiqueta="Coordinador del Consejo Territorial"
-					bind:valor={datos.aprobacion_coordinador}
-					ayuda="Puede quedar en blanco y completarse en la oficina."
-					alCambiar={alCambiar}
-				/>
-			{:else if paso.id === 'revision'}
-				<dl class="resumen">
-					<div><dt>Propietario</dt><dd>{datos.propietario_nombres}</dd></div>
-					<div><dt>Cédula</dt><dd>{datos.propietario_documento}</dd></div>
-					<div>
-						<dt>Vivienda</dt>
-						<dd>
-							{[datos.direccion_cabecera, datos.vereda, datos.corregimiento]
-								.filter(Boolean)
-								.join(' · ') || '—'}
-						</dd>
-					</div>
-					<div><dt>Fecha</dt><dd>{datos.fecha_evaluacion}</dd></div>
-					{#if cumple === false}
-						<div><dt>Resultado</dt><dd>No cumple requisitos — acta del numeral 8</dd></div>
-					{:else}
-						<div><dt>Sistema</dt><dd>{datos.sistema_constructivo || '—'}</dd></div>
-						<div>
-							<dt>Combo</dt>
-							<dd>{resultado.etiqueta ?? 'No corresponde'}<br /><small>{motivo}</small></dd>
-						</div>
-					{/if}
-				</dl>
-
-				{#if errorEnvio}
-					<p class="aviso aviso--error" role="alert" data-error>
-						<TriangleAlert size={15} aria-hidden="true" />
-						{errorEnvio}
+					<CampoTexto
+						id="acta_telefono"
+						etiqueta="Teléfono"
+						tipo="tel"
+						modoTeclado="tel"
+						bind:valor={datos.acta_telefono}
+						error={errores.acta_telefono}
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'aprobacion'}
+					<p class="tarjeta__nota">
+						El formato se imprime con las líneas de firma en blanco, para firmarlo a mano.
 					</p>
-				{/if}
-			{/if}
-
-			<div class="navegacion">
-				{#if indice > 0}
-					<button type="button" class="boton boton--suave" onclick={anterior} disabled={enviando}>
-						<ArrowLeft size={15} aria-hidden="true" />
-						Atrás
-					</button>
-				{/if}
-
-				{#if paso.id === 'revision'}
-					<button type="button" class="boton boton--principal" onclick={enviar} disabled={enviando}>
-						{#if enviando}
-							<LoaderCircle size={15} class="girando" aria-hidden="true" />
-							Enviando…
+					<CampoTexto
+						id="aprobacion_profesional"
+						etiqueta="Profesional responsable de la inspección"
+						marcador="Ej.: Ana María Ruiz Cadavid"
+						bind:valor={datos.aprobacion_profesional}
+						error={errores.aprobacion_profesional}
+						requerido
+						alCambiar={alCambiar}
+					/>
+					<CampoTexto
+						id="aprobacion_coordinador"
+						etiqueta="Coordinador del Consejo Territorial"
+						marcador="Ej.: Carlos Alberto Gil"
+						bind:valor={datos.aprobacion_coordinador}
+						ayuda="Puede quedar en blanco y completarse en la oficina."
+						alCambiar={alCambiar}
+					/>
+				{:else if paso.id === 'revision'}
+					<dl class="resumen">
+						<div><dt>Propietario</dt><dd>{datos.propietario_nombres}</dd></div>
+						<div><dt>Cédula</dt><dd>{datos.propietario_documento}</dd></div>
+						<div>
+							<dt>Vivienda</dt>
+							<dd>
+								{[datos.direccion_cabecera, datos.vereda, datos.corregimiento]
+									.filter(Boolean)
+									.join(' · ') || '—'}
+							</dd>
+						</div>
+						<div><dt>Fecha</dt><dd>{datos.fecha_evaluacion}</dd></div>
+						{#if cumple === false}
+							<div><dt>Resultado</dt><dd>No cumple requisitos — acta del numeral 8</dd></div>
 						{:else}
-							<Send size={15} aria-hidden="true" />
-							Enviar la inspección
+							<div><dt>Sistema</dt><dd>{datos.sistema_constructivo || '—'}</dd></div>
+							<div>
+								<dt>Combo</dt>
+								<dd>{resultado.etiqueta ?? 'No corresponde'}<br /><small>{motivo}</small></dd>
+							</div>
 						{/if}
-					</button>
-				{:else}
-					<button type="button" class="boton boton--principal" onclick={siguiente}>
-						{paso.id === 'inicio' ? 'Comenzar' : 'Siguiente'}
-						<ArrowRight size={15} aria-hidden="true" />
-					</button>
+					</dl>
+
+					{#if errorEnvio}
+						<p class="aviso aviso--error" role="alert" data-error>
+							<TriangleAlert size={15} aria-hidden="true" />
+							{errorEnvio}
+						</p>
+					{/if}
 				{/if}
+
+				<div class="navegacion">
+					{#if indice > 0}
+						<button type="button" class="boton boton--suave" onclick={anterior} disabled={enviando}>
+							<ArrowLeft size={15} aria-hidden="true" />
+							Atrás
+						</button>
+					{/if}
+
+					{#if paso.id === 'revision'}
+						<button type="button" class="boton boton--principal" onclick={enviar} disabled={enviando}>
+							{#if enviando}
+								<LoaderCircle size={15} class="girando" aria-hidden="true" />
+								Enviando…
+							{:else}
+								<Send size={15} aria-hidden="true" />
+								Enviar la inspección
+							{/if}
+						</button>
+					{:else}
+						<button type="button" class="boton boton--principal" onclick={siguiente}>
+							{paso.id === 'inicio' ? 'Comenzar' : 'Siguiente'}
+							<ArrowRight size={15} aria-hidden="true" />
+						</button>
+					{/if}
+				</div>
 			</div>
-		</div>
+		{/if}
 	{/if}
-{/if}
+</div>
 
 <style>
+	/* El menú, la barra superior y el fondo los pone el armazón del sistema; aquí
+	   solo se limita el ancho, igual que en el formulario del RUFE, para que las
+	   dos pantallas de campo se vean iguales y las líneas no queden ilegibles en
+	   un monitor de escritorio. */
+	.contenedor {
+		width: 100%;
+		max-width: 44rem;
+		margin: 0 auto;
+	}
+
 	.cabecera {
 		display: flex;
 		justify-content: space-between;

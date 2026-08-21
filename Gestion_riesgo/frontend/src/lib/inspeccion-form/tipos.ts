@@ -49,6 +49,7 @@ export type Catalogos = TablasCombo & {
 		bytes_carga: number;
 		extensiones: string[];
 	};
+	profesiones: Opcion[];
 	eventos: Opcion[];
 	requisitos: Opcion[];
 	corregimientos: string[];
@@ -77,6 +78,8 @@ export type FormularioInspeccion = {
 	profesional_nombre: string;
 	profesional_tarjeta: string;
 	profesional_profesion: string;
+	/** Solo cuando la profesión elegida es «Otra». */
+	profesional_profesion_otra: string;
 	profesional_documento: string;
 	/** El «De ___» del formato: dónde se expidió la cédula. */
 	profesional_documento_de: string;

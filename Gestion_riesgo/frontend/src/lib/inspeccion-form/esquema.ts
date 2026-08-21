@@ -62,6 +62,7 @@ export const PASOS: Paso[] = [
 			'profesional_nombre',
 			'profesional_tarjeta',
 			'profesional_profesion',
+			'profesional_profesion_otra',
 			'profesional_documento',
 			'profesional_documento_de',
 			'profesional_telefono',
@@ -235,6 +236,12 @@ export function pasosConProgreso(d: FormularioInspeccion, c: Catalogos): Paso[] 
 
 export const EVENTO_OTRO = 'OTRO';
 
+export const PROFESION_OTRA = 'OTRA';
+
+export function muestraProfesionOtra(d: FormularioInspeccion): boolean {
+	return d.profesional_profesion === PROFESION_OTRA;
+}
+
 export function muestraEventoOtro(d: FormularioInspeccion): boolean {
 	return d.evento === EVENTO_OTRO;
 }
@@ -310,6 +317,7 @@ export function formularioVacio(): FormularioInspeccion {
 		profesional_nombre: '',
 		profesional_tarjeta: '',
 		profesional_profesion: '',
+		profesional_profesion_otra: '',
 		profesional_documento: '',
 		profesional_documento_de: '',
 		profesional_telefono: '',
@@ -360,6 +368,7 @@ export function limpiarCondicionales(
 	const limpio: FormularioInspeccion = { ...d };
 
 	if (!muestraEventoOtro(limpio)) limpio.evento_otro = '';
+	if (!muestraProfesionOtra(limpio)) limpio.profesional_profesion_otra = '';
 
 	// Solo sobreviven los elementos del sistema elegido.
 	const validos = new Set(elementosDe(limpio, c).map((e) => e.codigo));

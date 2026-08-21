@@ -12,6 +12,11 @@ import type { Catalogos, FormularioInspeccion } from './tipos';
 
 const CATALOGOS = {
 	limites: { anos_atras: 2 },
+	profesiones: [
+		{ codigo: 'ARQUITECTO', etiqueta: 'Arquitecto(a)' },
+		{ codigo: 'INGENIERO_CIVIL', etiqueta: 'Ingeniero(a) civil' },
+		{ codigo: 'OTRA', etiqueta: 'Otra, ¿cuál?' }
+	],
 	corregimientos: ['Robles', 'Timba'],
 	eventos: [
 		{ codigo: 'SISMO', etiqueta: 'Sismo' },
@@ -55,7 +60,7 @@ function completo(cambios: Partial<FormularioInspeccion> = {}): FormularioInspec
 		fecha_evaluacion: hoy(),
 		profesional_nombre: 'Ana Ruiz',
 		profesional_tarjeta: 'CO-12345',
-		profesional_profesion: 'Ingeniera civil',
+		profesional_profesion: 'INGENIERO_CIVIL',
 		profesional_documento: '31234567',
 		profesional_telefono: '3151234567',
 		propietario_nombres: 'Pedro Pérez',
@@ -223,5 +228,31 @@ describe('pasoDelError', () => {
 
 	it('un campo desconocido no rompe: cae en la revisión', () => {
 		expect(pasoDelError('campo_que_no_existe', completo(), CATALOGOS)).toBe('revision');
+	});
+});
+
+describe('la profesión', () => {
+	it('tiene que salir de la lista', () => {
+		// El formato exige tarjeta profesional al lado: no cabe cualquier oficio.
+		expect(validarTodo(completo({ profesional_profesion: 'ASTRONAUTA' }), CATALOGOS).profesional_profesion).toBeTruthy();
+	});
+
+	it('«Otra» obliga a decir cuál', () => {
+		const e = validarTodo(completo({ profesional_profesion: 'OTRA' }), CATALOGOS);
+
+		expect(e.profesional_profesion_otra).toBeTruthy();
+	});
+
+	it('«Otra» con su texto pasa', () => {
+		const d = completo({
+			profesional_profesion: 'OTRA',
+			profesional_profesion_otra: 'Ingeniera sanitaria'
+		});
+
+		expect(validarTodo(d, CATALOGOS)).toEqual({});
+	});
+
+	it('vacía no pasa', () => {
+		expect(validarTodo(completo({ profesional_profesion: '' }), CATALOGOS).profesional_profesion).toBeTruthy();
 	});
 });

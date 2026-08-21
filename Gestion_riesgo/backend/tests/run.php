@@ -1563,7 +1563,7 @@ function inspeccionBase(array $cambios = []): array
         'fecha_evaluacion' => date('Y-m-d'),
         'profesional_nombre' => 'Ana Ruiz',
         'profesional_tarjeta' => 'CO-12345',
-        'profesional_profesion' => 'Ingeniera civil',
+        'profesional_profesion' => 'INGENIERO_CIVIL',
         'profesional_documento' => '31234567',
         'profesional_telefono' => '3151234567',
         'propietario_nombres' => 'Pedro Pérez Gómez',
@@ -1603,6 +1603,58 @@ function datosInspeccion(array $entrada): array
 
 prueba('una inspección completa pasa sin errores', function (): void {
     afirmarIgual([], erroresInspeccion(inspeccionBase()));
+});
+
+prueba('la profesión se guarda resuelta, no como código', function (): void {
+    // Lo que va al papel y al expediente es el nombre de la profesión: un
+    // «INGENIERO_CIVIL» impreso en un formato oficial no lo lee nadie.
+    $d = datosInspeccion(inspeccionBase());
+
+    afirmarIgual('Ingeniero(a) civil', $d['profesional_profesion']);
+});
+
+prueba('una profesión fuera de la lista se rechaza', function (): void {
+    $e = erroresInspeccion(inspeccionBase(['profesional_profesion' => 'ASTRONAUTA']));
+
+    afirmar(isset($e['profesional_profesion']), 'debe exigir una de la lista');
+});
+
+prueba('«Otra» guarda lo que escribió el profesional', function (): void {
+    $d = datosInspeccion(inspeccionBase([
+        'profesional_profesion' => 'OTRA',
+        'profesional_profesion_otra' => 'Ingeniera sanitaria',
+    ]));
+
+    afirmarIgual('Ingeniera sanitaria', $d['profesional_profesion']);
+});
+
+prueba('«Otra» sin decir cuál no pasa', function (): void {
+    $e = erroresInspeccion(inspeccionBase(['profesional_profesion' => 'OTRA']));
+
+    afirmar(isset($e['profesional_profesion_otra']), 'falta decir cuál');
+});
+
+prueba('un texto libre con una profesión de la lista se rechaza', function (): void {
+    // Significaría que el formulario y el servidor no están de acuerdo; guardarlo
+    // dejaría un dato que nadie puede volver a ver ni corregir.
+    $e = erroresInspeccion(inspeccionBase([
+        'profesional_profesion' => 'ARQUITECTO',
+        'profesional_profesion_otra' => 'Ingeniera sanitaria',
+    ]));
+
+    afirmar(isset($e['profesional_profesion_otra']), 'solo aplica con "Otra"');
+});
+
+prueba('las profesiones son las que pueden firmar una inspección', function (): void {
+    // El formato exige tarjeta profesional en el renglón de al lado: solo caben
+    // profesiones con matrícula que habilite para evaluar daño estructural.
+    $codigos = array_keys(CatalogosInspeccion::PROFESIONES);
+
+    foreach (['ARQUITECTO', 'INGENIERO_CIVIL', 'INGENIERO_ESTRUCTURAL', 'OTRA'] as $esperado) {
+        afirmar(in_array($esperado, $codigos, true), "falta {$esperado}");
+    }
+
+    afirmarIgual('OTRA', end($codigos), '«Otra» va al final de la lista');
 });
 
 prueba('el combo se calcula aquí y no se acepta del cliente', function (): void {

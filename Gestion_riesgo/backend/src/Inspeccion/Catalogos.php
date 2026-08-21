@@ -59,6 +59,30 @@ final class Catalogos
         self::EVENTO_OTRO => 'Otro, ¿cuál?',
     ];
 
+    // ── 1. Profesión de quien inspecciona ────────────────────────────────────
+
+    public const PROFESION_OTRA = 'OTRA';
+
+    /**
+     * Quién puede firmar una inspección de vivienda afectada.
+     *
+     * No es una lista de oficios: el formato exige TARJETA PROFESIONAL en el
+     * renglón de al lado, así que solo caben profesiones con matrícula que
+     * habilite para evaluar daño estructural.
+     *
+     * Se deja «Otra, ¿cuál?» porque un municipio puede enviar a un perfil que
+     * esta lista no previó, y cerrarle la puerta obligaría a mentir en el
+     * campo. Funciona igual que el «Otro» del tipo de evento.
+     */
+    public const PROFESIONES = [
+        'ARQUITECTO' => 'Arquitecto(a)',
+        'INGENIERO_CIVIL' => 'Ingeniero(a) civil',
+        'INGENIERO_ESTRUCTURAL' => 'Ingeniero(a) estructural',
+        'INGENIERO_GEOTECNISTA' => 'Ingeniero(a) geotecnista',
+        'TECNOLOGO_OBRAS_CIVILES' => 'Tecnólogo(a) en obras civiles',
+        self::PROFESION_OTRA => 'Otra, ¿cuál?',
+    ];
+
     // ── 3. Requisitos del propietario ────────────────────────────────────────
 
     /**
@@ -129,6 +153,11 @@ final class Catalogos
      */
     public const KIT_SUGERIDO = ['Z' => 'ZINC', 'Ac' => 'FIBROCEMENTO'];
 
+    public static function esProfesionValida(string $codigo): bool
+    {
+        return isset(self::PROFESIONES[$codigo]);
+    }
+
     public static function esEventoValido(string $codigo): bool
     {
         return isset(self::EVENTOS[$codigo]);
@@ -167,6 +196,7 @@ final class Catalogos
                 'bytes_carga' => Rufe::MAX_BYTES_CARGA,
                 'extensiones' => array_keys(Rufe::EXTENSIONES),
             ],
+            'profesiones' => $opciones(self::PROFESIONES),
             'eventos' => $opciones(self::EVENTOS),
             'requisitos' => $opciones(self::REQUISITOS),
             'corregimientos' => Rufe::CORREGIMIENTOS,

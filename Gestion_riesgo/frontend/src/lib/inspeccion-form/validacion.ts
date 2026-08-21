@@ -12,7 +12,14 @@
 
 import type { Catalogos, FormularioInspeccion } from './tipos';
 import type { IdPaso } from './esquema';
-import { cumpleRequisitos, elementosDe, EVENTO_OTRO, pasosVigentes } from './esquema';
+import {
+	cumpleRequisitos,
+	elementosDe,
+	EVENTO_OTRO,
+	muestraProfesionOtra,
+	pasosVigentes,
+	PROFESION_OTRA
+} from './esquema';
 
 export type Errores = Record<string, string>;
 
@@ -109,7 +116,16 @@ function general(d: FormularioInspeccion, c: Catalogos, e: Errores): void {
 
 	exigir(d.profesional_nombre, 'profesional_nombre', 'Escriba el nombre del profesional responsable.', e);
 	exigir(d.profesional_tarjeta, 'profesional_tarjeta', 'Indique la tarjeta profesional.', e);
-	exigir(d.profesional_profesion, 'profesional_profesion', 'Indique la profesión.', e);
+	if (d.profesional_profesion === '') {
+		e.profesional_profesion = 'Indique la profesión.';
+	} else if (!c.profesiones.some((o) => o.codigo === d.profesional_profesion)) {
+		e.profesional_profesion = 'Seleccione una profesión de la lista.';
+	} else if (muestraProfesionOtra(d)) {
+		const t = d.profesional_profesion_otra.trim();
+		if (t.length < 3 || t.length > 120) {
+			e.profesional_profesion_otra = 'Escriba la profesión, entre 3 y 120 caracteres.';
+		}
+	}
 
 	if (!documentoValido(d.profesional_documento)) {
 		e.profesional_documento = 'Indique la cédula del profesional.';

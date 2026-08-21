@@ -81,7 +81,7 @@ final class Validador
 
         $this->exigir($e, 'profesional_nombre', 'Escriba el nombre del profesional responsable.', 3);
         $this->exigir($e, 'profesional_tarjeta', 'Indique la tarjeta profesional.', 3);
-        $this->exigir($e, 'profesional_profesion', 'Indique la profesión.', 3);
+        $this->profesion($e);
         $this->documento($e, 'profesional_documento', 'Indique la cédula del profesional.');
         $this->opcional($e, 'profesional_documento_de');
         $this->tel($e, 'profesional_telefono', true);
@@ -95,6 +95,57 @@ final class Validador
 
         $rufe = $e['rufe_reporte_id'] ?? null;
         $this->datos['rufe_reporte_id'] = is_numeric($rufe) && (int) $rufe > 0 ? (int) $rufe : null;
+    }
+
+    /**
+     * La profesión de quien inspecciona.
+     *
+     * Se guarda ya resuelta —la etiqueta de la lista, o lo que se escribió en
+     * «Otra»—, igual que hace el RUFE con el evento. Lo que va al papel y al
+     * expediente es el nombre de la profesión, y no hay nada que filtrar por
+     * código que justifique una columna más.
+     *
+     * @param  array<string,mixed>  $e
+     */
+    private function profesion(array $e): void
+    {
+        $codigo = $this->texto($e, 'profesional_profesion');
+        $otra = $this->texto($e, 'profesional_profesion_otra');
+
+        if ($codigo === '') {
+            $this->errores['profesional_profesion'] = 'Indique la profesión.';
+
+            return;
+        }
+
+        if (! Catalogos::esProfesionValida($codigo)) {
+            $this->errores['profesional_profesion'] = 'Seleccione una profesión de la lista.';
+
+            return;
+        }
+
+        if ($codigo === Catalogos::PROFESION_OTRA) {
+            if (mb_strlen($otra) < 3 || mb_strlen($otra) > 120) {
+                $this->errores['profesional_profesion_otra'] = 'Escriba la profesión, entre 3 y 120 caracteres.';
+
+                return;
+            }
+
+            $this->datos['profesional_profesion'] = $otra;
+
+            return;
+        }
+
+        // Un texto libre con una profesión de la lista elegida significa que el
+        // formulario y el servidor no están de acuerdo: se rechaza en vez de
+        // guardar en silencio un dato que nadie podrá volver a ver ni corregir.
+        if ($otra !== '') {
+            $this->errores['profesional_profesion_otra'] = 'Este campo solo aplica cuando elige "Otra".';
+
+            return;
+        }
+
+        $this->datos['profesional_profesion'] = Catalogos::PROFESIONES[$codigo];
     }
 
     // ── 2. Localización ──────────────────────────────────────────────────────
