@@ -134,9 +134,25 @@ describe('la bifurcación', () => {
 			const ids = pasosVigentes(form({ requisitos }), CATALOGOS).map((p) => p.id);
 			expect(ids).toContain('profesional');
 			expect(ids).toContain('localizacion');
-			expect(ids).toContain('aprobacion');
 			expect(ids).toContain('revision');
 		}
+	});
+
+	it('el numeral 9 no es un paso: la aprobación no se autofirma', () => {
+		// Quien levanta la ficha no puede aprobarla en el mismo acto. La decisión
+		// se toma después, sobre la ficha guardada, igual que en el censo. Si
+		// alguien devuelve el paso, esto lo delata.
+		for (const requisitos of [TRES_SI, { ...TRES_SI, PROPIETARIO: false }]) {
+			const ids = pasosVigentes(form({ requisitos }), CATALOGOS).map((p) => p.id);
+			expect(ids).not.toContain('aprobacion');
+		}
+	});
+
+	it('la rama de inspección son diez pasos contados', () => {
+		// El número que ve el profesional en pantalla («Paso 8 de 10»). Se cuenta
+		// sobre `pasosConProgreso`, que es de donde sale ese rótulo: la portada y
+		// la revisión final no se anuncian como avance.
+		expect(pasosConProgreso(form({ requisitos: TRES_SI }), CATALOGOS)).toHaveLength(10);
 	});
 
 	it('ni el primer paso ni el último cuentan como avance', () => {

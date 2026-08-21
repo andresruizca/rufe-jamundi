@@ -262,7 +262,10 @@ final class InspeccionCapturaController
                     'acta_nombre' => $datos['acta_nombre'] ?? null,
                     'acta_documento' => $datos['acta_documento'] ?? null,
                     'acta_telefono' => $datos['acta_telefono'] ?? null,
-                    'aprobacion_profesional' => $datos['aprobacion_profesional'],
+                    // La columna es NOT NULL y viene de cuando el numeral 9 se
+                    // diligenciaba en campo. Las fichas nuevas entran con cadena
+                    // vacía; las ya levantadas conservan lo que se escribió.
+                    'aprobacion_profesional' => $datos['aprobacion_profesional'] ?? '',
                     'aprobacion_coordinador' => $datos['aprobacion_coordinador'] ?? null,
                     'huella' => $huella,
                     'creado_por' => $actor['id'],

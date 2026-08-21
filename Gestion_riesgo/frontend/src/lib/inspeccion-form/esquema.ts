@@ -25,7 +25,6 @@ export type IdPaso =
 	| 'informante'
 	| 'fotos'
 	| 'acta'
-	| 'aprobacion'
 	| 'revision';
 
 export type Paso = {
@@ -161,14 +160,6 @@ export const PASOS: Paso[] = [
 		campos: ['acta_modalidad', 'acta_nombre', 'acta_documento', 'acta_telefono'],
 		cuentaEnProgreso: true,
 		rama: 'acta'
-	},
-	{
-		id: 'aprobacion',
-		titulo: 'Aprobación',
-		ayuda: 'Quiénes responden por esta inspección.',
-		campos: ['aprobacion_profesional', 'aprobacion_coordinador'],
-		cuentaEnProgreso: true,
-		rama: 'siempre'
 	},
 	{
 		id: 'revision',
@@ -404,8 +395,6 @@ export function formularioVacio(): FormularioInspeccion {
 		acta_nombre: '',
 		acta_documento: '',
 		acta_telefono: '',
-		aprobacion_profesional: '',
-		aprobacion_coordinador: '',
 		rufe_reporte_id: null
 	};
 }

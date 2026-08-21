@@ -13,7 +13,7 @@
 
 	import { onDestroy } from 'svelte';
 	import { ChevronLeft, ChevronRight, Download, LoaderCircle, TriangleAlert, X, ZoomIn } from '@lucide/svelte';
-	import { rufeApi } from '$lib/api/servicios';
+	import { inspeccionApi, rufeApi } from '$lib/api/servicios';
 
 	type Evidencia = {
 		id: number;
@@ -22,9 +22,28 @@
 		tamano_bytes: number;
 		mime?: string;
 		tipo?: string;
+		/** El «FOTOGRAFIA DE:» del numeral 11, solo en la inspección. */
+		descripcion?: string | null;
 	};
 
-	let { reporteId, evidencias }: { reporteId: number; evidencias: Evidencia[] } = $props();
+	type Props = {
+		/** Ficha dueña de las fotos. Censo o inspección, según `origen`. */
+		reporteId: number;
+		evidencias: Evidencia[];
+		/**
+		 * De qué formato son. Cambia el endpoint del que salen las imágenes.
+		 *
+		 * Se pasa el origen y no una función de descarga porque el visor sigue
+		 * haciendo lo mismo con las dos: la única diferencia está en la ruta.
+		 */
+		origen?: 'rufe' | 'inspeccion';
+		/** Muestra el «FOTOGRAFIA DE:» del numeral 11 bajo cada miniatura. */
+		conPie?: boolean;
+	};
+
+	let { reporteId, evidencias, origen = 'rufe', conPie = false }: Props = $props();
+
+	const api = $derived(origen === 'inspeccion' ? inspeccionApi : rufeApi);
 
 	/** URL de objeto por evidencia, para no volver a pedir una imagen ya traída. */
 	let urls = $state<Record<number, string>>({});
@@ -54,7 +73,7 @@
 		cargando = { ...cargando, [ev.id]: true };
 
 		try {
-			const url = await rufeApi.verEvidencia(reporteId, ev.id);
+			const url = await api.verEvidencia(reporteId, ev.id);
 			urls = { ...urls, [ev.id]: url };
 			fallidas = { ...fallidas, [ev.id]: '' };
 		} catch {
@@ -118,7 +137,7 @@
 	 */
 	async function descargar(ev: Evidencia): Promise<void> {
 		try {
-			await rufeApi.descargarEvidencia(reporteId, ev.id, ev.nombre_original);
+			await api.descargarEvidencia(reporteId, ev.id, ev.nombre_original);
 			problema = null;
 		} catch {
 			problema = 'No se pudo descargar el archivo. Intente de nuevo.';
@@ -178,6 +197,13 @@
 
 				<div class="miniatura__pie">
 					<span class="miniatura__nombre">{etiqueta(ev, i)}</span>
+					{#if conPie}
+						<!-- El pie que escribió el profesional en campo. Sin él, diez
+						     fotos de grietas son indistinguibles entre sí. -->
+						<span class="miniatura__descripcion">
+							{ev.descripcion || 'Sin descripción'}
+						</span>
+					{/if}
 					<span class="miniatura__peso">{ev.extension.toUpperCase()} · {tamano(ev.tamano_bytes)}</span>
 				</div>
 
@@ -387,6 +413,13 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		overflow-wrap: anywhere;
+	}
+
+	.miniatura__descripcion {
+		display: block;
+		font-size: 0.76rem;
+		line-height: 1.35;
+		color: var(--color-text);
 	}
 
 	.miniatura__peso {

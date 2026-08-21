@@ -501,10 +501,15 @@ final class Validador
     /** @param array<string,mixed> $e */
     private function aprobacion(array $e): void
     {
-        $this->exigir($e, 'aprobacion_profesional', 'Escriba el nombre del profesional que responde por la inspección.', 3);
-
-        // El coordinador del Consejo Territorial suele aprobar después, en la
-        // oficina: exigirlo en campo dejaría la ficha sin poder cerrarse.
+        // El numeral 9 ya no se diligencia en campo. Quien levanta la ficha no
+        // puede aprobarla en el mismo acto: de ella depende una entrega de
+        // materiales públicos, y se llena de pie en la puerta de una casa. La
+        // decisión se toma después, sobre la ficha guardada, con el mismo
+        // mecanismo de estados del censo.
+        //
+        // Los dos campos siguen aceptándose —vacíos en las fichas nuevas— porque
+        // las inspecciones ya levantadas los traen y el PDF los imprime.
+        $this->opcional($e, 'aprobacion_profesional');
         $this->opcional($e, 'aprobacion_coordinador');
     }
 

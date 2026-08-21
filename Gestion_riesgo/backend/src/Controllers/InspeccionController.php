@@ -13,6 +13,7 @@ use App\Core\Response;
 use App\Inspeccion\BancoMateriales;
 use App\Inspeccion\Catalogos;
 use App\Inspeccion\NivelDano;
+use App\Rufe\Archivos;
 use App\Rufe\Catalogos as Rufe;
 
 /**
@@ -115,7 +116,7 @@ final class InspeccionController
         );
 
         $fotos = Db::all(
-            'SELECT id, descripcion, nombre_original, tamano_bytes, mime
+            'SELECT id, descripcion, nombre_original, extension, tamano_bytes, mime
                FROM rufe_evidencias WHERE inspeccion_id = :i ORDER BY id',
             ['i' => $id]
         );
@@ -152,6 +153,47 @@ final class InspeccionController
             'historial' => $historial,
             'fotos' => $fotos,
         ]);
+    }
+
+    /**
+     * Una foto del registro fotográfico, para verla o descargarla.
+     *
+     * Las fotos viven fuera del docroot y solo salen por aquí, con sesión: un
+     * enlace directo al archivo dejaría el registro fotográfico de una vivienda
+     * damnificada al alcance de cualquiera que adivinara la ruta.
+     *
+     * Se exige que la foto pertenezca a ESTA inspección, no solo que exista:
+     * sin esa condición, el identificador de una foto de otra ficha bastaría
+     * para verla.
+     */
+    public function descargarFoto(Request $req): void
+    {
+        $id = (int) $req->param('id');
+        $ficha = Db::first('SELECT id, numero FROM inspeccion_viviendas WHERE id = :i', ['i' => $id]);
+
+        if ($ficha === null) {
+            throw HttpError::noEncontrado('No existe esa inspección.');
+        }
+
+        $fila = Db::first(
+            'SELECT * FROM rufe_evidencias WHERE id = :f AND inspeccion_id = :i',
+            ['f' => (int) $req->param('foto'), 'i' => $ficha['id']]
+        );
+
+        if ($fila === null) {
+            throw HttpError::noEncontrado('El archivo no existe.');
+        }
+
+        Auditoria::registrar(
+            $req,
+            'inspeccion.foto_descargada',
+            Auth::exigirUsuario($req),
+            'inspeccion_viviendas',
+            (string) $ficha['numero'],
+            'foto '.$fila['id']
+        );
+
+        Archivos::emitir($fila);
     }
 
     public function cambiarEstado(Request $req): void

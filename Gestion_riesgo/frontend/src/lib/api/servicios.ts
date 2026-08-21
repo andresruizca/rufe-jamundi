@@ -173,6 +173,36 @@ export const inspeccionApi = {
 		}>(`/inspeccion/fichas${consulta ? `?${consulta}` : ''}`);
 	},
 	ver: (id: number) => api.get<DetalleInspeccion>(`/inspeccion/fichas/${id}`),
+
+	/**
+	 * Las fotos del numeral 11, por el mismo camino que las del censo: viven
+	 * fuera del docroot y solo salen con el token en una cabecera, algo que una
+	 * etiqueta `<img>` no sabe enviar.
+	 */
+	async verEvidencia(inspeccionId: number, fotoId: number): Promise<string> {
+		const respuesta = await fetch(`${API_BASE}/inspeccion/fichas/${inspeccionId}/fotos/${fotoId}`, {
+			headers: { Authorization: `Bearer ${leerToken() ?? ''}` }
+		});
+
+		if (!respuesta.ok) throw new Error('No se pudo abrir la imagen.');
+
+		return URL.createObjectURL(await respuesta.blob());
+	},
+
+	async descargarEvidencia(inspeccionId: number, fotoId: number, nombre: string): Promise<void> {
+		const respuesta = await fetch(`${API_BASE}/inspeccion/fichas/${inspeccionId}/fotos/${fotoId}`, {
+			headers: { Authorization: `Bearer ${leerToken() ?? ''}` }
+		});
+
+		if (!respuesta.ok) throw new Error('No se pudo descargar el archivo.');
+
+		const url = URL.createObjectURL(await respuesta.blob());
+		const enlace = document.createElement('a');
+		enlace.href = url;
+		enlace.download = nombre;
+		enlace.click();
+		URL.revokeObjectURL(url);
+	},
 	cambiarEstado: (id: number, estado: string, nota: string) =>
 		api.put<{ estado: string }>(`/inspeccion/fichas/${id}/estado`, { estado, nota })
 };

@@ -142,9 +142,10 @@ export type FormularioInspeccion = {
 	acta_documento: string;
 	acta_telefono: string;
 
-	// ── 9. Aprobación ────────────────────────────────────────────────────────
-	aprobacion_profesional: string;
-	aprobacion_coordinador: string;
+	// El numeral 9 —la aprobación— NO se captura aquí. Quien llena la ficha no
+	// puede aprobarla en el mismo acto: se levanta en la puerta de una casa y de
+	// ella depende una entrega de materiales públicos. La decisión se toma
+	// después, sobre la ficha guardada, igual que en el censo.
 
 	// ── Vínculo opcional con el censo ────────────────────────────────────────
 	/** Ficha RUFE de la que se partió, si se partió de una. */

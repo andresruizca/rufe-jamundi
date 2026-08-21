@@ -163,7 +163,11 @@
 				<tbody>
 					{#each filas as f (f.id)}
 						<tr>
-							<td class="numero">{f.numero}</td>
+							<td class="numero">
+								<!-- El número lleva a la ficha: es donde se ven las fotos, la
+								     ubicación y donde se aprueba o se rechaza. -->
+								<a href="/riesgo/inspecciones/{f.id}">{f.numero}</a>
+							</td>
 							<td>
 								{f.propietario_nombres}
 								<small>C.C. {f.propietario_documento}</small>

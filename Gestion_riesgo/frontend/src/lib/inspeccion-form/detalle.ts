@@ -46,6 +46,10 @@ export type InspeccionRegistrada = {
 	direccion_cabecera: string | null;
 	corregimiento: string | null;
 	vereda: string | null;
+	/** El punto GPS tomado frente a la vivienda. Nulo si no se pudo tomar. */
+	latitud: string | null;
+	longitud: string | null;
+	precision_m: number | null;
 	req_no_beneficiario: number | null;
 	req_propietario: number | null;
 	req_no_alto_riesgo: number | null;
@@ -85,5 +89,13 @@ export type DetalleInspeccion = {
 	requisitos: Record<string, string>;
 	kits_cubierta: Record<string, Record<string, string>>;
 	historial: { estado: string; nota: string | null; usuario_email: string | null; creado_en: string }[];
-	fotos: { id: number; descripcion: string | null; nombre_original: string; tamano_bytes: number; mime: string }[];
+	fotos: {
+		id: number;
+		/** El «FOTOGRAFIA DE:» del numeral 11. */
+		descripcion: string | null;
+		nombre_original: string;
+		extension: string;
+		tamano_bytes: number;
+		mime: string;
+	}[];
 };

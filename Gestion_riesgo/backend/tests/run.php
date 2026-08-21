@@ -1625,6 +1625,25 @@ prueba('una inspección completa pasa sin errores', function (): void {
     afirmarIgual([], erroresInspeccion(inspeccionBase()));
 });
 
+prueba('el numeral 9 ya no se diligencia en campo', function (): void {
+    // Quien levanta la ficha no puede aprobarla en el mismo acto: de ella
+    // depende una entrega de materiales públicos. La decisión se toma después,
+    // sobre la ficha guardada, con el mecanismo de estados.
+    $base = inspeccionBase();
+    unset($base['aprobacion_profesional']);
+
+    afirmarIgual([], erroresInspeccion($base));
+});
+
+prueba('una ficha que sí trae el numeral 9 lo conserva', function (): void {
+    // Las inspecciones ya levantadas lo llevan y el PDF lo imprime. Dejar de
+    // exigirlo no es lo mismo que empezar a descartarlo.
+    $d = datosInspeccion(inspeccionBase(['aprobacion_coordinador' => 'Carlos Alberto Gil']));
+
+    afirmarIgual('Ana Ruiz', $d['aprobacion_profesional']);
+    afirmarIgual('Carlos Alberto Gil', $d['aprobacion_coordinador']);
+});
+
 prueba('la inspección guarda el punto GPS cuando se toma', function (): void {
     // La misma ubicación que ya toma el censo. Sin ella, «finca La Esperanza,
     // vía a Potrerito» es imposible de encontrar dos semanas después con un

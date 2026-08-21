@@ -970,27 +970,6 @@
 						error={errores.acta_telefono}
 						alCambiar={alCambiar}
 					/>
-				{:else if paso.id === 'aprobacion'}
-					<p class="tarjeta__nota">
-						El formato se imprime con las líneas de firma en blanco, para firmarlo a mano.
-					</p>
-					<CampoTexto
-						id="aprobacion_profesional"
-						etiqueta="Profesional responsable de la inspección"
-						marcador="Ej.: Ana María Ruiz Cadavid"
-						bind:valor={datos.aprobacion_profesional}
-						error={errores.aprobacion_profesional}
-						requerido
-						alCambiar={alCambiar}
-					/>
-					<CampoTexto
-						id="aprobacion_coordinador"
-						etiqueta="Coordinador del Consejo Territorial"
-						marcador="Ej.: Carlos Alberto Gil"
-						bind:valor={datos.aprobacion_coordinador}
-						ayuda="Puede quedar en blanco y completarse en la oficina."
-						alCambiar={alCambiar}
-					/>
 				{:else if paso.id === 'revision'}
 					<dl class="resumen">
 						<div><dt>Propietario</dt><dd>{datos.propietario_nombres}</dd></div>

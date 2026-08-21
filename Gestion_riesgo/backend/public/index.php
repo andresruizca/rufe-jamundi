@@ -160,6 +160,7 @@ $router->get('/inspeccion/duplicados', [$inspeccionCaptura, 'duplicados'], Auth:
 $router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::ESCRITURA);
 $router->get('/inspeccion/fichas', [$inspeccion, 'listar'], Auth::TODOS);
 $router->get('/inspeccion/fichas/{id}', [$inspeccion, 'ver'], Auth::TODOS);
+$router->get('/inspeccion/fichas/{id}/fotos/{foto}', [$inspeccion, 'descargarFoto'], Auth::TODOS);
 $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], Auth::ESCRITURA);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);

@@ -79,7 +79,6 @@ function completo(cambios: Partial<FormularioInspeccion> = {}): FormularioInspec
 		informante_nombre: 'María Pérez',
 		informante_documento: '1144567890',
 		informante_parentesco: 3,
-		aprobacion_profesional: 'Ana Ruiz',
 		...cambios
 	};
 }

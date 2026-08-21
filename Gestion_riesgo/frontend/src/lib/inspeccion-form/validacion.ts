@@ -98,7 +98,6 @@ export function validarTodo(d: FormularioInspeccion, c: Catalogos): Errores {
 		acta(d, e);
 	}
 
-	exigir(d.aprobacion_profesional, 'aprobacion_profesional', 'Escriba el nombre del profesional que responde por la inspección.', e);
 
 	return e;
 }
