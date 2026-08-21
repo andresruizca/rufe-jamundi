@@ -28,11 +28,13 @@ import { RUTA_PLANTILLA as RUTA_INSPECCION } from '$lib/inspeccion-pdf/coordenad
 import { seGuardaDeLaApi } from '$lib/offline/cacheables';
 import { baseApi, ErrorDeRed, subirFotosDe } from '$lib/rufe-form/subida';
 import {
+	DESTINO,
 	ETIQUETA_SYNC,
 	borrarFotosDe,
 	fichasPendientes,
 	fotosDe,
 	guardarFicha,
+	tipoDe,
 	tokenEspejado,
 	type FichaEnCola,
 	type FotoEnCola
@@ -317,16 +319,22 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	// si la ficha entrara antes se quedarían huérfanas hasta caducar.
 	let carga: string | null = null;
 
-	try {
-		carga = await subirFotosDe(ficha, token);
-	} catch (e) {
-		return marcar(ficha, e);
+	// Solo el censo lleva fotos en la cola. La inspección adjunta su registro
+	// fotográfico desde la ficha ya guardada, con señal.
+	if (tipoDe(ficha) === 'RUFE') {
+		try {
+			carga = await subirFotosDe(ficha, token);
+		} catch (e) {
+			return marcar(ficha, e);
+		}
 	}
 
 	let respuesta: Response;
 
 	try {
-		respuesta = await fetch(`${baseApi()}/rufe/reportes`, {
+		// Cada formato va a su ruta. La tabla vive en `cola.ts` para que sumar un
+		// tercero no obligue a tocar el Service Worker.
+		respuesta = await fetch(`${baseApi()}${DESTINO[tipoDe(ficha)].ruta}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 			body: JSON.stringify({ ...ficha.cuerpo, envio_id: ficha.envioId, ...(carga ? { carga } : {}) })
@@ -349,7 +357,7 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 
 	let datos: {
 		ok?: boolean;
-		data?: { radicado?: string };
+		data?: Record<string, unknown>;
 		message?: string;
 		errors?: Record<string, string>;
 	};
@@ -373,7 +381,11 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	}
 
 	ficha.estado = 'enviada';
-	ficha.radicado = datos.data?.radicado;
+	// El censo lo llama «radicado» y la inspección «número»; se guardan los dos
+	// para que la pantalla de pendientes no tenga que saber cuál mirar.
+	const identificador = datos.data?.[DESTINO[tipoDe(ficha)].clave];
+	ficha.numero = typeof identificador === 'string' ? identificador : undefined;
+	ficha.radicado = ficha.numero;
 	ficha.error = undefined;
 	ficha.errores = undefined;
 	ficha.actualizadoEn = Date.now();

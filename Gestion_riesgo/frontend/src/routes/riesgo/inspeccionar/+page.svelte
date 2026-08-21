@@ -48,6 +48,7 @@
 	import type { Catalogos, FormularioInspeccion } from '$lib/inspeccion-form/tipos';
 	import type { ListaMateriales } from '$lib/inspeccion-form/detalle';
 	import { sesion } from '$lib/stores/sesion.svelte';
+	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 
 	let catalogos = $state<Catalogos | null>(null);
 	let datos = $state<FormularioInspeccion>(formularioVacio());
@@ -62,6 +63,13 @@
 	let avisoDuplicado = $state<string>('');
 
 	const borrador = new GestorBorrador();
+
+	// La misma cola del censo, con su discriminador. Sin esto, enviar en una
+	// vereda solo mostraba un error: el trabajo quedaba en el borrador, pero
+	// nadie garantizaba que saliera al volver la señal.
+	const envio = new GestorEnvio();
+	let detenerEnvio: (() => void) | null = null;
+	let enCola = $state(false);
 
 	const pasos = $derived(catalogos ? pasosVigentes(datos, catalogos) : []);
 	const paso = $derived(pasos[Math.min(indice, pasos.length - 1)]);
@@ -126,10 +134,14 @@
 	];
 
 	onMount(() => {
+		detenerEnvio = envio.iniciar();
 		void iniciar();
 	});
 
-	onDestroy(() => borrador.detener());
+	onDestroy(() => {
+		borrador.detener();
+		detenerEnvio?.();
+	});
 
 	async function iniciar() {
 		try {
@@ -173,6 +185,8 @@
 
 	function empezarDeNuevo() {
 		descartarBorrador();
+		enCola = false;
+		enviado = null;
 		datos = formularioVacio();
 		datos.fecha_evaluacion = hoy();
 		datos.profesional_nombre = sesion.usuario?.nombre ?? '';
@@ -258,10 +272,38 @@
 		errorEnvio = '';
 
 		try {
-			const respuesta = await inspeccionApi.enviar({
-				...$state.snapshot(datos),
-				envio_id: borrador.clave
-			});
+			const resumen = {
+				evento: 'Inspección de vivienda',
+				direccion:
+					[datos.direccion_cabecera, datos.vereda, datos.corregimiento]
+						.filter(Boolean)
+						.join(' · ') || datos.propietario_nombres,
+				personas: 0
+			};
+
+			const r = await envio.enviar(
+				{ ...$state.snapshot(datos), envio_id: borrador.clave },
+				resumen,
+				[],
+				'INSPECCION'
+			);
+
+			if (r.estado === 'en-cola') {
+				// No es un error ni un final: la inspección está a salvo en el
+				// teléfono y saldrá sola. Quien está en la puerta de una casa puede
+				// seguir con la siguiente sin esperar a que vuelva la señal.
+				enCola = true;
+				enviado = { numero: '', combo: null, motivo: null };
+				descartarBorrador();
+
+				return;
+			}
+
+			const respuesta = r.respuesta as unknown as {
+				numero: string;
+				combo: string | null;
+				combo_motivo: string | null;
+			};
 
 			enviado = {
 				numero: respuesta.numero,
@@ -300,15 +342,23 @@
 {:else if enviado}
 	<div class="tarjeta cierre">
 		<CheckCircle2 size={40} aria-hidden="true" />
-		<h2>Inspección registrada</h2>
-		<p class="cierre__numero">{enviado.numero}</p>
+		{#if enCola}
+			<h2>Inspección guardada</h2>
+			<p class="cierre__motivo">
+				No hay señal. Quedó guardada en este teléfono y se enviará sola en cuanto vuelva la
+				conexión. Puede verla en <a href="/riesgo/pendientes">Pendientes</a>.
+			</p>
+		{:else}
+			<h2>Inspección registrada</h2>
+			<p class="cierre__numero">{enviado.numero}</p>
+		{/if}
 
-		{#if enviado.combo}
+		{#if enviado.combo && !enCola}
 			<p class="cierre__combo">
 				Corresponde <strong>{enviado.combo.replace('_', ' ').toLowerCase()}</strong>.
 			</p>
 			<p class="cierre__motivo">{enviado.motivo}</p>
-		{:else}
+		{:else if !enCola}
 			<p class="cierre__motivo">{enviado.motivo}</p>
 		{/if}
 

@@ -25,6 +25,7 @@ import {
 	borrarFicha,
 	fichasPendientes,
 	guardarFicha,
+	type TipoFicha,
 	guardarFoto,
 	leerFicha,
 	pedirAlmacenamientoPersistente,
@@ -133,12 +134,14 @@ export class GestorEnvio {
 	async enviar(
 		cuerpo: Record<string, unknown>,
 		resumen: FichaEnCola['resumen'],
-		fotos: (Omit<FotoEnCola, 'envioId' | 'subida'> & { subida?: boolean })[] = []
+		fotos: (Omit<FotoEnCola, 'envioId' | 'subida'> & { subida?: boolean })[] = [],
+		tipo: TipoFicha = 'RUFE'
 	): Promise<{ estado: 'enviado'; respuesta: RespuestaEnvio } | { estado: 'en-cola' }> {
 		this.#envioId ??= uid();
 
 		const ficha: FichaEnCola = {
 			envioId: this.#envioId,
+			tipo,
 			cuerpo,
 			estado: 'pendiente',
 			intentos: 0,

@@ -30,9 +30,20 @@ export const ETIQUETA_SYNC = 'sgr-enviar-fichas';
 
 export type EstadoFicha = 'pendiente' | 'enviando' | 'enviada' | 'error';
 
+/**
+ * Qué formato se está enviando.
+ *
+ * Ausente significa RUFE: las fichas que ya estaban en la cola de un teléfono
+ * antes de que existiera la inspección no tienen este campo, y no hay forma de
+ * migrarlas —viven en el IndexedDB de cada aparato, no en el servidor—. Se lee
+ * siempre con `tipoDe()`, nunca directamente.
+ */
+export type TipoFicha = 'RUFE' | 'INSPECCION';
+
 export type FichaEnCola = {
 	/** Identificador de envío. Es lo que hace seguro reintentar. */
 	envioId: string;
+	tipo?: TipoFicha;
 	cuerpo: Record<string, unknown>;
 	estado: EstadoFicha;
 	intentos: number;
@@ -50,8 +61,26 @@ export type FichaEnCola = {
 	 * de saber qué corregir ni de decidir si vale la pena descartarla.
 	 */
 	errores?: Record<string, string>;
+	/** Número o radicado devuelto por el servidor, según el formato. */
+	numero?: string;
 	/** Resumen mínimo para poder listarla sin abrir el cuerpo entero. */
 	resumen: { evento: string; direccion: string; personas: number };
+};
+
+/** El tipo de una ficha, tratando la ausencia como RUFE. */
+export function tipoDe(f: Pick<FichaEnCola, 'tipo'>): TipoFicha {
+	return f.tipo ?? 'RUFE';
+}
+
+/**
+ * A dónde va cada formato y con qué nombre vuelve su identificador.
+ *
+ * En un solo sitio para que añadir un tercer formato sea una línea y no una
+ * cacería por el Service Worker.
+ */
+export const DESTINO: Record<TipoFicha, { ruta: string; clave: string; etiqueta: string }> = {
+	RUFE: { ruta: '/rufe/reportes', clave: 'radicado', etiqueta: 'Ficha del censo' },
+	INSPECCION: { ruta: '/inspeccion/fichas', clave: 'numero', etiqueta: 'Inspección de vivienda' }
 };
 
 export type FotoEnCola = {

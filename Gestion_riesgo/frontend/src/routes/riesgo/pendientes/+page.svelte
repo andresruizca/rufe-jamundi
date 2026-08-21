@@ -20,6 +20,8 @@
 		espacioDisponible,
 		fichasPendientes,
 		fotosDe,
+		DESTINO,
+		tipoDe,
 		type FichaEnCola
 	} from '$lib/rufe-form/cola';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
@@ -188,9 +190,12 @@
 				<li class="ficha">
 					<div class="ficha__cuerpo">
 						<p class="ficha__direccion">{ficha.resumen.direccion}</p>
+						<!-- De qué formato es. Con dos conviviendo en la misma cola, no
+						     decirlo obligaría a adivinar por la dirección. -->
+						<p class="ficha__tipo">{DESTINO[tipoDe(ficha)].etiqueta}</p>
 						<p class="ficha__meta">
-							{ficha.resumen.evento} · {ficha.resumen.personas}
-							{ficha.resumen.personas === 1 ? 'persona' : 'personas'}
+							{ficha.resumen.evento}{#if ficha.resumen.personas > 0} · {ficha.resumen.personas}
+								{ficha.resumen.personas === 1 ? 'persona' : 'personas'}{/if}
 							{#if fotosPorFicha[ficha.envioId] > 0}
 								· {fotosPorFicha[ficha.envioId]}
 								{fotosPorFicha[ficha.envioId] === 1 ? 'foto' : 'fotos'}
@@ -390,6 +395,17 @@
 	.ficha__cuerpo {
 		flex: 1 1 12rem;
 		min-width: 0;
+	}
+
+	.ficha__tipo {
+		display: inline-block;
+		margin: 0 0 0.2rem;
+		padding: 0.08rem 0.4rem;
+		border-radius: 999px;
+		background: var(--color-surface-alt);
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		font-weight: 600;
 	}
 
 	.ficha__direccion {
