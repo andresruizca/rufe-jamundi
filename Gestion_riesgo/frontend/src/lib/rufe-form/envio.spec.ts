@@ -18,8 +18,27 @@ vi.stubGlobal('window', {
 });
 vi.stubGlobal('navigator', { onLine: true });
 
+// Se intercepta `api.post` y no `rufeApi.enviarReporte` porque el envío ya no
+// conoce una sola ruta: la saca de DESTINO según el formato. La ruta recibida es
+// justamente lo que hay que poder comprobar.
 const enviarReporte = vi.fn();
-vi.mock('$lib/api/servicios', () => ({ rufeApi: { enviarReporte: (c: unknown) => enviarReporte(c) } }));
+const rutasUsadas: string[] = [];
+
+vi.mock('$lib/api/client', async (original) => {
+	const real = await original<typeof import('$lib/api/client')>();
+
+	return {
+		...real,
+		api: {
+			...real.api,
+			post: (ruta: string, cuerpo: unknown) => {
+				rutasUsadas.push(ruta);
+
+				return enviarReporte(cuerpo);
+			}
+		}
+	};
+});
 
 const { ApiError } = await import('$lib/api/client');
 const { GestorEnvio } = await import('./envio.svelte');
@@ -42,6 +61,42 @@ function ficha(envioId: string, cambios: Record<string, unknown> = {}) {
 beforeEach(async () => {
 	for (const f of await todasLasFichas()) await borrarFicha(f.envioId);
 	enviarReporte.mockReset();
+	rutasUsadas.length = 0;
+});
+
+describe('a qué ruta va cada formato', () => {
+	// El fallo que esto fija: `#intentar` tenía escrita `/rufe/reportes` a mano,
+	// así que una inspección enviada CON señal iba al endpoint del censo y el
+	// servidor la rechazaba. Sin señal salía bien, porque el Service Worker sí
+	// consultaba DESTINO — de ahí que costara verlo.
+	it('una inspección va a /inspeccion/fichas, no a /rufe/reportes', async () => {
+		await guardarFicha(ficha('i1', { tipo: 'INSPECCION' }));
+		enviarReporte.mockResolvedValue({ numero: 'INSP-0001' });
+
+		await new GestorEnvio().reintentarPendiente();
+
+		expect(rutasUsadas).toEqual(['/inspeccion/fichas']);
+	});
+
+	it('una ficha del censo sigue yendo a /rufe/reportes', async () => {
+		await guardarFicha(ficha('r1'));
+		enviarReporte.mockResolvedValue({ radicado: 'RUFE-0001' });
+
+		await new GestorEnvio().reintentarPendiente();
+
+		expect(rutasUsadas).toEqual(['/rufe/reportes']);
+	});
+
+	it('una ficha vieja sin `tipo` se trata como censo', async () => {
+		// Las que ya estaban en el IndexedDB de un teléfono antes de que existiera
+		// la inspección no tienen el campo y no hay forma de migrarlas.
+		await guardarFicha(ficha('v1', { tipo: undefined }));
+		enviarReporte.mockResolvedValue({ radicado: 'RUFE-0002' });
+
+		await new GestorEnvio().reintentarPendiente();
+
+		expect(rutasUsadas).toEqual(['/rufe/reportes']);
+	});
 });
 
 describe('una ficha rechazada por el servidor', () => {

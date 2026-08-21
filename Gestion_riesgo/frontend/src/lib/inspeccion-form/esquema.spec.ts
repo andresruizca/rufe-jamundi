@@ -152,8 +152,10 @@ describe('ningún campo se queda sin paso', () => {
 		// Es la prueba que justifica tener los pasos como datos: un campo que se
 		// añade y se olvida no se valida nunca y viaja vacío al expediente.
 		const enPasos = new Set(PASOS.flatMap((p) => p.campos));
-		// Estos no se editan: el vínculo lo pone el sistema al partir de una ficha.
-		const sinPaso = new Set(['rufe_reporte_id']);
+		// Estos no tienen control propio: el vínculo lo pone el sistema al partir de
+		// una ficha, y las coordenadas las pone el botón de «tomar la ubicación»,
+		// igual que en el RUFE.
+		const sinPaso = new Set(['rufe_reporte_id', 'latitud', 'longitud', 'precision_m']);
 
 		for (const campo of Object.keys(formularioVacio())) {
 			if (sinPaso.has(campo)) continue;

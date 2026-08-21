@@ -34,7 +34,7 @@ function foto(uid: string, cambios: Partial<EvidenciaLocal> = {}): EvidenciaLoca
 }
 
 function gestor(archivos: EvidenciaLocal[]) {
-	const g = new GestorEvidencias(CATALOGOS, 'borrador-de-prueba');
+	const g = GestorEvidencias.paraRufe(CATALOGOS, 'borrador-de-prueba');
 	g.archivos = archivos;
 
 	return g;
@@ -96,5 +96,44 @@ describe('cupos y estado', () => {
 		const g = gestor([foto('rechazada', { estado: 'error', reintentable: false })]);
 
 		expect(g.hayFallos).toBe(true);
+	});
+});
+
+describe('el registro fotográfico de la inspección', () => {
+	// El numeral 11 imprime diez recuadros, cada uno con su «FOTOGRAFIA DE:». El
+	// mismo gestor sirve a los dos formatos; lo único distinto es el cupo y el
+	// pie de foto.
+	function gestorInspeccion(archivos: EvidenciaLocal[] = []) {
+		const g = new GestorEvidencias({ INSPECCION: 10 }, 'inspeccion-de-prueba');
+		g.archivos = archivos;
+
+		return g;
+	}
+
+	it('tiene las diez casillas del formato, no las cuatro del censo', () => {
+		expect(gestorInspeccion().limiteDe('INSPECCION')).toBe(10);
+	});
+
+	it('un tipo que este formato no usa no deja hueco libre', () => {
+		// `limiteDe` devolvía el cupo de las fotos del daño para cualquier tipo que
+		// no fuera DOCUMENTO. Con tres tipos eso ya no vale: un cupo inventado
+		// dejaría adjuntar cédulas a una inspección.
+		expect(gestorInspeccion().limiteDe('DOCUMENTO')).toBe(0);
+	});
+
+	it('el pie de foto viaja con la foto a la cola', () => {
+		// Si no viajara, la hoja 3 del PDF saldría con los diez pies en blanco y
+		// nadie sabría qué muestra cada imagen.
+		const g = gestorInspeccion([
+			foto('f1', { tipo: 'INSPECCION', descripcion: 'Fisura en muro de carga' })
+		]);
+
+		expect(g.paraLaCola()[0].descripcion).toBe('Fisura en muro de carga');
+	});
+
+	it('una foto sin pie no inventa uno', () => {
+		const g = gestorInspeccion([foto('f2', { tipo: 'INSPECCION' })]);
+
+		expect(g.paraLaCola()[0].descripcion).toBeUndefined();
 	});
 });

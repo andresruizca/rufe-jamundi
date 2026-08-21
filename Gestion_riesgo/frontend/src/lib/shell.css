@@ -913,6 +913,46 @@ h3 {
 	margin-top: 0.1rem;
 }
 
+/* Bloque de «tomar la ubicación aquí». Lo usan los dos formatos de campo —el
+   censo y la inspección—, así que vive aquí y no en una de las dos páginas: la
+   copia de la otra se habría quedado atrás en el primer retoque. */
+.ubicacion {
+margin: 1.2rem 0;
+padding: 0.9rem;
+border: 1px solid var(--color-border);
+border-radius: 10px;
+background: var(--color-surface);
+}
+
+.ubicacion__titulo {
+margin: 0 0 0.25rem;
+font-size: 0.86rem;
+font-weight: 600;
+}
+
+.ubicacion__ayuda {
+margin: 0 0 0.7rem;
+font-size: 0.78rem;
+color: var(--color-muted);
+}
+
+.ubicacion__valor {
+display: flex;
+align-items: center;
+gap: 0.3rem;
+margin: 0 0 0.6rem;
+font-size: 0.84rem;
+color: var(--color-success);
+}
+
+.ubicacion__estado {
+margin: 0.5rem 0 0;
+min-height: 1rem;
+font-size: 0.78rem;
+color: var(--color-muted);
+}
+
+
 /* Aviso de versión nueva. Va bajo la barra, sin taparla: informa, no interrumpe.
    Recargar es decisión de quien está usando el sistema, que puede estar a mitad
    de una ficha. */

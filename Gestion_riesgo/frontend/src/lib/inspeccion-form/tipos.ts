@@ -97,6 +97,17 @@ export type FormularioInspeccion = {
 	direccion_cabecera: string;
 	corregimiento: string;
 	vereda: string;
+	/**
+	 * El punto GPS de la vivienda, tomado estando frente a ella.
+	 *
+	 * No tiene casilla en el papel, y aun así se guarda: «finca La Esperanza, vía
+	 * a Potrerito» no lleva a nadie hasta la casa dos semanas después, cuando hay
+	 * que ir a entregar los materiales. Es opcional, como en el censo, porque el
+	 * GPS no siempre engancha.
+	 */
+	latitud: number | null;
+	longitud: number | null;
+	precision_m: number | null;
 
 	// ── 3. Requisitos ────────────────────────────────────────────────────────
 	/** Uno por cada requisito del formato. `null` es «sin contestar». */

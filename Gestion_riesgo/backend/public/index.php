@@ -124,6 +124,7 @@ $router->get('/rufe/catalogos', [$rufeCaptura, 'catalogos'], Auth::ESCRITURA);
 $router->post('/rufe/cargas', [$rufeCaptura, 'abrirCarga'], Auth::ESCRITURA);
 $router->get('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'listarArchivos'], Auth::ESCRITURA);
 $router->post('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'subirArchivo'], Auth::ESCRITURA);
+$router->put('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'describirArchivo'], Auth::ESCRITURA);
 $router->delete('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'eliminarArchivo'], Auth::ESCRITURA);
 $router->post('/rufe/reportes', [$rufeCaptura, 'crear'], Auth::ESCRITURA);
 

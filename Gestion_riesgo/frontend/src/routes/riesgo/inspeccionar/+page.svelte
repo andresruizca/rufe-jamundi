@@ -13,7 +13,16 @@
 	// con la inspección de la vivienda, pasar al numeral 8».
 
 	import { onDestroy, onMount } from 'svelte';
-	import { ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, Send, TriangleAlert } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		ArrowRight,
+		CheckCircle2,
+		LoaderCircle,
+		MapPin,
+		Send,
+		TriangleAlert
+	} from '@lucide/svelte';
+	import { browser } from '$app/environment';
 	import { ApiError } from '$lib/api/client';
 	import { inspeccionApi } from '$lib/api/servicios';
 	import CampoTexto from '$lib/rufe-form/componentes/CampoTexto.svelte';
@@ -53,12 +62,16 @@
 	import type { Catalogos, FormularioInspeccion } from '$lib/inspeccion-form/tipos';
 	import type { ListaMateriales } from '$lib/inspeccion-form/detalle';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
+	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
+	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
 
 	let catalogos = $state<Catalogos | null>(null);
 	let datos = $state<FormularioInspeccion>(formularioVacio());
 	let indice = $state(0);
 	let errores = $state<Record<string, string>>({});
 	let cargando = $state(true);
+	let ubicando = $state(false);
+	let avisoUbicacion = $state<string | null>(null);
 	let errorCarga = $state('');
 	let enviando = $state(false);
 	let errorEnvio = $state('');
@@ -74,6 +87,13 @@
 	// nadie garantizaba que saliera al volver la señal.
 	const envio = new GestorEnvio();
 	let detenerEnvio: (() => void) | null = null;
+
+	// El registro fotográfico del numeral 11. La misma maquinaria del censo:
+	// comprime en el teléfono —la original nunca sale de ahí—, sube de a una con
+	// barra de progreso y guarda en IndexedDB lo que no pudo salir por falta de
+	// señal.
+	let evidencias = $state<GestorEvidencias | null>(null);
+	let detenerEvidencias: (() => void) | null = null;
 	let enCola = $state(false);
 
 	const pasos = $derived(catalogos ? pasosVigentes(datos, catalogos) : []);
@@ -106,6 +126,51 @@
 				)
 			: ''
 	);
+
+	// ── Ubicación ───────────────────────────────────────────────────────────
+	//
+	// Las mismas que el censo, y por la misma razón: la dirección escrita de una
+	// vivienda rural no lleva a nadie hasta la puerta dos semanas después, cuando
+	// hay que ir a entregar los materiales que esta inspección decide.
+	//
+	// Nunca bloquea: si el GPS no engancha —bajo un techo de zinc, entre
+	// montañas— se avisa y la visita continúa.
+
+	function usarMiUbicacion() {
+		if (!browser || !navigator.geolocation) {
+			avisoUbicacion = 'Su navegador no permite compartir la ubicación.';
+
+			return;
+		}
+
+		ubicando = true;
+		avisoUbicacion = null;
+
+		navigator.geolocation.getCurrentPosition(
+			(posicion) => {
+				datos.latitud = Number(posicion.coords.latitude.toFixed(7));
+				datos.longitud = Number(posicion.coords.longitude.toFixed(7));
+				datos.precision_m = Math.round(posicion.coords.accuracy);
+				ubicando = false;
+				avisoUbicacion = 'Ubicación agregada a la inspección.';
+				alCambiar();
+			},
+			() => {
+				ubicando = false;
+				avisoUbicacion =
+					'No se pudo obtener la ubicación. Puede continuar: la dirección escrita es suficiente.';
+			},
+			{ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+		);
+	}
+
+	function quitarUbicacion() {
+		datos.latitud = null;
+		datos.longitud = null;
+		datos.precision_m = null;
+		avisoUbicacion = 'Ubicación retirada de la inspección.';
+		alCambiar();
+	}
 
 	// De dónde sale el combo, para el desplegable de auditoría. No recalcula
 	// nada: toma `resultado` como un hecho y lo reordena para enseñarlo.
@@ -175,6 +240,7 @@
 	onDestroy(() => {
 		borrador.detener();
 		detenerEnvio?.();
+		detenerEvidencias?.();
 	});
 
 	async function iniciar() {
@@ -193,6 +259,9 @@
 		// Los mapas de requisitos e infraestructura se llenan en cuanto hay
 		// catálogos: sus claves salen de ahí y el formulario vacío no las conoce.
 		datos = conValoresIniciales(datos, catalogos);
+
+		evidencias = new GestorEvidencias({ INSPECCION: catalogos.limites.fotos }, borrador.clave);
+		detenerEvidencias = evidencias.iniciar();
 
 		const previo = leerBorrador();
 
@@ -223,9 +292,17 @@
 		indice = Math.max(1, pos);
 		borrador.marcarRecuperado(previo.actualizado_en);
 		hayBorradorPrevio = false;
+
+		// Las fotos viven atadas a la clave del borrador, así que el gestor se
+		// rehace con la clave recuperada antes de repoblar la lista.
+		detenerEvidencias?.();
+		evidencias = new GestorEvidencias({ INSPECCION: catalogos.limites.fotos }, borrador.clave);
+		detenerEvidencias = evidencias.iniciar();
+		void evidencias.restaurar();
 	}
 
 	function empezarDeNuevo() {
+		void evidencias?.limpiar();
 		descartarBorrador();
 		enCola = false;
 		enviado = null;
@@ -325,7 +402,7 @@
 			const r = await envio.enviar(
 				{ ...$state.snapshot(datos), envio_id: borrador.clave },
 				resumen,
-				[],
+				evidencias?.paraLaCola() ?? [],
 				'INSPECCION'
 			);
 
@@ -623,6 +700,44 @@
 						bind:valor={datos.vereda}
 						alCambiar={alCambiar}
 					/>
+
+					<div class="ubicacion">
+						<p class="ubicacion__titulo">Ubicación en el mapa (opcional)</p>
+						<p class="ubicacion__ayuda">
+							Tómela estando frente a la vivienda. Es lo que permite volver a encontrarla para
+							entregar los materiales. Puede continuar sin ella.
+						</p>
+
+						{#if datos.latitud !== null}
+							<p class="ubicacion__valor">
+								<MapPin size={15} aria-hidden="true" />
+								Ubicación tomada
+								{#if datos.precision_m}(precisión de unos {datos.precision_m} m){/if}
+							</p>
+							<button type="button" class="boton boton--suave" onclick={quitarUbicacion}>
+								Quitar la ubicación
+							</button>
+						{:else}
+							<button
+								type="button"
+								class="boton boton--suave"
+								onclick={usarMiUbicacion}
+								disabled={ubicando}
+							>
+								{#if ubicando}
+									<LoaderCircle size={15} class="girando" aria-hidden="true" />
+									Obteniendo…
+								{:else}
+									<MapPin size={15} aria-hidden="true" />
+									Tomar la ubicación aquí
+								{/if}
+							</button>
+						{/if}
+
+						<p class="ubicacion__estado" role="status" aria-live="polite">
+							{avisoUbicacion ?? ''}
+						</p>
+					</div>
 				{:else if paso.id === 'requisitos'}
 					<p class="tarjeta__nota">
 						Los tres requisitos del numeral 3. De ellos depende que continúe la inspección.
@@ -793,9 +908,20 @@
 						alCambiar={alCambiar}
 					/>
 				{:else if paso.id === 'fotos'}
-					<p class="aviso aviso--info" role="status">
-						El registro fotográfico se adjunta desde la ficha una vez guardada.
-					</p>
+					{#if evidencias}
+						<SubidaEvidencias
+							gestor={evidencias}
+							tipo="INSPECCION"
+							titulo="Registro fotográfico"
+							ayuda="Las diez casillas del numeral 11. Se guardan en el teléfono y salen solas cuando haya señal."
+							textoCamara="Tomar foto"
+							pieDeFoto={{
+								etiqueta: 'Fotografía de',
+								marcador: 'Ej.: fisura en muro de carga, fachada norte',
+								maximo: catalogos.limites.descripcion_foto
+							}}
+						/>
+					{/if}
 				{:else if paso.id === 'acta'}
 					<div class="aviso aviso--alerta" role="status">
 						<TriangleAlert size={15} aria-hidden="true" />

@@ -17,12 +17,12 @@
 // veces al mismo hogar.
 
 import { browser } from '$app/environment';
-import { ApiError, leerToken } from '$lib/api/client';
-import { rufeApi } from '$lib/api/servicios';
+import { ApiError, api, leerToken } from '$lib/api/client';
 import type { RespuestaEnvio } from './tipos';
 import { uid } from './esquema';
 import {
 	borrarFicha,
+	DESTINO,
 	fichasPendientes,
 	guardarFicha,
 	type TipoFicha,
@@ -30,6 +30,7 @@ import {
 	leerFicha,
 	pedirAlmacenamientoPersistente,
 	pedirEnvioEnSegundoPlano,
+	tipoDe,
 	todasLasFichas,
 	type FichaEnCola,
 	type FotoEnCola
@@ -245,7 +246,11 @@ export class GestorEnvio {
 			const token = leerToken();
 			const carga = token ? await subirFotosDe(ficha, token) : null;
 
-			const respuesta = await rufeApi.enviarReporte({
+			// La ruta sale de DESTINO, no está escrita aquí: este método envía los
+			// DOS formatos. Estuvo mandando las inspecciones a `/rufe/reportes`
+			// —el Service Worker sí usaba DESTINO, así que solo fallaba con señal,
+			// que es el caso que menos se prueba en un formulario de campo—.
+			const respuesta = await api.post<RespuestaEnvio>(DESTINO[tipoDe(ficha)].ruta, {
 				...ficha.cuerpo,
 				envio_id: ficha.envioId,
 				...(carga ? { carga } : {})

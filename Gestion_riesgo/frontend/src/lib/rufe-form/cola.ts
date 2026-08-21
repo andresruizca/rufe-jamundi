@@ -86,11 +86,13 @@ export const DESTINO: Record<TipoFicha, { ruta: string; clave: string; etiqueta:
 export type FotoEnCola = {
 	uid: string;
 	envioId: string;
-	tipo: 'DOCUMENTO' | 'DANO';
+	tipo: 'DOCUMENTO' | 'DANO' | 'INSPECCION';
 	nombre: string;
 	mime: string;
 	blob: Blob;
 	subida: boolean;
+	/** El «FOTOGRAFIA DE:» del numeral 11. Solo lo llevan las de inspección. */
+	descripcion?: string;
 };
 
 // ── Apertura ─────────────────────────────────────────────────────────────────

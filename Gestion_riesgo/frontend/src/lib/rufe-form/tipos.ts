@@ -44,7 +44,15 @@ export type Catalogos = {
 };
 
 /** Documento de identidad o foto del daño. */
-export type TipoEvidencia = 'DOCUMENTO' | 'DANO';
+/**
+ * Las clases de archivo que admite una carga.
+ *
+ * `INSPECCION` es el registro fotográfico del numeral 11 del formato de
+ * inspección: hasta diez fotos, cada una con su «FOTOGRAFIA DE:». Comparte la
+ * maquinaria del censo —compresión, cola, reintento, adopción— porque es
+ * exactamente el mismo trabajo; lo único distinto es el cupo y el pie de foto.
+ */
+export type TipoEvidencia = 'DOCUMENTO' | 'DANO' | 'INSPECCION';
 
 export type Persona = {
 	/** Identificador local, solo para la clave de la lista. No viaja al servidor. */
@@ -130,6 +138,14 @@ export type EvidenciaLocal = {
 	idServidor?: number;
 	/** URL de objeto para la vista previa. Se revoca al quitar el archivo. */
 	vistaPrevia?: string;
+	/**
+	 * El «FOTOGRAFIA DE:» del numeral 11. Solo lo usa la inspección.
+	 *
+	 * Se escribe DESPUÉS de tomar la foto —primero se dispara y luego se
+	 * describe—, así que no viaja en la subida: se manda aparte cuando el
+	 * profesional termina de escribirlo.
+	 */
+	descripcion?: string;
 };
 
 export type RespuestaEnvio = {

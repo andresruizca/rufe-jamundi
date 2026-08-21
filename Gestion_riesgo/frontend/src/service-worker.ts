@@ -319,14 +319,14 @@ async function enviarFicha(ficha: FichaEnCola, token: string): Promise<Resultado
 	// si la ficha entrara antes se quedarían huérfanas hasta caducar.
 	let carga: string | null = null;
 
-	// Solo el censo lleva fotos en la cola. La inspección adjunta su registro
-	// fotográfico desde la ficha ya guardada, con señal.
-	if (tipoDe(ficha) === 'RUFE') {
-		try {
-			carga = await subirFotosDe(ficha, token);
-		} catch (e) {
-			return marcar(ficha, e);
-		}
+	// Los dos formatos llevan fotos: el censo su documento y sus daños, la
+	// inspección el registro fotográfico del numeral 11. `subirFotosDe` devuelve
+	// null cuando la ficha no trae ninguna, así que no hace falta preguntar por
+	// el tipo.
+	try {
+		carga = await subirFotosDe(ficha, token);
+	} catch (e) {
+		return marcar(ficha, e);
 	}
 
 	let respuesta: Response;

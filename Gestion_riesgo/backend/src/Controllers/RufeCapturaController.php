@@ -114,7 +114,16 @@ final class RufeCapturaController
 
         // Sin tipo se asume foto del daño: es el caso mayoritario y evita que un
         // cliente viejo deje de funcionar por un campo que antes no existía.
-        $guardado = Archivos::guardarEnCarga($archivo, $hash, $req->campo('tipo', 'DANO'));
+        //
+        // La descripción es el «FOTOGRAFIA DE:» del numeral 11 de la inspección.
+        // En el RUFE no existe y llega vacía, que es lo correcto: ahí las fotos
+        // no llevan pie.
+        $guardado = Archivos::guardarEnCarga(
+            $archivo,
+            $hash,
+            $req->campo('tipo', 'DANO'),
+            $req->campo('descripcion', '')
+        );
 
         Response::json(['ok' => true, 'data' => ['archivo' => $guardado]], 201);
     }
@@ -124,6 +133,21 @@ final class RufeCapturaController
         $hash = $this->hashDeCarga($req->param('carga'));
 
         Response::ok(['archivos' => Archivos::listarCarga($hash)]);
+    }
+
+    /** El «FOTOGRAFIA DE:» del numeral 11, que se escribe tras tomar la foto. */
+    public function describirArchivo(Request $req): void
+    {
+        $hash = $this->hashDeCarga($req->param('carga'));
+
+        $id = (int) $req->param('id');
+        if ($id <= 0) {
+            throw HttpError::noEncontrado('El archivo no existe.');
+        }
+
+        Archivos::describirEnCarga($hash, $id, $req->texto('descripcion'));
+
+        Response::sinContenido();
     }
 
     public function eliminarArchivo(Request $req): void

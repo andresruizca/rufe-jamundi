@@ -7,6 +7,7 @@ namespace App\Rufe;
 use App\Core\Config;
 use App\Core\Db;
 use App\Core\HttpError;
+use App\Inspeccion\Catalogos as InspeccionCatalogos;
 use RuntimeException;
 
 /**
@@ -41,8 +42,12 @@ final class Archivos
      * @param  array{nombre:string,tmp:string,tamano:int,error:int}  $subido
      * @return array<string,mixed> fila creada, en la forma que ve el cliente
      */
-    public static function guardarEnCarga(array $subido, string $cargaHash, string $tipo): array
-    {
+    public static function guardarEnCarga(
+        array $subido,
+        string $cargaHash,
+        string $tipo,
+        ?string $descripcion = null
+    ): array {
         self::revisarErrorDeSubida($subido['error']);
 
         if (! isset(Catalogos::TIPOS_EVIDENCIA[$tipo])) {
@@ -101,14 +106,21 @@ final class Archivos
 
         chmod($destino, 0640);
 
+        // El «FOTOGRAFIA DE:» del numeral 11. Se recorta en vez de rechazarse: la
+        // foto ya está subida y perderla por un pie de foto largo sería absurdo.
+        $pie = $descripcion === null || trim($descripcion) === ''
+            ? null
+            : mb_substr(trim($descripcion), 0, InspeccionCatalogos::MAX_DESCRIPCION_FOTO);
+
         Db::exec(
             'INSERT INTO rufe_evidencias
-                (carga_hash, tipo, nombre_original, nombre_guardado, ruta_relativa, mime,
+                (carga_hash, tipo, descripcion, nombre_original, nombre_guardado, ruta_relativa, mime,
                  extension, tamano_bytes, hash_sha256, expira_en)
-             VALUES (:c, :ti, :no, :ng, :rr, :mi, :ex, :ta, :ha, :exp)',
+             VALUES (:c, :ti, :de, :no, :ng, :rr, :mi, :ex, :ta, :ha, :exp)',
             [
                 'c' => $cargaHash,
                 'ti' => $tipo,
+                'de' => $pie,
                 'no' => self::nombreLegible($subido['nombre']),
                 'ng' => $nombreGuardado,
                 'rr' => $relativa,
@@ -125,17 +137,40 @@ final class Archivos
         return [
             'id' => $id,
             'tipo' => $tipo,
+            'descripcion' => $pie,
             'nombre_original' => self::nombreLegible($subido['nombre']),
             'tamano_bytes' => $subido['tamano'],
             'mime' => $mime,
         ];
     }
 
+    /**
+     * Cambia el «FOTOGRAFIA DE:» de una foto que ya está en la carga.
+     *
+     * El pie se escribe DESPUÉS de tomar la foto —primero se dispara, luego se
+     * describe—, así que no puede viajar en la subida. Solo se permite mientras
+     * la foto siga suelta en la carga: una vez adoptada por una inspección, el
+     * expediente ya está cerrado y no se retoca desde el formulario.
+     */
+    public static function describirEnCarga(string $cargaHash, int $id, string $descripcion): void
+    {
+        $pie = trim($descripcion) === ''
+            ? null
+            : mb_substr(trim($descripcion), 0, InspeccionCatalogos::MAX_DESCRIPCION_FOTO);
+
+        Db::exec(
+            'UPDATE rufe_evidencias
+                SET descripcion = :de
+              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
+            ['de' => $pie, 'i' => $id, 'c' => $cargaHash]
+        );
+    }
+
     /** @return list<array<string,mixed>> */
     public static function listarCarga(string $cargaHash): array
     {
         $filas = Db::all(
-            'SELECT id, tipo, nombre_original, tamano_bytes, mime
+            'SELECT id, tipo, descripcion, nombre_original, tamano_bytes, mime
                FROM rufe_evidencias
               WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL
               ORDER BY id',

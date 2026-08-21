@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Rufe;
 
+use App\Inspeccion\Catalogos as InspeccionCatalogos;
+
 /**
  * Catálogos y límites del formato RUFE (UNGRD FR-1703-SMD-69, versión 01).
  *
@@ -54,10 +56,24 @@ final class Catalogos
 
     public const MAX_EVIDENCIAS = self::MAX_EVIDENCIAS_DOCUMENTO + self::MAX_EVIDENCIAS_DANO;
 
-    /** @var array<string,array{etiqueta:string,maximo:int}> */
+    /**
+     * Los tipos que admite una carga.
+     *
+     * `INSPECCION` es el registro fotográfico del numeral 11 del formato de
+     * inspección: hasta diez fotos, cada una con su «FOTOGRAFIA DE:». Vive en
+     * esta lista, y no en un módulo propio, porque la maquinaria de carga
+     * —cupos, compresión, adopción y purga— es exactamente la misma; duplicarla
+     * dejaría dos copias que mantener y una de las dos se quedaría atrás.
+     *
+     * @var array<string,array{etiqueta:string,maximo:int}>
+     */
     public const TIPOS_EVIDENCIA = [
         'DOCUMENTO' => ['etiqueta' => 'Documento de identidad', 'maximo' => self::MAX_EVIDENCIAS_DOCUMENTO],
         'DANO' => ['etiqueta' => 'Foto del daño', 'maximo' => self::MAX_EVIDENCIAS_DANO],
+        'INSPECCION' => [
+            'etiqueta' => 'Registro fotográfico de la inspección',
+            'maximo' => InspeccionCatalogos::MAX_FOTOS,
+        ],
     ];
 
     /**
@@ -74,7 +90,16 @@ final class Catalogos
     /** Meta que persigue el navegador antes de dar una foto por buena. */
     public const OBJETIVO_BYTES_FOTO = 921600;     // 900 KB
 
-    public const MAX_BYTES_CARGA = 5242880;        // 5 MiB
+    /**
+     * Cupo total de una carga, contando todas sus fotos.
+     *
+     * Sube de 5 a 12 MiB al entrar el registro fotográfico de la inspección:
+     * son DIEZ fotos, el doble de lo que sube un RUFE, y con el tope anterior la
+     * séptima habría sido rechazada al final de una visita ya terminada, con un
+     * mensaje que hablaba de megabytes y no de fotos. Una prueba comprueba que
+     * este número siga alcanzando para el formato más grande.
+     */
+    public const MAX_BYTES_CARGA = 12582912;       // 12 MiB
 
     /**
      * Dimensión máxima admitida, en píxeles por lado.

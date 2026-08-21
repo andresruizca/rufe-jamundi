@@ -13,18 +13,22 @@
 	} from '@lucide/svelte';
 	import type { GestorEvidencias } from '../evidencias.svelte';
 	import { tamanoLegible } from '../evidencias.svelte';
-	import type { Catalogos, TipoEvidencia } from '../tipos';
+	import type { TipoEvidencia } from '../tipos';
 
 	type Props = {
 		gestor: GestorEvidencias;
-		catalogos: Catalogos;
 		tipo: TipoEvidencia;
 		titulo: string;
 		ayuda: string;
 		textoCamara: string;
+		/**
+		 * Pie de foto por imagen: el «FOTOGRAFIA DE:» del numeral 11 de la
+		 * inspección. En el censo no existe y no se dibuja.
+		 */
+		pieDeFoto?: { etiqueta: string; marcador: string; maximo: number };
 	};
 
-	let { gestor, catalogos, tipo, titulo, ayuda, textoCamara }: Props = $props();
+	let { gestor, tipo, titulo, ayuda, textoCamara, pieDeFoto }: Props = $props();
 
 	let entradaCamara = $state<HTMLInputElement | null>(null);
 	let entradaArchivo = $state<HTMLInputElement | null>(null);
@@ -189,6 +193,26 @@
 								<TriangleAlert size={13} aria-hidden="true" />
 								{archivo.error}
 							</span>
+						{/if}
+
+						{#if pieDeFoto}
+							<!--
+								El pie se escribe después de disparar, no antes: en campo se
+								fotografía primero y se describe cuando ya se tienen todas. Por
+								eso es un campo por foto y no una pregunta previa.
+							-->
+							<label class="pie">
+								<span class="pie__etiqueta">{pieDeFoto.etiqueta}</span>
+								<input
+									class="pie__campo"
+									type="text"
+									maxlength={pieDeFoto.maximo}
+									placeholder={pieDeFoto.marcador}
+									value={archivo.descripcion ?? ''}
+									onchange={(e) =>
+										gestor.describir(archivo.uid, (e.currentTarget as HTMLInputElement).value)}
+								/>
+							</label>
 						{/if}
 					</span>
 
@@ -419,6 +443,32 @@
 	   neutro para no alarmar a quien simplemente está sin cobertura. */
 	.archivo__error--leve {
 		color: var(--color-warning);
+	}
+
+	.pie {
+		display: block;
+		margin-top: 0.45rem;
+	}
+
+	.pie__etiqueta {
+		display: block;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		color: var(--color-muted);
+	}
+
+	.pie__campo {
+		width: 100%;
+		margin-top: 0.15rem;
+		padding: 0.4rem 0.5rem;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 0.4rem;
+		background: var(--color-surface);
+		color: var(--color-text);
+		font: inherit;
+		font-size: 0.82rem;
 	}
 
 	.archivo__acciones {

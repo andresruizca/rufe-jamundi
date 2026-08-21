@@ -155,7 +155,7 @@
 			datos.fecha_evento = catalogos.predeterminados.fecha_evento;
 		}
 
-		evidencias = new GestorEvidencias(catalogos, borrador.clave);
+		evidencias = GestorEvidencias.paraRufe(catalogos, borrador.clave);
 		detenerEvidencias = evidencias.iniciar();
 		cargando = false;
 	}
@@ -192,7 +192,7 @@
 		// siguiente. Las de la ficha que quedó en cola ya están copiadas allí.
 		if (catalogos) {
 			detenerEvidencias?.();
-			evidencias = new GestorEvidencias(catalogos, borrador.clave);
+			evidencias = GestorEvidencias.paraRufe(catalogos, borrador.clave);
 			detenerEvidencias = evidencias.iniciar();
 		}
 
@@ -871,7 +871,6 @@
 				{#if evidencias}
 					<SubidaEvidencias
 						gestor={evidencias}
-						{catalogos}
 						tipo="DOCUMENTO"
 						titulo="Foto del documento de identidad"
 						ayuda="Foto de la cédula del jefe de hogar, por el lado de los datos. Respalda la identificación del hogar."
@@ -880,7 +879,6 @@
 
 					<SubidaEvidencias
 						gestor={evidencias}
-						{catalogos}
 						tipo="DANO"
 						titulo="Fotos del daño"
 						ayuda="Cómo quedó el inmueble. Ayudan a valorar el daño, pero no son obligatorias."
@@ -1144,42 +1142,6 @@
 		display: flex;
 		gap: 0.5rem;
 		flex-wrap: wrap;
-	}
-
-	.ubicacion {
-		margin: 1.2rem 0;
-		padding: 0.9rem;
-		border: 1px solid var(--color-border);
-		border-radius: 10px;
-		background: var(--color-surface);
-	}
-
-	.ubicacion__titulo {
-		margin: 0 0 0.25rem;
-		font-size: 0.86rem;
-		font-weight: 600;
-	}
-
-	.ubicacion__ayuda {
-		margin: 0 0 0.7rem;
-		font-size: 0.78rem;
-		color: var(--color-muted);
-	}
-
-	.ubicacion__valor {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-		margin: 0 0 0.6rem;
-		font-size: 0.84rem;
-		color: var(--color-success);
-	}
-
-	.ubicacion__estado {
-		margin: 0.5rem 0 0;
-		min-height: 1rem;
-		font-size: 0.78rem;
-		color: var(--color-muted);
 	}
 
 	.ver-mas {

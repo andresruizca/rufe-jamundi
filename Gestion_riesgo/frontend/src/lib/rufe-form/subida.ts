@@ -84,6 +84,11 @@ async function abrirCarga(token: string): Promise<string> {
 async function subirFoto(carga: string, foto: FotoEnCola, token: string): Promise<void> {
 	const cuerpo = new FormData();
 	cuerpo.append('tipo', foto.tipo);
+	// El «FOTOGRAFIA DE:» del numeral 11 viaja CON la foto por este camino: aquí
+	// la subida ocurre al enviar la ficha, cuando el pie ya está escrito. En el
+	// formulario es al revés —primero se dispara, luego se describe— y por eso
+	// allí se manda aparte.
+	if (foto.descripcion) cuerpo.append('descripcion', foto.descripcion);
 	cuerpo.append('archivo', foto.blob, foto.nombre);
 
 	const respuesta = await fetch(`${baseApi()}/rufe/cargas/${carga}/archivos`, {

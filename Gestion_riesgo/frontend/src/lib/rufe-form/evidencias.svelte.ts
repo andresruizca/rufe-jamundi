@@ -41,13 +41,29 @@ export class GestorEvidencias {
 	/** Solo cuenta como fallo lo que no es culpa de la red: eso se reintenta solo. */
 	readonly hayFallos = $derived(this.archivos.some((a) => a.estado === 'error' && !a.reintentable));
 
-	#catalogos: Catalogos;
+	#limites: Partial<Record<TipoEvidencia, number>>;
 	#claveBorrador: string;
 	#alVolverLaRed: (() => void) | null = null;
 
-	constructor(catalogos: Catalogos, claveBorrador: string) {
-		this.#catalogos = catalogos;
+	/**
+	 * @param limites cupo por clase de archivo. Recibe el mapa y no los catálogos
+	 *   enteros porque este gestor sirve a los dos formatos: el censo trae dos
+	 *   clases con cupos distintos y la inspección una sola de diez.
+	 */
+	constructor(limites: Partial<Record<TipoEvidencia, number>>, claveBorrador: string) {
+		this.#limites = limites;
 		this.#claveBorrador = claveBorrador;
+	}
+
+	/** Los cupos del censo, tal como vienen en sus catálogos. */
+	static paraRufe(catalogos: Catalogos, claveBorrador: string): GestorEvidencias {
+		return new GestorEvidencias(
+			{
+				DOCUMENTO: catalogos.limites.evidencias_documento,
+				DANO: catalogos.limites.evidencias_dano
+			},
+			claveBorrador
+		);
 	}
 
 	/**
@@ -72,9 +88,7 @@ export class GestorEvidencias {
 	}
 
 	limiteDe(tipo: TipoEvidencia): number {
-		return tipo === 'DOCUMENTO'
-			? this.#catalogos.limites.evidencias_documento
-			: this.#catalogos.limites.evidencias_dano;
+		return this.#limites[tipo] ?? 0;
 	}
 
 	/** Repuebla la lista con las fotos que quedaron guardadas de una visita anterior. */
@@ -95,6 +109,7 @@ export class GestorEvidencias {
 				estado: g.optimizada ? 'pendiente' : 'optimizando',
 				progreso: 0,
 				metricas: (g.metricas as EvidenciaLocal['metricas']) ?? undefined,
+				descripcion: g.descripcion,
 				vistaPrevia: URL.createObjectURL(archivo)
 			});
 
@@ -122,7 +137,7 @@ export class GestorEvidencias {
 				this.error =
 					tipo === 'DOCUMENTO'
 						? 'Ya adjuntó la foto del documento. Quítela si desea cambiarla.'
-						: `Solo puede adjuntar hasta ${limite} fotos del daño.`;
+						: `Solo puede adjuntar hasta ${limite} fotos.`;
 				break;
 			}
 
@@ -152,7 +167,8 @@ export class GestorEvidencias {
 				categoria: tipo,
 				blob: registro.archivo,
 				optimizada: true,
-				metricas: registro.metricas
+				metricas: registro.metricas,
+				descripcion: registro.descripcion
 			});
 		}
 
@@ -198,6 +214,50 @@ export class GestorEvidencias {
 		registro.progreso = 0;
 
 		return true;
+	}
+
+	/**
+	 * Cambia el «FOTOGRAFIA DE:» de una foto del numeral 11.
+	 *
+	 * El pie se escribe después de disparar, cuando la foto ya puede estar
+	 * subida, así que se guarda en el teléfono y —si ya tiene identificador del
+	 * servidor— se manda aparte. Que el envío del pie falle no rompe nada: la
+	 * foto sigue en su sitio y el texto sigue guardado en el aparato, listo para
+	 * volver a intentarlo al reenviar.
+	 */
+	async describir(uidArchivo: string, texto: string): Promise<void> {
+		const archivo = this.archivos.find((a) => a.uid === uidArchivo);
+		if (!archivo) return;
+
+		archivo.descripcion = texto;
+
+		void guardarEvidencia({
+			uid: archivo.uid,
+			claveBorrador: this.#claveBorrador,
+			nombre: archivo.nombre,
+			tipo: archivo.archivo.type,
+			categoria: archivo.tipo,
+			blob: archivo.archivo,
+			optimizada: true,
+			metricas: archivo.metricas,
+			descripcion: texto
+		});
+
+		if (archivo.idServidor === undefined || !this.carga) return;
+
+		try {
+			await fetch(`${API_BASE}/rufe/cargas/${this.carga}/archivos/${archivo.idServidor}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${leerToken() ?? ''}`
+				},
+				body: JSON.stringify({ descripcion: texto })
+			});
+		} catch {
+			// Sin señal el pie se queda en el teléfono. Viaja igual: la cola lo
+			// vuelve a mandar con la foto cuando le toque.
+		}
 	}
 
 	async quitar(uidArchivo: string): Promise<void> {
@@ -287,6 +347,7 @@ export class GestorEvidencias {
 		mime: string;
 		blob: Blob;
 		subida: boolean;
+		descripcion?: string;
 	}[] {
 		return this.archivos
 			.filter((a) => a.estado !== 'optimizando' && a.estado !== 'error')
@@ -296,6 +357,7 @@ export class GestorEvidencias {
 				nombre: a.nombre,
 				mime: a.archivo.type,
 				blob: a.archivo,
+				descripcion: a.descripcion,
 				// Si ya tiene identificador del servidor, esta foto YA está en la
 				// carga. Marcarla como pendiente haría que se volviera a subir y la
 				// ficha acabaría con la misma evidencia repetida — que es justo lo

@@ -14,15 +14,19 @@ const BASE = 'sgr_rufe';
 const VERSION = 1;
 const ALMACEN = 'evidencias';
 
+import type { TipoEvidencia } from './tipos';
+
 export type EvidenciaGuardada = {
 	uid: string;
 	claveBorrador: string;
 	nombre: string;
 	/** MIME del archivo. */
 	tipo: string;
-	/** DOCUMENTO o DANO. */
-	categoria: 'DOCUMENTO' | 'DANO';
+	/** DOCUMENTO, DANO o INSPECCION. */
+	categoria: TipoEvidencia;
 	blob: Blob;
+	/** El «FOTOGRAFIA DE:» del numeral 11, si lo lleva. */
+	descripcion?: string;
 	/**
 	 * ¿El blob guardado ya pasó por la compresión?
 	 *

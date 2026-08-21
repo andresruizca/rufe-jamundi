@@ -172,6 +172,57 @@ final class Validador
         $this->datos['direccion_cabecera'] = $this->recortar($direccion);
         $this->datos['corregimiento'] = $corregimiento;
         $this->datos['vereda'] = $this->recortar($vereda);
+
+        $this->coordenadas($e);
+    }
+
+    /**
+     * El punto GPS de la vivienda. Opcional, como en el censo.
+     *
+     * Es la misma regla que `Rufe\Validador::coordenadas()` y por el mismo
+     * motivo: unas coordenadas ilegibles o de otro país no valen nada, pero
+     * tampoco pueden tumbar la inspección entera. Se descartan y la visita
+     * sigue, que es lo que hace falta cuando el GPS no engancha bajo un techo
+     * de zinc en una casa entre montañas.
+     *
+     * @param  array<string,mixed>  $e
+     */
+    private function coordenadas(array $e): void
+    {
+        $this->datos['latitud'] = null;
+        $this->datos['longitud'] = null;
+        $this->datos['precision_m'] = null;
+
+        $lat = $e['latitud'] ?? null;
+        $lon = $e['longitud'] ?? null;
+
+        if ($lat === null && $lon === null) {
+            return;
+        }
+
+        if (! is_numeric($lat) || ! is_numeric($lon)) {
+            $this->errores['latitud'] = 'No se pudo leer la ubicación. Continúe sin ella.';
+
+            return;
+        }
+
+        $lat = (float) $lat;
+        $lon = (float) $lon;
+
+        // La misma caja que el RUFE: territorio continental e insular colombiano.
+        if ($lat < -4.5 || $lat > 13.5 || $lon < -82.0 || $lon > -66.0) {
+            $this->errores['latitud'] = 'La ubicación detectada está fuera de Colombia. Continúe sin ella.';
+
+            return;
+        }
+
+        $this->datos['latitud'] = round($lat, 7);
+        $this->datos['longitud'] = round($lon, 7);
+
+        $precision = $e['precision_m'] ?? null;
+        if (is_numeric($precision) && $precision >= 0 && $precision <= 10000) {
+            $this->datos['precision_m'] = (int) $precision;
+        }
     }
 
     // ── 3 y 4. Requisitos ────────────────────────────────────────────────────

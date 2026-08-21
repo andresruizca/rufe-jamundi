@@ -730,12 +730,32 @@ prueba('los cupos de evidencia son uno de documento y cuatro de daño', function
     afirmarIgual(1, Catalogos::MAX_EVIDENCIAS_DOCUMENTO);
     afirmarIgual(4, Catalogos::MAX_EVIDENCIAS_DANO);
     afirmarIgual(5, Catalogos::MAX_EVIDENCIAS);
-    afirmarIgual(['DOCUMENTO', 'DANO'], array_keys(Catalogos::TIPOS_EVIDENCIA));
+    afirmarIgual(['DOCUMENTO', 'DANO', 'INSPECCION'], array_keys(Catalogos::TIPOS_EVIDENCIA));
 
     // Cinco fotos de 900 KB caben de sobra en el cupo total de la carga.
     afirmar(
         Catalogos::MAX_EVIDENCIAS * Catalogos::OBJETIVO_BYTES_FOTO < Catalogos::MAX_BYTES_CARGA,
         'el cupo total de la carga no alcanza para el máximo de fotos'
+    );
+});
+
+prueba('el registro fotográfico de la inspección tiene las diez casillas del formato', function (): void {
+    // El numeral 11 imprime diez recuadros. Si el cupo del servidor fuera menor,
+    // el profesional llenaría el papel y el sistema le rechazaría fotos sin que
+    // nada en pantalla explicara por qué.
+    afirmarIgual(
+        CatalogosInspeccion::MAX_FOTOS,
+        Catalogos::TIPOS_EVIDENCIA['INSPECCION']['maximo']
+    );
+    afirmarIgual(10, CatalogosInspeccion::MAX_FOTOS);
+});
+
+prueba('las diez fotos de una inspección caben en el cupo de la carga', function (): void {
+    // Diez es el doble de lo que sube un RUFE. Si no cupieran, el fallo
+    // aparecería en la última foto de una visita ya terminada.
+    afirmar(
+        CatalogosInspeccion::MAX_FOTOS * Catalogos::OBJETIVO_BYTES_FOTO < Catalogos::MAX_BYTES_CARGA,
+        'el cupo de la carga no alcanza para las diez fotos del numeral 11'
     );
 });
 
@@ -1603,6 +1623,51 @@ function datosInspeccion(array $entrada): array
 
 prueba('una inspección completa pasa sin errores', function (): void {
     afirmarIgual([], erroresInspeccion(inspeccionBase()));
+});
+
+prueba('la inspección guarda el punto GPS cuando se toma', function (): void {
+    // La misma ubicación que ya toma el censo. Sin ella, «finca La Esperanza,
+    // vía a Potrerito» es imposible de encontrar dos semanas después con un
+    // camión de materiales.
+    $d = datosInspeccion(inspeccionBase([
+        'latitud' => 3.2611234,
+        'longitud' => -76.5412345,
+        'precision_m' => 12,
+    ]));
+
+    afirmarIgual(3.2611234, $d['latitud']);
+    afirmarIgual(-76.5412345, $d['longitud']);
+    afirmarIgual(12, $d['precision_m']);
+});
+
+prueba('sin ubicación la inspección sigue siendo válida', function (): void {
+    // Tomarla es opcional: bajo un techo de zinc entre montañas el GPS no
+    // engancha, y la visita no se puede detener por eso.
+    $r = ValidadorInspeccion::inspeccion(inspeccionBase());
+
+    afirmarIgual([], $r['errores']);
+    afirmarIgual(null, $r['datos']['latitud']);
+    afirmarIgual(null, $r['datos']['precision_m']);
+});
+
+prueba('una ubicación fuera de Colombia se descarta, no tumba la ficha', function (): void {
+    // Un GPS que devuelve Madrid es un GPS averiado. Lo que no puede pasar es
+    // que por eso se pierda una inspección ya diligenciada entera.
+    $e = erroresInspeccion(inspeccionBase(['latitud' => 40.4168, 'longitud' => -3.7038]));
+
+    afirmar(isset($e['latitud']), 'debe avisar de la ubicación imposible');
+    afirmar(! isset($e['direccion_cabecera']), 'no debe arrastrar el resto del formulario');
+});
+
+prueba('una precisión absurda se ignora, pero el punto se conserva', function (): void {
+    $d = datosInspeccion(inspeccionBase([
+        'latitud' => 3.2611,
+        'longitud' => -76.5412,
+        'precision_m' => 999999,
+    ]));
+
+    afirmarIgual(null, $d['precision_m']);
+    afirmarIgual(3.2611, $d['latitud']);
 });
 
 prueba('la profesión se guarda resuelta, no como código', function (): void {

@@ -29,6 +29,8 @@ final class Migrador
         // Va después de rufe.sql: declara una clave foránea contra
         // `rufe_reportes` y añade columnas a `rufe_evidencias`.
         'inspeccion_01_viviendas.sql',
+        // Añade el punto GPS a la inspección, como el que ya toma el censo.
+        'inspeccion_02_ubicacion.sql',
     ];
 
     /**
