@@ -28,6 +28,8 @@ const SESION = 'sesion';
 /** Etiqueta del evento de Background Sync. Debe coincidir en el Service Worker. */
 export const ETIQUETA_SYNC = 'sgr-enviar-fichas';
 
+import type { TipoEvidencia } from './tipos';
+
 export type EstadoFicha = 'pendiente' | 'enviando' | 'enviada' | 'error';
 
 /**
@@ -86,7 +88,10 @@ export const DESTINO: Record<TipoFicha, { ruta: string; clave: string; etiqueta:
 export type FotoEnCola = {
 	uid: string;
 	envioId: string;
-	tipo: 'DOCUMENTO' | 'DANO' | 'INSPECCION';
+	// El mismo tipo que maneja el gestor de evidencias. En la práctica la cola
+	// solo lleva los internos —el formulario ciudadano envía en el momento, no
+	// difiere—, pero mantener dos listas paralelas ya se separó una vez.
+	tipo: TipoEvidencia;
 	nombre: string;
 	mime: string;
 	blob: Blob;

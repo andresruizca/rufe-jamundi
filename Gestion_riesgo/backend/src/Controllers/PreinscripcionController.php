@@ -66,7 +66,8 @@ final class PreinscripcionController
             'corregimientos' => Rufe::CORREGIMIENTOS,
             'aviso_version'  => Rufe::AVISO_VERSION,
             'limites'        => [
-                'fotos'            => 4,
+                'fotos_dano'       => Rufe::MAX_FOTOS_PREINSCRIPCION,
+                'fotos_cedula'     => 1,
                 'bytes_archivo'    => Rufe::MAX_BYTES_ARCHIVO,
                 'bytes_carga'      => Rufe::MAX_BYTES_CARGA,
                 'objetivo_bytes_foto' => Rufe::OBJETIVO_BYTES_FOTO,
@@ -101,7 +102,7 @@ final class PreinscripcionController
             'ok' => true,
             'data' => [
                 'carga' => bin2hex(random_bytes(32)),
-                'maximo_archivos' => Rufe::MAX_FOTOS_PREINSCRIPCION,
+                'maximo_archivos' => Rufe::MAX_FOTOS_PREINSCRIPCION + 1,
                 'maximo_bytes' => Rufe::MAX_BYTES_ARCHIVO,
             ],
         ], 201);
@@ -123,10 +124,15 @@ final class PreinscripcionController
             throw HttpError::validacion(['archivo' => 'No se recibió ninguna foto.']);
         }
 
-        // El tipo se fija aquí, no llega del cliente: si viniera de fuera, una
-        // solicitud ciudadana podría reclamar el cupo de diez fotos de una
-        // inspección.
-        $guardado = Archivos::guardarEnCarga($archivo, $this->hashDeCarga($req->param('carga')), 'PREINSCRIPCION');
+        // El tipo llega del cliente pero se filtra contra una lista blanca: sin
+        // ella, una solicitud ciudadana podría reclamar el cupo de diez fotos
+        // del registro fotográfico de una inspección.
+        $tipo = $req->campo('tipo', 'PRE_DANO');
+        if (! in_array($tipo, Rufe::TIPOS_PREINSCRIPCION, true)) {
+            throw HttpError::validacion(['archivo' => 'Tipo de archivo no reconocido.']);
+        }
+
+        $guardado = Archivos::guardarEnCarga($archivo, Archivos::hashDeCarga($req->param('carga')), $tipo);
 
         Response::json(['ok' => true, 'data' => ['archivo' => $guardado]], 201);
     }
@@ -138,7 +144,7 @@ final class PreinscripcionController
             throw HttpError::noEncontrado('El archivo no existe.');
         }
 
-        Archivos::eliminarDeCarga($this->hashDeCarga($req->param('carga')), $id);
+        Archivos::eliminarDeCarga(Archivos::hashDeCarga($req->param('carga')), $id);
 
         Response::sinContenido();
     }
@@ -285,7 +291,7 @@ final class PreinscripcionController
             $id = Db::lastId();
 
             if ($carga !== null) {
-                Archivos::adoptarPreinscripcion($carga, $id);
+                Archivos::adoptarPreinscripcion(Archivos::hashDeCarga($carga), $id);
             }
 
             $pdo->commit();
@@ -439,18 +445,6 @@ final class PreinscripcionController
         );
 
         Response::ok(['estado' => $estado]);
-    }
-
-    /**
-     * El hash del token de carga. Nunca se guarda el token en claro.
-     */
-    private function hashDeCarga(string $token): string
-    {
-        if (! preg_match('/^[a-f0-9]{64}$/', $token)) {
-            throw HttpError::noEncontrado('La carga no existe o ya caducó.');
-        }
-
-        return hash('sha256', $token);
     }
 
     /** El `envio_id` que manda el navegador, si viene con la forma esperada. */

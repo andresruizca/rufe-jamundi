@@ -74,11 +74,26 @@ final class Catalogos
             'etiqueta' => 'Registro fotográfico de la inspección',
             'maximo' => InspeccionCatalogos::MAX_FOTOS,
         ],
-        'PREINSCRIPCION' => [
+        'PRE_CEDULA' => [
+            'etiqueta' => 'Cédula (pre-inscripción ciudadana)',
+            'maximo' => 1,
+        ],
+        'PRE_DANO' => [
             'etiqueta' => 'Foto del daño (pre-inscripción ciudadana)',
             'maximo' => self::MAX_FOTOS_PREINSCRIPCION,
         ],
     ];
+
+    /**
+     * Los tipos que puede subir alguien SIN sesión.
+     *
+     * La lista existe para que el tipo no llegue nunca de la petición sin
+     * filtrar: sin esto, una solicitud ciudadana podría reclamar el cupo de diez
+     * fotos del registro fotográfico de una inspección.
+     *
+     * @var list<string>
+     */
+    public const TIPOS_PREINSCRIPCION = ['PRE_CEDULA', 'PRE_DANO'];
 
     /**
      * Cuántas fotos puede adjuntar un ciudadano a su solicitud.

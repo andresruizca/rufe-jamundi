@@ -35,6 +35,9 @@ final class Migrador
         'sistema_02_rol_inspector.sql',
         // Va después de la inspección: apunta a `inspeccion_viviendas`.
         'preinscripcion_01.sql',
+        // Amplía `rufe_evidencias.tipo`, que se quedó con los dos valores del
+        // censo mientras el código ya usaba tres más.
+        'evidencias_03_tipos.sql',
     ];
 
     /**

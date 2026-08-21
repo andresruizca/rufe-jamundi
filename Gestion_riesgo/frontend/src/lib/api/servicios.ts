@@ -237,13 +237,22 @@ export const preinscripcionApi = {
 			corregimientos: string[];
 			aviso_version: string;
 			limites: {
-				fotos: number;
+				fotos_dano: number;
+				fotos_cedula: number;
 				bytes_archivo: number;
 				bytes_carga: number;
 				objetivo_bytes_foto: number;
 				extensiones: string[];
 			};
 		}>('/preinscripcion/catalogos', false),
+
+	/** Abre una carga para las fotos, sin sesión. */
+	abrirCarga: () =>
+		api.post<{ carga: string; maximo_archivos: number; maximo_bytes: number }>(
+			'/preinscripcion/cargas',
+			{},
+			false
+		),
 
 	enviar: (cuerpo: Record<string, unknown>) =>
 		api.post<{ radicado: string; recibido_en: string; reintento?: boolean; duplicada?: boolean }>(

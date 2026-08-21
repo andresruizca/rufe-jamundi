@@ -64,10 +64,15 @@ final class Archivos
         ) ?? ['n' => 0];
 
         if ((int) $delTipo['n'] >= $limite) {
+            // El mensaje nombra lo que se está subiendo. Con el texto genérico,
+            // rechazar la segunda foto de la cédula decía «hasta 1 fotos del
+            // daño», que no explica nada a quien está en la calle intentándolo.
+            $etiqueta = mb_strtolower(Catalogos::TIPOS_EVIDENCIA[$tipo]['etiqueta']);
+
             throw HttpError::validacion([
-                'archivo' => $tipo === 'DOCUMENTO'
-                    ? 'Ya adjuntó la foto del documento. Quite la anterior si desea cambiarla.'
-                    : 'Solo puede adjuntar hasta '.$limite.' fotos del daño.',
+                'archivo' => $limite === 1
+                    ? 'Ya adjuntó la foto de '.$etiqueta.'. Quite la anterior si desea cambiarla.'
+                    : 'Solo puede adjuntar hasta '.$limite.' fotos de este tipo.',
             ]);
         }
 
@@ -216,6 +221,23 @@ final class Archivos
      *
      * @return int cuántos archivos se adoptaron
      */
+    /**
+     * El hash del token de una carga. NUNCA se guarda el token en claro.
+     *
+     * Vive aquí y no en cada controlador porque olvidarlo no da error: la
+     * consulta simplemente no encuentra nada y los archivos quedan huérfanos
+     * hasta caducar, sin que nadie se entere. Pasó exactamente eso con las fotos
+     * de la inspección, que adoptaban con el token sin cifrar.
+     */
+    public static function hashDeCarga(string $token): string
+    {
+        if (preg_match('/^[a-f0-9]{64}$/', $token) !== 1) {
+            throw HttpError::noEncontrado('La carga de archivos no existe o ya venció.');
+        }
+
+        return hash('sha256', $token);
+    }
+
     public static function adoptar(string $cargaHash, int $reporteId): int
     {
         return self::adoptarPara($cargaHash, 'reporte_id', $reporteId, 'rufe');

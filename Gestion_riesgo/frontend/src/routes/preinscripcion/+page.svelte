@@ -25,6 +25,8 @@
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi } from '$lib/api/servicios';
 	import logo from '$lib/assets/logo-jamundi.svg';
+	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import { GestorEvidencias, RUTAS_PUBLICAS_CARGA } from '$lib/rufe-form/evidencias.svelte';
 
 	type Catalogos = Awaited<ReturnType<typeof preinscripcionApi.catalogos>>;
 
@@ -36,6 +38,12 @@
 	let errorEnvio = $state('');
 	let errores = $state<Record<string, string>>({});
 	let resultado = $state<{ radicado: string; duplicada?: boolean } | null>(null);
+
+	// Las fotos comparten toda la maquinaria del censo —compresión en el
+	// teléfono, cola, reintento— apuntando a las rutas públicas. La original
+	// nunca sale del aparato: lo que sube es siempre la versión optimizada.
+	let evidencias = $state<GestorEvidencias | null>(null);
+	let detenerEvidencias: (() => void) | null = null;
 
 	let ubicando = $state(false);
 	let avisoUbicacion = $state<string | null>(null);
@@ -62,14 +70,30 @@
 		sitio_web: ''
 	});
 
-	onMount(async () => {
-		try {
-			catalogos = await preinscripcionApi.catalogos();
-		} catch {
-			errorCarga = 'No se pudo cargar el formulario. Revise su conexión e intente de nuevo.';
-		} finally {
-			cargando = false;
-		}
+	onMount(() => {
+		void (async () => {
+			try {
+				catalogos = await preinscripcionApi.catalogos();
+
+				evidencias = new GestorEvidencias(
+					{
+						PRE_CEDULA: catalogos.limites.fotos_cedula,
+						PRE_DANO: catalogos.limites.fotos_dano
+					},
+					// La clave del borrador es este envío: las fotos viven atadas a
+					// él y no se mezclan con las de otra solicitud del mismo aparato.
+					`preinscripcion-${envioId}`,
+					RUTAS_PUBLICAS_CARGA
+				);
+				detenerEvidencias = evidencias.iniciar();
+			} catch {
+				errorCarga = 'No se pudo cargar el formulario. Revise su conexión e intente de nuevo.';
+			} finally {
+				cargando = false;
+			}
+		})();
+
+		return () => detenerEvidencias?.();
 	});
 
 	function usarMiUbicacion() {
@@ -118,7 +142,10 @@
 			const r = await preinscripcionApi.enviar({
 				...datos,
 				envio_id: envioId,
-				aviso_version: catalogos.aviso_version
+				aviso_version: catalogos.aviso_version,
+				// El servidor adopta las fotos de esta carga al recibir la
+				// solicitud; sin el token quedarían huérfanas hasta caducar.
+				...(evidencias?.carga ? { carga: evidencias.carga } : {})
 			});
 
 			resultado = { radicado: r.radicado, duplicada: r.duplicada };
@@ -331,6 +358,32 @@
 				</label>
 			</section>
 
+			{#if evidencias}
+				<section class="tarjeta">
+					<h2 class="tarjeta__titulo">Fotos</h2>
+					<p class="tarjeta__nota">
+						Las fotos se reducen en su celular antes de enviarse, así que gastan pocos datos. Si
+						está sin señal, espere un momento y se enviarán solas.
+					</p>
+
+					<SubidaEvidencias
+						gestor={evidencias}
+						tipo="PRE_CEDULA"
+						titulo="Foto de su cédula"
+						ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que la solicitud es suya."
+						textoCamara="Tomar foto de la cédula"
+					/>
+
+					<SubidaEvidencias
+						gestor={evidencias}
+						tipo="PRE_DANO"
+						titulo="Fotos del daño"
+						ayuda="Cómo quedó la vivienda. No son obligatorias, pero ayudan a priorizar la visita."
+						textoCamara="Tomar foto del daño"
+					/>
+				</section>
+			{/if}
+
 			<section class="tarjeta">
 				<h2 class="tarjeta__titulo">Autorización de datos</h2>
 
@@ -346,7 +399,8 @@
 					<span class="opcion__texto">
 						Autorizo de manera libre, previa, expresa e informada a la
 						<strong>Alcaldía de Jamundí</strong> a tratar los datos personales que entrego en este
-						formulario —nombre, cédula, teléfono, correo, dirección y ubicación de mi vivienda— con
+						formulario —nombre, cédula, teléfono, correo, dirección, ubicación de mi vivienda y las
+						<strong>fotografías que adjunto, incluida la de mi documento de identidad</strong>— con
 						la única finalidad de programar y realizar la inspección técnica de la vivienda
 						afectada y adelantar la atención de la emergencia. Sé que puedo conocer, actualizar,
 						rectificar y solicitar la supresión de mis datos ante la Alcaldía de Jamundí.

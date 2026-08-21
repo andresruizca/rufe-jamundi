@@ -21,11 +21,41 @@
 
 import { browser } from '$app/environment';
 import { API_BASE, leerToken } from '$lib/api/client';
-import { rufeApi } from '$lib/api/servicios';
+import { preinscripcionApi, rufeApi } from '$lib/api/servicios';
 import type { Catalogos, EvidenciaLocal, TipoEvidencia } from './tipos';
 import { uid } from './esquema';
 import { borrarEvidencia, borrarEvidenciasDe, guardarEvidencia, leerEvidencias } from './almacen';
 import { comprimirEvidencia, liberarVistaPrevia, tamanoLegible } from './imagen';
+
+/**
+ * A qué endpoints habla el gestor.
+ *
+ * Existe porque la pre-inscripción ciudadana sube fotos SIN sesión: mandar una
+ * cabecera con un token vacío haría que el servidor respondiera 401 en vez de
+ * servir la ruta pública.
+ */
+export type RutasCarga = {
+	/** Abre una carga y devuelve su token. */
+	abrir: () => Promise<{ carga: string }>;
+	/** Base de los archivos de una carga, sin barra final. */
+	archivos: (carga: string) => string;
+	/** Si las peticiones llevan el token de la sesión. */
+	autenticada: boolean;
+};
+
+/** Las del censo y la inspección, que comparten cargas. */
+export const RUTAS_INTERNAS: RutasCarga = {
+	abrir: () => rufeApi.abrirCarga(),
+	archivos: (carga) => `${API_BASE}/rufe/cargas/${carga}/archivos`,
+	autenticada: true
+};
+
+/** Las del formulario ciudadano, sin sesión. */
+export const RUTAS_PUBLICAS_CARGA: RutasCarga = {
+	abrir: () => preinscripcionApi.abrirCarga(),
+	archivos: (carga) => `${API_BASE}/preinscripcion/cargas/${carga}/archivos`,
+	autenticada: false
+};
 
 export class GestorEvidencias {
 	archivos = $state<EvidenciaLocal[]>([]);
@@ -43,16 +73,24 @@ export class GestorEvidencias {
 
 	#limites: Partial<Record<TipoEvidencia, number>>;
 	#claveBorrador: string;
+	#rutas: RutasCarga;
 	#alVolverLaRed: (() => void) | null = null;
 
 	/**
 	 * @param limites cupo por clase de archivo. Recibe el mapa y no los catálogos
-	 *   enteros porque este gestor sirve a los dos formatos: el censo trae dos
-	 *   clases con cupos distintos y la inspección una sola de diez.
+	 *   enteros porque este gestor sirve a tres formularios: el censo trae dos
+	 *   clases con cupos distintos, la inspección una sola de diez, y la
+	 *   pre-inscripción ciudadana dos con cupos propios.
+	 * @param rutas a qué endpoints hablar. Por omisión, los del censo.
 	 */
-	constructor(limites: Partial<Record<TipoEvidencia, number>>, claveBorrador: string) {
+	constructor(
+		limites: Partial<Record<TipoEvidencia, number>>,
+		claveBorrador: string,
+		rutas: RutasCarga = RUTAS_INTERNAS
+	) {
 		this.#limites = limites;
 		this.#claveBorrador = claveBorrador;
+		this.#rutas = rutas;
 	}
 
 	/** Los cupos del censo, tal como vienen en sus catálogos. */
@@ -246,12 +284,9 @@ export class GestorEvidencias {
 		if (archivo.idServidor === undefined || !this.carga) return;
 
 		try {
-			await fetch(`${API_BASE}/rufe/cargas/${this.carga}/archivos/${archivo.idServidor}`, {
+			await fetch(`${this.#rutas.archivos(this.carga)}/${archivo.idServidor}`, {
 				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${leerToken() ?? ''}`
-				},
+				headers: { 'Content-Type': 'application/json', ...this.#cabeceras() },
 				body: JSON.stringify({ descripcion: texto })
 			});
 		} catch {
@@ -275,9 +310,9 @@ export class GestorEvidencias {
 
 		if (archivo.idServidor && this.carga) {
 			try {
-				await fetch(`${API_BASE}/rufe/cargas/${this.carga}/archivos/${archivo.idServidor}`, {
+				await fetch(`${this.#rutas.archivos(this.carga)}/${archivo.idServidor}`, {
 					method: 'DELETE',
-					headers: { Authorization: `Bearer ${leerToken() ?? ''}` }
+					headers: this.#cabeceras()
 				});
 			} catch {
 				// Si no se pudo borrar en el servidor, el archivo queda en la carga
@@ -317,7 +352,7 @@ export class GestorEvidencias {
 
 		if (!this.carga) {
 			try {
-				this.carga = (await rufeApi.abrirCarga()).carga;
+				this.carga = (await this.#rutas.abrir()).carga;
 			} catch {
 				for (const a of pendientes) {
 					a.estado = 'error';
@@ -374,6 +409,12 @@ export class GestorEvidencias {
 		await borrarEvidenciasDe(this.#claveBorrador);
 	}
 
+	#cabeceras(): Record<string, string> {
+		if (!this.#rutas.autenticada) return {};
+
+		return { Authorization: `Bearer ${leerToken() ?? ''}` };
+	}
+
 	#subir(registro: EvidenciaLocal): Promise<void> {
 		return new Promise((resolver) => {
 			registro.estado = 'subiendo';
@@ -384,12 +425,13 @@ export class GestorEvidencias {
 			cuerpo.append('archivo', registro.archivo, registro.nombre);
 
 			const xhr = new XMLHttpRequest();
-			xhr.open('POST', `${API_BASE}/rufe/cargas/${this.carga}/archivos`);
+			xhr.open('POST', this.#rutas.archivos(this.carga as string));
 			xhr.setRequestHeader('Accept', 'application/json');
 
 			// XMLHttpRequest no pasa por el cliente de la API, así que la cabecera
-			// se pone a mano. Sin ella el servidor responde 401 y la foto nunca sube.
-			const token = leerToken();
+			// se pone a mano. Sin ella el servidor responde 401 y la foto nunca
+			// sube. En el formulario ciudadano no hay token y no se manda ninguna.
+			const token = this.#rutas.autenticada ? leerToken() : null;
 			if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
 			xhr.upload.onprogress = (e) => {

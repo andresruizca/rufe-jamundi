@@ -731,7 +731,10 @@ prueba('los cupos de evidencia son uno de documento y cuatro de daño', function
     afirmarIgual(1, Catalogos::MAX_EVIDENCIAS_DOCUMENTO);
     afirmarIgual(4, Catalogos::MAX_EVIDENCIAS_DANO);
     afirmarIgual(5, Catalogos::MAX_EVIDENCIAS);
-    afirmarIgual(['DOCUMENTO', 'DANO', 'INSPECCION', 'PREINSCRIPCION'], array_keys(Catalogos::TIPOS_EVIDENCIA));
+    afirmarIgual(
+        ['DOCUMENTO', 'DANO', 'INSPECCION', 'PRE_CEDULA', 'PRE_DANO'],
+        array_keys(Catalogos::TIPOS_EVIDENCIA)
+    );
 
     // Cinco fotos de 900 KB caben de sobra en el cupo total de la carga.
     afirmar(
@@ -851,38 +854,51 @@ prueba('todos los .sql del Migrador se trocean y son idempotentes', function () 
 /**
  * ¿Este ALTER solo ENSANCHA un ENUM?
  *
- * Cierto únicamente si es un `MODIFY COLUMN … ENUM(...)`, no toca nada más, y
- * la lista de valores contiene todos los que la columna ya admitía. Los valores
- * previos se toman del propio proyecto —`ROLES_ANTERIORES`— y no del archivo,
- * porque leerlos del mismo sitio que se quiere comprobar no comprobaría nada.
+ * Cierto únicamente si es un `MODIFY COLUMN … ENUM(...)` sobre una de las
+ * columnas declaradas abajo, no toca nada más, y la lista nueva contiene todos
+ * los valores que esa columna ya admitía.
+ *
+ * Los valores previos se escriben AQUÍ y no se leen del archivo de migración:
+ * sacarlos del mismo sitio que se quiere comprobar no comprobaría nada.
  */
 function ensanchaUnEnum(string $sentencia): bool
 {
-    // Solo la columna `rol` de `usuarios`: es el único ENUM del proyecto y
-    // dejar la excepción abierta a cualquier columna sería regalar el permiso.
-    if (preg_match('/MODIFY\s+COLUMN\s+rol\s+ENUM\s*\(([^)]*)\)/i', $sentencia, $m) !== 1) {
-        return false;
-    }
+    // La excepción está acotada a columnas concretas. Abrirla a cualquier
+    // columna sería regalar el permiso de modificar lo que sea.
+    foreach (ENUMS_QUE_PUEDEN_CRECER as $columna => $anteriores) {
+        if (preg_match('/MODIFY\s+COLUMN\s+'.$columna.'\s+ENUM\s*\(([^)]*)\)/i', $sentencia, $m) !== 1) {
+            continue;
+        }
 
-    // Nada más en el mismo ALTER: ni DROP, ni CHANGE, ni otro MODIFY.
-    if (preg_match_all('/\b(DROP|CHANGE|MODIFY)\s+COLUMN\b/i', $sentencia) !== 1) {
-        return false;
-    }
-
-    preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1], $valores);
-    $nuevos = $valores[1];
-
-    foreach (ROLES_ANTERIORES as $previo) {
-        if (! in_array($previo, $nuevos, true)) {
+        // Nada más en el mismo ALTER: ni DROP, ni CHANGE, ni otro MODIFY.
+        if (preg_match_all('/\b(DROP|CHANGE|MODIFY)\s+COLUMN\b/i', $sentencia) !== 1) {
             return false;
         }
+
+        preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1], $valores);
+        $nuevos = $valores[1];
+
+        foreach ($anteriores as $previo) {
+            if (! in_array($previo, $nuevos, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    return true;
+    return false;
 }
 
-/** Los roles que la columna admitía antes de esta migración. */
-const ROLES_ANTERIORES = ['ADMINISTRADOR', 'GESTOR', 'VISUALIZACION'];
+/**
+ * Qué ENUM puede ensancharse, y qué valores admitía antes.
+ *
+ * @var array<string,list<string>>
+ */
+const ENUMS_QUE_PUEDEN_CRECER = [
+    'rol'  => ['ADMINISTRADOR', 'GESTOR', 'VISUALIZACION'],
+    'tipo' => ['DOCUMENTO', 'DANO'],
+];
 
 prueba('la excepción del ENUM no vale para recortarlo', function (): void {
     // Sin esto, «se permite un MODIFY de un ENUM» sería un agujero por el que
@@ -890,12 +906,16 @@ prueba('la excepción del ENUM no vale para recortarlo', function (): void {
     $ensancha = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''GESTOR'',''VISUALIZACION'',''INSPECTOR'')";
     $recorta  = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''INSPECTOR'')";
     $otraCosa = "ALTER TABLE usuarios MODIFY COLUMN email VARCHAR(200) NOT NULL";
+    $tipoOk   = "ALTER TABLE rufe_evidencias MODIFY COLUMN tipo ENUM(''DOCUMENTO'',''DANO'',''INSPECCION'')";
+    $tipoMal  = "ALTER TABLE rufe_evidencias MODIFY COLUMN tipo ENUM(''DANO'',''INSPECCION'')";
     $conDrop  = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''GESTOR'',''VISUALIZACION'',''INSPECTOR''), DROP COLUMN activo";
 
     afirmar(ensanchaUnEnum($ensancha), 'añadir un rol debería permitirse');
     afirmar(! ensanchaUnEnum($recorta), 'quitar un rol NO puede permitirse');
     afirmar(! ensanchaUnEnum($otraCosa), 'la excepción es solo para el ENUM de rol');
     afirmar(! ensanchaUnEnum($conDrop), 'un DROP colado en el mismo ALTER debe bloquearlo');
+    afirmar(ensanchaUnEnum($tipoOk), 'añadir un tipo de evidencia debería permitirse');
+    afirmar(! ensanchaUnEnum($tipoMal), 'quitar DOCUMENTO NO puede permitirse');
 });
 
 prueba('ninguna migración puede borrar datos', function () use ($raiz): void {
@@ -2256,7 +2276,28 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
 prueba('el cupo de fotos de una solicitud ciudadana es acotado', function (): void {
     // Es una ruta de subida SIN sesión: cada foto de más es almacenamiento que
     // cualquiera en internet puede consumir.
-    afirmarIgual(4, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PREINSCRIPCION']['maximo']);
+    afirmarIgual(1, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA']['maximo']);
+    afirmarIgual(4, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']);
+});
+
+prueba('sin sesión solo se pueden subir los dos tipos de la pre-inscripción', function (): void {
+    // El tipo llega en la petición. Sin lista blanca, quien quisiera podría
+    // pedir el cupo de diez fotos del registro fotográfico de una inspección.
+    afirmarIgual(['PRE_CEDULA', 'PRE_DANO'], App\Rufe\Catalogos::TIPOS_PREINSCRIPCION);
+
+    foreach (App\Rufe\Catalogos::TIPOS_PREINSCRIPCION as $t) {
+        afirmar(
+            isset(App\Rufe\Catalogos::TIPOS_EVIDENCIA[$t]),
+            "«{$t}» no existe como tipo de evidencia"
+        );
+    }
+
+    foreach (['DOCUMENTO', 'DANO', 'INSPECCION'] as $t) {
+        afirmar(
+            ! in_array($t, App\Rufe\Catalogos::TIPOS_PREINSCRIPCION, true),
+            "«{$t}» no puede subirse sin sesión"
+        );
+    }
 });
 
 prueba('ninguna ruta pública devuelve pre-inscripciones', function () use ($raiz): void {

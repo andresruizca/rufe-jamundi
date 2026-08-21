@@ -105,7 +105,7 @@ final class RufeCapturaController
     {
         Limite::consumir('rufe.archivo', $this->clave($req), self::MAX_ARCHIVOS_HORA, 3600);
 
-        $hash = $this->hashDeCarga($req->param('carga'));
+        $hash = Archivos::hashDeCarga($req->param('carga'));
 
         $archivo = $req->archivo('archivo');
         if ($archivo === null) {
@@ -130,7 +130,7 @@ final class RufeCapturaController
 
     public function listarArchivos(Request $req): void
     {
-        $hash = $this->hashDeCarga($req->param('carga'));
+        $hash = Archivos::hashDeCarga($req->param('carga'));
 
         Response::ok(['archivos' => Archivos::listarCarga($hash)]);
     }
@@ -138,7 +138,7 @@ final class RufeCapturaController
     /** El «FOTOGRAFIA DE:» del numeral 11, que se escribe tras tomar la foto. */
     public function describirArchivo(Request $req): void
     {
-        $hash = $this->hashDeCarga($req->param('carga'));
+        $hash = Archivos::hashDeCarga($req->param('carga'));
 
         $id = (int) $req->param('id');
         if ($id <= 0) {
@@ -152,7 +152,7 @@ final class RufeCapturaController
 
     public function eliminarArchivo(Request $req): void
     {
-        $hash = $this->hashDeCarga($req->param('carga'));
+        $hash = Archivos::hashDeCarga($req->param('carga'));
 
         $id = (int) $req->param('id');
         if ($id <= 0) {
@@ -382,7 +382,7 @@ final class RufeCapturaController
 
             $carga = (string) ($req->input('carga') ?? '');
             if ($carga !== '') {
-                Archivos::adoptar($this->hashDeCarga($carga), $reporteId);
+                Archivos::adoptar(Archivos::hashDeCarga($carga), $reporteId);
             }
 
             Db::exec(
@@ -481,15 +481,6 @@ final class RufeCapturaController
         $usuario = Auth::usuario($req);
 
         return $usuario !== null ? 'u'.$usuario['id'] : $req->ip();
-    }
-
-    private function hashDeCarga(string $token): string
-    {
-        if (preg_match('/^[a-f0-9]{64}$/', $token) !== 1) {
-            throw HttpError::noEncontrado('La carga de archivos no existe o ya venció.');
-        }
-
-        return hash('sha256', $token);
     }
 
     /**

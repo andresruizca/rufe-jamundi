@@ -337,7 +337,7 @@ final class InspeccionCapturaController
             );
 
             if ($carga !== null) {
-                Archivos::adoptarInspeccion($carga, $id);
+                Archivos::adoptarInspeccion(Archivos::hashDeCarga($carga), $id);
             }
 
             // La solicitud queda atendida y apuntando a su inspección. Se marca
