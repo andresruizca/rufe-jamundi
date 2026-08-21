@@ -317,6 +317,37 @@ export type PreinscripcionDetalle = {
 	historial: { estado: string; nota: string | null; usuario_email: string | null; creado_en: string }[];
 };
 
+export type CategoriaVideo = {
+	id: number;
+	nombre: string;
+	instruccion: string | null;
+	orden: number;
+	obligatoria: boolean;
+	segundos_min: number;
+	segundos_max: number;
+	activa: boolean;
+};
+
+/** Catálogo de categorías de video. Solo administración. */
+export const categoriasVideoApi = {
+	listar: () =>
+		api.get<{ categorias: CategoriaVideo[]; maximo_obligatorias: number }>('/admin/categorias-video'),
+
+	crear: (datos: Partial<CategoriaVideo>) =>
+		api.post<{ categoria: CategoriaVideo }>('/admin/categorias-video', datos),
+
+	actualizar: (id: number, datos: Partial<CategoriaVideo>) =>
+		api.put<{ categoria: CategoriaVideo }>(`/admin/categorias-video/${id}`, datos),
+
+	cambiarEstado: (id: number, activa: boolean) =>
+		api.put<{ categoria: CategoriaVideo }>(`/admin/categorias-video/${id}/estado`, { activa }),
+
+	reordenar: (orden: number[]) =>
+		api.put<{ categorias: CategoriaVideo[] }>('/admin/categorias-video/orden', { orden }),
+
+	eliminar: (id: number) => api.delete<void>(`/admin/categorias-video/${id}`)
+};
+
 export const mapaApi = {
 	fichas: () => api.get<{ fichas: FichaMapa[] }>('/mapa/fichas'),
 

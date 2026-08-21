@@ -38,6 +38,8 @@ final class Migrador
         // Amplía `rufe_evidencias.tipo`, que se quedó con los dos valores del
         // censo mientras el código ya usaba tres más.
         'evidencias_03_tipos.sql',
+        // Catálogo de categorías de video y los videos ciudadanos.
+        'preinscripcion_02_video.sql',
     ];
 
     /**

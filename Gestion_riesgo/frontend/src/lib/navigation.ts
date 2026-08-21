@@ -31,7 +31,8 @@ import {
 	FileText,
 	HardHat,
 	ClipboardCheck,
-	Inbox
+	Inbox,
+	Video
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 
@@ -295,6 +296,18 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: MapPinned,
 		roles: SOLO_ADMIN,
 		match: ['/admin/mapas']
+	},
+
+	{
+		id: 'categorias-video',
+		type: 'item',
+		parentId: 'grupo-admin',
+		label: 'Videos que se piden',
+		title: 'Categorías de video de la pre-inscripción',
+		href: '/admin/categorias-video',
+		icon: Video,
+		roles: SOLO_ADMIN,
+		match: ['/admin/categorias-video']
 	},
 
 	{

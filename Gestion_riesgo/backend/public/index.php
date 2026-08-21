@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
+use App\Controllers\CategoriasVideoController;
 use App\Controllers\InspeccionCapturaController;
 use App\Controllers\InspeccionController;
 use App\Controllers\MapaController;
@@ -95,6 +96,7 @@ $mapa = new MapaController;
 $inspeccionCaptura = new InspeccionCapturaController;
 $inspeccion = new InspeccionController;
 $preinscripcion = new PreinscripcionController;
+$categoriasVideo = new CategoriasVideoController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -200,6 +202,16 @@ $router->get('/preinscripcion/fichas', [$preinscripcion, 'listar'], Auth::LECTUR
 $router->get('/preinscripcion/fichas/{id}', [$preinscripcion, 'ver'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}/fotos/{foto}', [$preinscripcion, 'descargarFoto'], Auth::LECTURA_RUFE);
 $router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEstado'], Auth::ESCRITURA);
+
+// Catálogo de categorías de video, que gestiona el administrador. Qué hay que
+// grabar de una vivienda cambia entre una emergencia y la siguiente; esperar a
+// un despliegue para ajustarlo sería llegar tarde siempre.
+$router->get('/admin/categorias-video', [$categoriasVideo, 'listar'], $soloAdmin);
+$router->post('/admin/categorias-video', [$categoriasVideo, 'crear'], $soloAdmin);
+$router->put('/admin/categorias-video/orden', [$categoriasVideo, 'reordenar'], $soloAdmin);
+$router->put('/admin/categorias-video/{id}', [$categoriasVideo, 'actualizar'], $soloAdmin);
+$router->put('/admin/categorias-video/{id}/estado', [$categoriasVideo, 'cambiarEstado'], $soloAdmin);
+$router->delete('/admin/categorias-video/{id}', [$categoriasVideo, 'eliminar'], $soloAdmin);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);

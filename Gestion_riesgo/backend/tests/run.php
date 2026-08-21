@@ -2223,6 +2223,21 @@ prueba('cada rol tiene etiqueta y capacidades declaradas', function (): void {
     }
 });
 
+prueba('una ruta literal se registra antes que la que lleva un comodín', function () use ($raiz): void {
+    // El router recorre las rutas EN ORDEN y se queda con la primera que casa.
+    // Si `/{id}` se registrara antes que `/orden`, reordenar el catálogo
+    // acabaría intentando editar una categoría con id «orden» —y el fallo se
+    // vería solo al arrastrar una fila, no al desplegar.
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+
+    $posOrden = strpos($php, "'/admin/categorias-video/orden'");
+    $posId = strpos($php, "'/admin/categorias-video/{id}'");
+
+    afirmar($posOrden !== false, 'no se encontró la ruta de reordenar');
+    afirmar($posId !== false, 'no se encontró la ruta de editar');
+    afirmar($posOrden < $posId, 'la ruta literal debe registrarse antes que la del comodín');
+});
+
 grupo('Rutas › qué queda abierto a internet');
 
 /**
