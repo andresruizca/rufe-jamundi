@@ -13,7 +13,7 @@
 
 	import { onDestroy } from 'svelte';
 	import { ChevronLeft, ChevronRight, Download, LoaderCircle, TriangleAlert, X, ZoomIn } from '@lucide/svelte';
-	import { inspeccionApi, rufeApi } from '$lib/api/servicios';
+	import { inspeccionApi, preinscripcionApi, rufeApi } from '$lib/api/servicios';
 
 	type Evidencia = {
 		id: number;
@@ -36,14 +36,15 @@
 		 * Se pasa el origen y no una función de descarga porque el visor sigue
 		 * haciendo lo mismo con las dos: la única diferencia está en la ruta.
 		 */
-		origen?: 'rufe' | 'inspeccion';
+		origen?: 'rufe' | 'inspeccion' | 'preinscripcion';
 		/** Muestra el «FOTOGRAFIA DE:» del numeral 11 bajo cada miniatura. */
 		conPie?: boolean;
 	};
 
 	let { reporteId, evidencias, origen = 'rufe', conPie = false }: Props = $props();
 
-	const api = $derived(origen === 'inspeccion' ? inspeccionApi : rufeApi);
+	const POR_ORIGEN = { rufe: rufeApi, inspeccion: inspeccionApi, preinscripcion: preinscripcionApi };
+	const api = $derived(POR_ORIGEN[origen]);
 
 	/** URL de objeto por evidencia, para no volver a pedir una imagen ya traída. */
 	let urls = $state<Record<number, string>>({});

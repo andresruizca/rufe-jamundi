@@ -82,7 +82,30 @@ final class InspeccionCapturaController
         );
 
         $carga = $req->texto('carga');
-        $numero = $this->guardar($datos, $huella, $envioId, $actor, $carga === '' ? null : $carga);
+
+        // La solicitud ciudadana de la que nació esta inspección, si nació de
+        // una. Se lee de la petición pero NO se cree a ciegas: se comprueba que
+        // exista antes de marcarla como atendida.
+        $preinscripcion = (int) $req->texto('preinscripcion_id');
+        if ($preinscripcion > 0) {
+            $existe = Db::first(
+                'SELECT id FROM preinscripciones WHERE id = :i',
+                ['i' => $preinscripcion]
+            );
+
+            if ($existe === null) {
+                $preinscripcion = 0;
+            }
+        }
+
+        $numero = $this->guardar(
+            $datos,
+            $huella,
+            $envioId,
+            $actor,
+            $carga === '' ? null : $carga,
+            $preinscripcion > 0 ? $preinscripcion : null
+        );
 
         Auditoria::registrar(
             $req,
@@ -162,7 +185,8 @@ final class InspeccionCapturaController
         string $huella,
         ?string $envioId,
         array $actor,
-        ?string $carga
+        ?string $carga,
+        ?int $preinscripcionId = null
     ): string {
         $pdo = Db::conn();
         $pdo->beginTransaction();
@@ -314,6 +338,32 @@ final class InspeccionCapturaController
 
             if ($carga !== null) {
                 Archivos::adoptarInspeccion($carga, $id);
+            }
+
+            // La solicitud queda atendida y apuntando a su inspección. Se marca
+            // AQUÍ, dentro de la misma transacción, y no con una llamada aparte
+            // desde el navegador: si se hiciera fuera, una solicitud podría
+            // quedar marcada como convertida sin que existiera la ficha.
+            if ($preinscripcionId !== null) {
+                Db::exec(
+                    'UPDATE preinscripciones
+                        SET estado = :e, inspeccion_id = :ins
+                      WHERE id = :i',
+                    ['e' => 'CONVERTIDA', 'ins' => $id, 'i' => $preinscripcionId]
+                );
+
+                Db::exec(
+                    'INSERT INTO preinscripcion_historial
+                        (preinscripcion_id, estado, nota, usuario_id, usuario_email)
+                     VALUES (:i, :e, :n, :u, :m)',
+                    [
+                        'i' => $preinscripcionId,
+                        'e' => 'CONVERTIDA',
+                        'n' => 'Se levantó la inspección '.$numero.'.',
+                        'u' => $actor['id'],
+                        'm' => $actor['email'],
+                    ]
+                );
             }
 
             $pdo->commit();

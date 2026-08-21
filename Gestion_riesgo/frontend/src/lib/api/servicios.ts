@@ -270,6 +270,34 @@ export const preinscripcionApi = {
 
 	ver: (id: number) => api.get<PreinscripcionDetalle>(`/preinscripcion/fichas/${id}`),
 
+	/** Las fotos viven fuera del docroot y solo salen con el token en la cabecera. */
+	async verEvidencia(preinscripcionId: number, fotoId: number): Promise<string> {
+		const respuesta = await fetch(
+			`${API_BASE}/preinscripcion/fichas/${preinscripcionId}/fotos/${fotoId}`,
+			{ headers: { Authorization: `Bearer ${leerToken() ?? ''}` } }
+		);
+
+		if (!respuesta.ok) throw new Error('No se pudo abrir la imagen.');
+
+		return URL.createObjectURL(await respuesta.blob());
+	},
+
+	async descargarEvidencia(preinscripcionId: number, fotoId: number, nombre: string): Promise<void> {
+		const respuesta = await fetch(
+			`${API_BASE}/preinscripcion/fichas/${preinscripcionId}/fotos/${fotoId}`,
+			{ headers: { Authorization: `Bearer ${leerToken() ?? ''}` } }
+		);
+
+		if (!respuesta.ok) throw new Error('No se pudo descargar el archivo.');
+
+		const url = URL.createObjectURL(await respuesta.blob());
+		const enlace = document.createElement('a');
+		enlace.href = url;
+		enlace.download = nombre;
+		enlace.click();
+		URL.revokeObjectURL(url);
+	},
+
 	cambiarEstado: (id: number, estado: string, nota: string) =>
 		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota })
 };

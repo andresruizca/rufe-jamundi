@@ -30,7 +30,8 @@ import {
 	FilePlus2,
 	FileText,
 	HardHat,
-	ClipboardCheck
+	ClipboardCheck,
+	Inbox
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 
@@ -223,6 +224,19 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: FileText,
 		roles: LECTURA_RUFE,
 		match: ['/riesgo/reportes', /^\/riesgo\/reportes\/[^/]+$/]
+	},
+	{
+		id: 'preinscripciones',
+		type: 'item',
+		parentId: 'grupo-reportes',
+		label: 'Solicitudes ciudadanas',
+		title: 'Pre-inscripciones recibidas',
+		href: '/riesgo/preinscripciones',
+		icon: Inbox,
+		// Lectura del censo: son solicitudes con nombre, cédula y dirección de
+		// familias. El profesional que inspecciona no las necesita.
+		roles: LECTURA_RUFE,
+		match: ['/riesgo/preinscripciones', /^\/riesgo\/preinscripciones\/[^/]+$/]
 	},
 	{
 		id: 'inspecciones',

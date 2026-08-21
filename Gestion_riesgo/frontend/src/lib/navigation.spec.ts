@@ -139,6 +139,7 @@ describe('menú por rol', () => {
 
 		expect(reportes?.type === 'group' && reportes.items.map((i) => i.href)).toEqual([
 			'/riesgo/reportes',
+			'/riesgo/preinscripciones',
 			'/riesgo/inspecciones'
 		]);
 	});
@@ -161,6 +162,8 @@ describe('menú por rol', () => {
 	// no un descuido.
 
 	it('el inspector ve exactamente su formato, la cola y sus fichas', () => {
+		// Sin «Solicitudes ciudadanas»: llevan nombre, cédula y dirección de
+		// familias que aún no son caso suyo.
 		expect(etiquetas('INSPECTOR')).toEqual([
 			'INSP DE VIVIENDA',
 			'Pendientes',
@@ -182,7 +185,13 @@ describe('menú por rol', () => {
 		// El menú es cortesía; esto es lo que decide la guardia de rutas. El
 		// permiso de verdad lo aplica PHP, pero si esto se abriera, el navegador
 		// dejaría entrar a una pantalla que luego muestra un error.
-		for (const ruta of ['/dashboard', '/riesgo/reportes', '/riesgo/reportes/1', '/riesgo/mapas']) {
+		for (const ruta of [
+			'/dashboard',
+			'/riesgo/reportes',
+			'/riesgo/reportes/1',
+			'/riesgo/mapas',
+			'/riesgo/preinscripciones'
+		]) {
 			expect(puedeAcceder(ruta, 'INSPECTOR'), ruta).toBe(false);
 		}
 	});

@@ -13,6 +13,7 @@
 	// con la inspección de la vivienda, pasar al numeral 8».
 
 	import { onDestroy, onMount } from 'svelte';
+	import { page } from '$app/state';
 	import {
 		ArrowLeft,
 		ArrowRight,
@@ -26,7 +27,7 @@
 	import { ApiError } from '$lib/api/client';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { ROLES } from '$lib/navigation';
-	import { inspeccionApi } from '$lib/api/servicios';
+	import { inspeccionApi, preinscripcionApi } from '$lib/api/servicios';
 	import CampoTexto from '$lib/rufe-form/componentes/CampoTexto.svelte';
 	import CampoSelect from '$lib/rufe-form/componentes/CampoSelect.svelte';
 	import CampoOpciones from '$lib/rufe-form/componentes/CampoOpciones.svelte';
@@ -80,6 +81,17 @@
 	let enviado = $state<{ numero: string; combo: string | null; motivo: string | null } | null>(null);
 	let hayBorradorPrevio = $state(false);
 	let avisoDuplicado = $state<string>('');
+
+	/**
+	 * La solicitud ciudadana de la que nace esta inspección, si viene de una.
+	 *
+	 * Se guarda para mandarla al enviar: el servidor marca la solicitud como
+	 * atendida DENTRO de la misma transacción que crea la ficha. Si se marcara
+	 * desde aquí con otra llamada, una solicitud podría quedar cerrada como
+	 * «convertida» sin que la inspección existiera.
+	 */
+	let preinscripcionId = $state<number | null>(null);
+	let avisoPreinscripcion = $state('');
 	let enLinea = $state(true);
 
 	const borrador = new GestorBorrador();
@@ -152,6 +164,44 @@
 		datos.profesional_documento_de = u.documento_de ?? '';
 		datos.profesional_telefono = u.telefono ?? '';
 		datos.profesional_direccion = u.direccion ?? '';
+	}
+
+	/**
+	 * Trae lo que el ciudadano ya escribió en su pre-inscripción.
+	 *
+	 * Es el objetivo de todo el módulo público: que el profesional llegue a la
+	 * casa con medio formato lleno y sabiendo a dónde va. Todo queda editable —lo
+	 * escribió alguien sin formación técnica y desde su celular—, así que se
+	 * trata como un punto de partida, no como un dato verificado.
+	 */
+	async function precargarDesdeSolicitud() {
+		const parametro = Number(page.url.searchParams.get('preinscripcion'));
+		if (!Number.isInteger(parametro) || parametro <= 0) return;
+
+		try {
+			const { preinscripcion: s } = await preinscripcionApi.ver(parametro);
+
+			preinscripcionId = parametro;
+			datos.propietario_nombres = String(s.nombre_completo ?? '');
+			datos.propietario_documento = String(s.documento ?? '');
+			datos.propietario_telefono = String(s.telefono ?? '');
+			datos.direccion_cabecera = String(s.direccion ?? '');
+			datos.corregimiento = s.corregimiento ? String(s.corregimiento) : '';
+			datos.vereda = s.vereda ? String(s.vereda) : '';
+
+			if (s.latitud !== null && s.longitud !== null) {
+				datos.latitud = Number(s.latitud);
+				datos.longitud = Number(s.longitud);
+				datos.precision_m = s.precision_m === null ? null : Number(s.precision_m);
+			}
+
+			avisoPreinscripcion = `Datos tomados de la solicitud ${s.radicado}. Verifíquelos en la visita: los escribió la propia familia.`;
+		} catch {
+			// Que no se pueda traer la solicitud no puede impedir levantar la
+			// inspección: el profesional ya está en la puerta de la casa.
+			avisoPreinscripcion =
+				'No se pudieron traer los datos de la solicitud. Puede continuar y llenarlos a mano.';
+		}
 	}
 
 	// ── Ubicación ───────────────────────────────────────────────────────────
@@ -298,6 +348,7 @@
 		} else {
 			datos.fecha_evaluacion = hoy();
 			precargarProfesional();
+			await precargarDesdeSolicitud();
 		}
 
 		cargando = false;
@@ -423,7 +474,11 @@
 			};
 
 			const r = await envio.enviar(
-				{ ...$state.snapshot(datos), envio_id: borrador.clave },
+				{
+					...$state.snapshot(datos),
+					envio_id: borrador.clave,
+					...(preinscripcionId ? { preinscripcion_id: preinscripcionId } : {})
+				},
 				resumen,
 				evidencias?.paraLaCola() ?? [],
 				'INSPECCION'
@@ -542,6 +597,12 @@
 				<p class="tarjeta__nota">{paso.ayuda}</p>
 
 				{#if paso.id === 'inicio'}
+					{#if avisoPreinscripcion}
+						<p class="aviso aviso--info" role="status">
+							<CheckCircle2 size={15} aria-hidden="true" />
+							{avisoPreinscripcion}
+						</p>
+					{/if}
 					<div class="intro">
 						<p>
 							Este formato evalúa la vivienda para determinar qué le corresponde del <strong
