@@ -16,6 +16,14 @@
 	// Los niveles que el Anexo 1 no define para un elemento —las casillas «N/A»
 	// del formato— sencillamente no se muestran. No se dibujan en gris: una
 	// opción visible pero inerte invita a intentar pulsarla.
+	//
+	// Las respuestas son radios de verdad, con las mismas clases que `CampoOpciones`
+	// (`.opcion`, `.opcion--activa` en shell.css), y no botones con `aria-pressed`
+	// como fueron al principio. Un botón pulsado solo se distingue por el fondo, y
+	// en el tema oscuro ese fondo es un 14 % de azul sobre un azul casi negro: el
+	// nivel quedaba marcado y no se veía. Aquí eso no es un detalle estético —de
+	// este nivel sale el combo, y del combo salen los materiales que recibe una
+	// familia—, así que la marca tiene que ser inequívoca y no depender del color.
 
 	import { ChevronDown, TriangleAlert } from '@lucide/svelte';
 	import type { DanoElemento, ElementoEvaluable } from '../tipos';
@@ -73,25 +81,37 @@
 				{/if}
 			</legend>
 
-			<div class="afectado" role="group" aria-label="¿{elemento.etiqueta} resultó afectado?">
-				<button
-					type="button"
-					class="afectado__btn"
-					class:afectado__btn--activo={dano.afectado === true}
-					aria-pressed={dano.afectado === true}
-					onclick={() => responder(elemento.codigo, true)}
-				>
-					Sí, fue afectado
-				</button>
-				<button
-					type="button"
-					class="afectado__btn"
-					class:afectado__btn--activo={dano.afectado === false}
-					aria-pressed={dano.afectado === false}
-					onclick={() => responder(elemento.codigo, false)}
-				>
-					No
-				</button>
+			<!--
+				`role="radiogroup"` en este div y no en el <fieldset>: el fieldset
+				envuelve DOS preguntas —si fue afectado y con qué nivel—, y marcarlo
+				entero como un solo grupo de opciones las mezclaría en el anuncio del
+				lector de pantalla.
+			-->
+			<div
+				class="opciones afectado"
+				role="radiogroup"
+				aria-label="¿{elemento.etiqueta} resultó afectado?"
+				aria-required="true"
+				aria-invalid={errorAfectado ? 'true' : undefined}
+			>
+				<label class="opcion" class:opcion--activa={dano.afectado === true}>
+					<input
+						type="radio"
+						name="afectado-{elemento.codigo}"
+						checked={dano.afectado === true}
+						onchange={() => responder(elemento.codigo, true)}
+					/>
+					<span class="opcion__texto">Sí, fue afectado</span>
+				</label>
+				<label class="opcion" class:opcion--activa={dano.afectado === false}>
+					<input
+						type="radio"
+						name="afectado-{elemento.codigo}"
+						checked={dano.afectado === false}
+						onchange={() => responder(elemento.codigo, false)}
+					/>
+					<span class="opcion__texto">No</span>
+				</label>
 			</div>
 
 			{#if errorAfectado}
@@ -103,44 +123,64 @@
 
 			{#if dano.afectado === true}
 				<div class="niveles">
-					<p class="niveles__titulo">Nivel de daño</p>
+					<p class="niveles__titulo" id="niveles-{elemento.codigo}">Nivel de daño</p>
 
-					{#each elemento.niveles as nivel (nivel.codigo)}
-						{@const clave = `${elemento.codigo}.${nivel.codigo}`}
-						<div class="nivel" class:nivel--activo={dano.nivel === nivel.codigo}>
-							<button
-								type="button"
-								class="nivel__elegir"
-								aria-pressed={dano.nivel === nivel.codigo}
-								onclick={() => elegirNivel(elemento.codigo, nivel.codigo)}
-							>
-								<span class="nivel__nombre nivel__nombre--{nivel.codigo.toLowerCase()}">
-									{nivel.etiqueta}
-								</span>
-								<span class="nivel__alcance">{nivel.alcance}</span>
-							</button>
+					<div
+						role="radiogroup"
+						aria-labelledby="niveles-{elemento.codigo}"
+						aria-required="true"
+						aria-invalid={errorNivel ? 'true' : undefined}
+					>
+						{#each elemento.niveles as nivel (nivel.codigo)}
+							{@const clave = `${elemento.codigo}.${nivel.codigo}`}
+							<div class="nivel">
+								<!--
+									El <label> envuelve solo el radio y su texto. Meter dentro el
+									botón de los criterios haría que consultarlos seleccionara el
+									nivel, que es exactamente el error que este formato no puede
+									permitirse.
+								-->
+								<label class="opcion" class:opcion--activa={dano.nivel === nivel.codigo}>
+									<input
+										type="radio"
+										name="nivel-{elemento.codigo}"
+										checked={dano.nivel === nivel.codigo}
+										onchange={() => elegirNivel(elemento.codigo, nivel.codigo)}
+									/>
+									<span class="opcion__texto">
+										<span class="nivel__nombre nivel__nombre--{nivel.codigo.toLowerCase()}">
+											{nivel.etiqueta}
+										</span>
+										<span class="opcion__nota">{nivel.alcance}</span>
+									</span>
+								</label>
 
-							{#if nivel.criterios.length > 0}
-								<button
-									type="button"
-									class="nivel__ver"
-									aria-expanded={!!abiertos[clave]}
-									onclick={() => alternar(clave)}
-								>
-									<ChevronDown size={14} aria-hidden="true" class={abiertos[clave] ? 'girado' : ''} />
-									{abiertos[clave] ? 'Ocultar criterios' : 'Ver criterios del Anexo 1'}
-								</button>
+								{#if nivel.criterios.length > 0}
+									<button
+										type="button"
+										class="nivel__ver"
+										aria-expanded={!!abiertos[clave]}
+										onclick={() => alternar(clave)}
+									>
+										<ChevronDown
+											size={14}
+											aria-hidden="true"
+											class={abiertos[clave] ? 'girado' : ''}
+										/>
+										{abiertos[clave] ? 'Ocultar criterios' : 'Ver criterios del Anexo 1'}
+									</button>
 
-								{#if abiertos[clave]}
-									<ul class="criterios">
-										{#each nivel.criterios as criterio (criterio)}
-											<li>{criterio}</li>
-										{/each}
-									</ul>
+									{#if abiertos[clave]}
+										<ul class="criterios">
+											{#each nivel.criterios as criterio (criterio)}
+												<li>{criterio}</li>
+											{/each}
+										</ul>
+									{/if}
 								{/if}
-							{/if}
-						</div>
-					{/each}
+							</div>
+						{/each}
+					</div>
 
 					{#if errorNivel}
 						<p class="elemento__error" role="alert">
@@ -194,31 +234,11 @@
 		letter-spacing: 0.02em;
 	}
 
+	/* Una opción por fila, no las dos en línea: esto se marca de pie, con guantes
+	   y a veces con lluvia, y una fila entera es un blanco mucho más grande que
+	   media. Lo demás lo pone `.opcion` en shell.css. */
 	.afectado {
-		display: flex;
-		gap: 0.5rem;
 		margin-top: 0.6rem;
-	}
-
-	/* Botones grandes: esto se marca de pie, con guantes y a veces con lluvia. */
-	.afectado__btn {
-		flex: 1;
-		min-height: 2.9rem;
-		padding: 0.5rem 0.6rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
-		background: var(--color-surface-alt);
-		color: var(--color-text);
-		font-size: 0.9rem;
-		font-weight: 500;
-		cursor: pointer;
-	}
-
-	.afectado__btn--activo {
-		border-color: var(--color-primary);
-		background: var(--color-info-bg);
-		color: var(--aviso-info-texto);
-		font-weight: 600;
 	}
 
 	.niveles {
@@ -236,33 +256,11 @@
 		color: var(--color-muted);
 	}
 
+	/* El recuadro lo dibuja la propia `.opcion`; aquí solo se agrupa cada nivel
+	   con su desplegable de criterios. Un borde más alrededor daría dos marcos
+	   concéntricos y le quitaría fuerza justo al que indica lo seleccionado. */
 	.nivel {
-		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
 		margin-bottom: 0.45rem;
-		overflow: hidden;
-	}
-
-	.nivel--activo {
-		border-color: var(--color-primary);
-	}
-
-	.nivel__elegir {
-		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
-		width: 100%;
-		min-height: 2.6rem;
-		padding: 0.45rem 0.6rem;
-		border: 0;
-		background: transparent;
-		color: var(--color-text);
-		text-align: left;
-		cursor: pointer;
-	}
-
-	.nivel--activo .nivel__elegir {
-		background: var(--color-info-bg);
 	}
 
 	.nivel__nombre {
@@ -285,20 +283,16 @@
 		color: var(--color-muted);
 	}
 
-	.nivel__alcance {
-		font-size: 0.78rem;
-		color: var(--color-muted);
-	}
-
+	/* Colgado bajo su opción y sangrado a la altura del texto, para que se lea
+	   como algo que pertenece a ese nivel y no como una opción más. */
 	.nivel__ver {
 		display: flex;
 		align-items: center;
 		gap: 0.3rem;
-		width: 100%;
-		padding: 0.35rem 0.6rem;
+		margin-left: 1.65rem;
+		padding: 0.3rem 0.2rem;
 		border: 0;
-		border-top: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
+		background: transparent;
 		color: var(--color-muted);
 		font-size: 0.76rem;
 		text-align: left;
@@ -310,8 +304,9 @@
 	}
 
 	.criterios {
-		margin: 0;
+		margin: 0 0 0.2rem 1.65rem;
 		padding: 0.5rem 0.7rem 0.6rem 1.5rem;
+		border-radius: 0.4rem;
 		background: var(--color-surface-alt);
 		font-size: 0.8rem;
 		line-height: 1.45;
