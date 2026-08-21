@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	PASOS,
+	conValoresIniciales,
 	muestraProfesionOtra,
 	cumpleRequisitos,
 	danoVacio,
@@ -36,6 +37,16 @@ const CATALOGOS = {
 		MADERA: { ZINC: 'Cubierta en zinc' }
 	},
 	kit_sugerido: { Z: 'ZINC', Ac: 'FIBROCEMENTO' },
+	profesiones: [
+		{ codigo: 'ARQUITECTO', etiqueta: 'Arquitecto(a)' },
+		{ codigo: 'OTRA', etiqueta: 'Otra, ¿cuál?' }
+	],
+	convenciones: {
+		MUROS_DIVISORIOS: { etiqueta: 'Muros divisorios', opciones: { L: 'Ladrillo' } },
+		PISOS: { etiqueta: 'Pisos', opciones: { C: 'Cemento' } },
+		ESTRUCTURA: { etiqueta: 'Estructura', opciones: { Co: 'Concreto' } },
+		CUBIERTA: { etiqueta: 'Cubierta', opciones: { Z: 'Zinc', Ac: 'Asbesto-cemento' } }
+	},
 	evaluacion: {
 		MAMPOSTERIA: [
 			{
@@ -315,5 +326,118 @@ describe('la profesión «Otra»', () => {
 		});
 
 		expect(limpiarCondicionales(d, CATALOGOS).profesional_profesion_otra).toBe('');
+	});
+});
+
+describe('conValoresIniciales', () => {
+	// El 21 de agosto de 2026 el formulario se quedaba en blanco en el paso 4 con
+	// un `props_invalid_value` de Svelte: `bind:valor={datos.requisitos[codigo]}`
+	// sobre una clave que no existía le pasaba `undefined` a un `$bindable` con
+	// valor por defecto. Un mapa vacío no se ve mal leyendo el código; revienta
+	// en pantalla y no deja continuar.
+
+	it('ninguna clave enlazada con bind: queda en undefined', () => {
+		const d = conValoresIniciales(form(), CATALOGOS);
+
+		for (const r of CATALOGOS.requisitos) {
+			expect(d.requisitos[r.codigo], `requisitos.${r.codigo}`).toBeDefined();
+			expect(d.requisitos[r.codigo]).toBeNull();
+		}
+
+		for (const categoria of Object.keys(CATALOGOS.convenciones)) {
+			expect(d.infraestructura[categoria], `infraestructura.${categoria}`).toBeDefined();
+		}
+	});
+
+	it('no pisa lo que la persona ya contestó', () => {
+		// Recuperar un borrador no puede borrar respuestas.
+		const d = conValoresIniciales(
+			form({
+				requisitos: { PROPIETARIO: false },
+				infraestructura: { CUBIERTA: 'Z' }
+			}),
+			CATALOGOS
+		);
+
+		expect(d.requisitos.PROPIETARIO).toBe(false);
+		expect(d.requisitos.NO_BENEFICIARIO).toBeNull();
+		expect(d.infraestructura.CUBIERTA).toBe('Z');
+	});
+
+	it('un borrador viejo recibe las claves que le falten', () => {
+		// Si mañana el catálogo crece, un borrador guardado antes no tendría la
+		// clave nueva y volvería a romper la pantalla.
+		const viejo = form({ requisitos: {}, infraestructura: {} });
+
+		expect(Object.keys(conValoresIniciales(viejo, CATALOGOS).requisitos).sort()).toEqual(
+			CATALOGOS.requisitos.map((r) => r.codigo).sort()
+		);
+	});
+
+	it('la rama del acta tampoco deja huecos', () => {
+		// Vaciar `infraestructura` al no cumplir requisitos volvía a producir el
+		// undefined si la persona volvía atrás a corregir una respuesta.
+		const d = limpiarCondicionales(
+			conValoresIniciales(
+				form({ requisitos: { ...TRES_SI, PROPIETARIO: false }, infraestructura: { CUBIERTA: 'Z' } }),
+				CATALOGOS
+			),
+			CATALOGOS
+		);
+
+		for (const categoria of Object.keys(CATALOGOS.convenciones)) {
+			expect(d.infraestructura[categoria], `infraestructura.${categoria}`).toBeDefined();
+		}
+	});
+});
+
+describe('un borrador guardado con una versión anterior', () => {
+	// El caso real: se continuó un borrador de antes de que existiera el campo
+	// «¿Cuál?» de la profesión. Al elegir «Otra», Svelte intentaba enlazar una
+	// propiedad inexistente y la pantalla se quedaba en blanco. El fallo no
+	// aparecía donde estaba el campo, sino al llegar a él.
+
+	it('recibe todos los campos que le falten, no solo los mapas', () => {
+		const viejo = {
+			propietario_nombres: 'Pedro Antonio Pérez Gómez',
+			fecha_evaluacion: '2026-08-20'
+		} as unknown as FormularioInspeccion;
+
+		const d = conValoresIniciales(viejo, CATALOGOS);
+
+		for (const [campo, valor] of Object.entries(formularioVacio())) {
+			expect(d[campo as keyof FormularioInspeccion], `falta «${campo}»`).not.toBeUndefined();
+			void valor;
+		}
+	});
+
+	it('conserva lo que el borrador sí traía', () => {
+		const d = conValoresIniciales(
+			{ propietario_nombres: 'Pedro Antonio Pérez Gómez' } as FormularioInspeccion,
+			CATALOGOS
+		);
+
+		expect(d.propietario_nombres).toBe('Pedro Antonio Pérez Gómez');
+	});
+
+	it('descarta una profesión que ya no está en la lista', () => {
+		// Cuando el campo era texto libre se guardaba «Ingeniera civil»; hoy el
+		// desplegable espera un código. Dejarlo pondría la lista en un estado que
+		// no corresponde a ninguna de sus opciones.
+		const d = conValoresIniciales(
+			{ profesional_profesion: 'Ingeniera civil' } as FormularioInspeccion,
+			CATALOGOS
+		);
+
+		expect(d.profesional_profesion).toBe('');
+	});
+
+	it('respeta una profesión que sí está en la lista', () => {
+		const d = conValoresIniciales(
+			{ profesional_profesion: 'ARQUITECTO' } as FormularioInspeccion,
+			CATALOGOS
+		);
+
+		expect(d.profesional_profesion).toBe('ARQUITECTO');
 	});
 });

@@ -311,6 +311,60 @@ export function danoVacio(): DanoElemento {
 	return { afectado: null, nivel: null };
 }
 
+/**
+ * Completa un formulario con todo lo que le falte para poder dibujarse.
+ *
+ * Existe por un fallo concreto del 21 de agosto de 2026: la pantalla se quedaba
+ * en blanco con un `props_invalid_value` de Svelte. Enlazar
+ * `bind:valor={datos.algo}` sobre una propiedad que NO EXISTE le pasa
+ * `undefined` a un `$bindable` con valor por defecto, y Svelte lo rechaza.
+ *
+ * Pasaba por dos caminos distintos, y por eso esto arregla los dos:
+ *
+ *  • `requisitos` e `infraestructura` son diccionarios cuyas claves salen de
+ *    los catálogos, así que el formulario vacío no puede conocerlas y
+ *    empezaban en `{}`.
+ *  • Un borrador guardado con una versión anterior no trae los campos que se
+ *    añadieron después. Al continuarlo, cualquiera de ellos reventaba la
+ *    pantalla — y no en el paso donde está el campo, sino al llegar a él.
+ *
+ * Se parte del formulario vacío y se le encima el guardado: así cada campo que
+ * falte recibe su valor por defecto, incluidos los que se añadan en el futuro.
+ * Un borrador es del teléfono de cada quien; no hay forma de migrarlos.
+ *
+ * Lo que ya tiene valor NO se toca: recuperar un borrador no puede borrar lo
+ * que la persona ya contestó.
+ */
+export function conValoresIniciales(
+	d: Partial<FormularioInspeccion>,
+	c: Catalogos
+): FormularioInspeccion {
+	const requisitos: Record<string, boolean | null> = {};
+	for (const r of c.requisitos) {
+		requisitos[r.codigo] = d.requisitos?.[r.codigo] ?? null;
+	}
+
+	const infraestructura: Record<string, string> = {};
+	for (const categoria of Object.keys(c.convenciones)) {
+		infraestructura[categoria] = d.infraestructura?.[categoria] ?? '';
+	}
+
+	// Una profesión que ya no está en el catálogo —un borrador de cuando el
+	// campo era texto libre— no se puede mostrar en la lista: se descarta en vez
+	// de dejar el desplegable en un estado que no corresponde a nada.
+	const profesion = c.profesiones.some((p) => p.codigo === d.profesional_profesion)
+		? (d.profesional_profesion as string)
+		: '';
+
+	return {
+		...formularioVacio(),
+		...d,
+		profesional_profesion: profesion,
+		requisitos,
+		infraestructura
+	};
+}
+
 export function formularioVacio(): FormularioInspeccion {
 	return {
 		fecha_evaluacion: '',
@@ -406,7 +460,9 @@ export function limpiarCondicionales(
 			evento: '',
 			evento_otro: '',
 			sistema_constructivo: '' as Sistema | '',
-			infraestructura: {},
+			// Vaciar el mapa entero volvería a dejar claves sin valor y a romper el
+			// `bind:` si la persona vuelve atrás y corrige un requisito.
+			infraestructura: Object.fromEntries(Object.keys(c.convenciones).map((k) => [k, ''])),
 			danos: {},
 			colapso_total: false,
 			requiere_evacuacion: null,

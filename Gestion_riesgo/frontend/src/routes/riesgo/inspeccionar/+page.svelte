@@ -22,6 +22,7 @@
 	import TablaEvaluacion from '$lib/inspeccion-form/componentes/TablaEvaluacion.svelte';
 	import ResultadoCombo from '$lib/inspeccion-form/componentes/ResultadoCombo.svelte';
 	import {
+		conValoresIniciales,
 		cumpleRequisitos,
 		elementosDe,
 		formularioVacio,
@@ -159,6 +160,10 @@
 			return;
 		}
 
+		// Los mapas de requisitos e infraestructura se llenan en cuanto hay
+		// catálogos: sus claves salen de ahí y el formulario vacío no las conoce.
+		datos = conValoresIniciales(datos, catalogos);
+
 		const previo = leerBorrador();
 
 		if (previo) {
@@ -181,7 +186,9 @@
 		const previo = leerBorrador();
 		if (!previo || !catalogos) return;
 
-		datos = previo.datos;
+		// Un borrador guardado con una versión anterior puede no traer todas las
+		// claves, y un catálogo que crezca traería claves nuevas a uno viejo.
+		datos = conValoresIniciales(previo.datos, catalogos);
 		const pos = pasosVigentes(datos, catalogos).findIndex((p) => p.id === previo.paso);
 		indice = Math.max(1, pos);
 		borrador.marcarRecuperado(previo.actualizado_en);
@@ -194,6 +201,7 @@
 		enviado = null;
 		datos = formularioVacio();
 		datos.fecha_evaluacion = hoy();
+		if (catalogos) datos = conValoresIniciales(datos, catalogos);
 		indice = 0;
 		hayBorradorPrevio = false;
 		errores = {};
