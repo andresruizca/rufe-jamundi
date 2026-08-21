@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * El «Ficha No.» del encabezado del formato.
  *
- * Formato: INSP-AAAA-XXXXXXXX (18 caracteres), calcado de
+ * Formato: INSP-AAAA-XXXXXX (16 caracteres), calcado de
  * `Rufe\Radicado` y por las mismas razones:
  *
  *  • Los ocho caracteres finales son aleatorios y no correlativos. Un
@@ -28,7 +28,15 @@ final class Numero
 {
     private const ALFABETO = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-    private const LONGITUD = 8;
+    /**
+     * Seis caracteres y no ocho, como en el radicado del censo.
+     *
+     * La casilla «Ficha No.» del formato impreso mide 26 puntos: con ocho, el
+     * número solo cabe en letra de 4,5 pt, que sobre papel no se lee. Con seis
+     * entra a un tamaño legible y siguen quedando mil millones de
+     * combinaciones, de sobra para un municipio.
+     */
+    private const LONGITUD = 6;
 
     private const INTENTOS = 8;
 

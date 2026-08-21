@@ -1724,11 +1724,13 @@ prueba('la aprobación del coordinador puede quedar para después', function ():
 
 grupo('Inspección › número de ficha');
 
-prueba('el formato es INSP-AAAA-XXXXXXXX y se distingue del radicado', function (): void {
+prueba('el formato es INSP-AAAA-XXXXXX y cabe en la casilla del papel', function (): void {
+    // Seis caracteres: la casilla «Ficha No.» del formato mide 26 puntos y con
+    // ocho el número solo cabía en letra de 4,5 pt, ilegible impresa.
     $n = Numero::componer(2026);
 
     afirmar(Numero::esValido($n), $n);
-    afirmarIgual(18, strlen($n));
+    afirmarIgual(16, strlen($n));
     afirmar(str_starts_with($n, 'INSP-2026-'), $n);
     afirmar(! Radicado::esValido($n), 'no debe pasar por un radicado del censo');
 });

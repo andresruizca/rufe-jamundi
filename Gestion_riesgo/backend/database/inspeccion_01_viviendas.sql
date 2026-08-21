@@ -11,7 +11,7 @@
 
 CREATE TABLE IF NOT EXISTS inspeccion_viviendas (
   id                        INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-  numero                    CHAR(18)      NOT NULL,
+  numero                    CHAR(16)      NOT NULL,
   -- Lo genera el navegador ANTES de mandar. Es lo que hace seguro reintentar
   -- sin señal: si la inspección ya entró, el servidor devuelve el mismo número
   -- en vez de crear una segunda.

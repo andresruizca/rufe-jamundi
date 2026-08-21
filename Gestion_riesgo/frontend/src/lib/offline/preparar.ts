@@ -11,9 +11,13 @@
 import { pedirAlmacenamientoPersistente } from '$lib/rufe-form/cola';
 import { API_BASE, leerToken } from '$lib/api/client';
 import { RUTA_PLANTILLA } from '$lib/ficha-pdf/coordenadas';
+import { RUTA_PLANTILLA as RUTA_INSPECCION } from '$lib/inspeccion-pdf/coordenadas';
 
 /** Los catálogos del formulario. Sin ellos no hay formulario que dibujar. */
 const CATALOGOS = `${API_BASE}/rufe/catalogos`;
+
+/** Los del formato de inspección: elementos, Anexo 1 y Anexo 2. */
+const CATALOGOS_INSPECCION = `${API_BASE}/inspeccion/catalogos`;
 
 export type Parte = {
 	/** ¿Se puede abrir y usar el formulario sin señal? Es lo único imprescindible. */
@@ -41,14 +45,25 @@ export async function prepararParaCampo(): Promise<Parte> {
 	const almacenamientoPersistente = await pedirAlmacenamientoPersistente();
 
 	// En paralelo: son descargas independientes y el censador está esperando.
-	const [catalogos, formato] = await Promise.all([guardar(CATALOGOS), guardar(RUTA_PLANTILLA)]);
+	const [catalogosRufe, catalogosInspeccion, formatoRufe, formatoInspeccion] = await Promise.all([
+		guardar(CATALOGOS),
+		guardar(CATALOGOS_INSPECCION),
+		guardar(RUTA_PLANTILLA),
+		guardar(RUTA_INSPECCION)
+	]);
+
+	// Los dos formularios de campo tienen que estar completos: quien sale a
+	// censar también inspecciona, y descubrir en la vereda que falta uno es
+	// exactamente lo que esta pantalla existe para evitar.
+	const catalogos = catalogosRufe && catalogosInspeccion;
+	const formato = formatoRufe && formatoInspeccion;
 
 	const aplicacion = await aplicacionGuardada();
 
 	const faltantes: string[] = [];
 	if (!aplicacion) faltantes.push('la aplicación');
-	if (!catalogos) faltantes.push('el formulario');
-	if (!formato) faltantes.push('el formato oficial para descargar fichas');
+	if (!catalogos) faltantes.push('los formularios');
+	if (!formato) faltantes.push('los formatos oficiales para descargar fichas');
 
 	return {
 		// El formato no entra en la cuenta: sirve para descargar PDF, que es

@@ -24,6 +24,7 @@
 
 import { base, build, files, version } from '$service-worker';
 import { RUTA_PLANTILLA } from '$lib/ficha-pdf/coordenadas';
+import { RUTA_PLANTILLA as RUTA_INSPECCION } from '$lib/inspeccion-pdf/coordenadas';
 import { seGuardaDeLaApi } from '$lib/offline/cacheables';
 import { baseApi, ErrorDeRed, subirFotosDe } from '$lib/rufe-form/subida';
 import {
@@ -78,7 +79,9 @@ const FUERA = [
 	// instalación le costaría esos datos a cada censador que solo va a levantar
 	// fichas. Se guarda igual la primera vez que alguien lo usa, así que a partir
 	// de ahí la descarga funciona sin conexión.
-	RUTA_PLANTILLA
+	RUTA_PLANTILLA,
+	// Y por lo mismo el formato de inspección, que pesa otros 220 KB.
+	RUTA_INSPECCION
 ];
 
 const ARMAZON = [`${base}/`, ...build, ...files].filter(

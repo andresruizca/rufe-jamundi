@@ -9,6 +9,7 @@
 	import { ClipboardCheck, LoaderCircle, Search, TriangleAlert } from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { inspeccionApi } from '$lib/api/servicios';
+	import BotonInspeccionPdf from '$lib/components/BotonInspeccionPdf.svelte';
 
 	type Fila = {
 		id: number;
@@ -156,6 +157,7 @@
 						<th scope="col">Vivienda</th>
 						<th scope="col">Fecha</th>
 						<th scope="col">Resultado</th>
+						<th scope="col">Formato oficial</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -183,6 +185,9 @@
 								>
 									{comboLegible(f)}
 								</span>
+							</td>
+							<td>
+								<BotonInspeccionPdf id={f.id} numero={f.numero} />
 							</td>
 						</tr>
 					{/each}
