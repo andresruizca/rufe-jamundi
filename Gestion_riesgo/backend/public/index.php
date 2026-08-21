@@ -120,6 +120,8 @@ $router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
 $router->post('/preinscripcion/cargas', [$preinscripcion, 'abrirCarga']);
 $router->post('/preinscripcion/cargas/{carga}/archivos', [$preinscripcion, 'subirArchivo']);
 $router->delete('/preinscripcion/cargas/{carga}/archivos/{id}', [$preinscripcion, 'eliminarArchivo']);
+$router->post('/preinscripcion/cargas/{carga}/videos', [$preinscripcion, 'iniciarVideo']);
+$router->post('/preinscripcion/cargas/{carga}/videos/{id}/trozos', [$preinscripcion, 'subirTrozo']);
 $router->post('/preinscripcion', [$preinscripcion, 'crear']);
 
 // ── Autenticadas (cualquier rol) ─────────────────────────────────────────
@@ -201,6 +203,7 @@ $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], A
 $router->get('/preinscripcion/fichas', [$preinscripcion, 'listar'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}', [$preinscripcion, 'ver'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}/fotos/{foto}', [$preinscripcion, 'descargarFoto'], Auth::LECTURA_RUFE);
+$router->get('/preinscripcion/fichas/{id}/videos/{video}', [$preinscripcion, 'descargarVideo'], Auth::LECTURA_RUFE);
 $router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEstado'], Auth::ESCRITURA);
 
 // Catálogo de categorías de video, que gestiona el administrador. Qué hay que

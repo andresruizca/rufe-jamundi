@@ -352,6 +352,10 @@ final class InspeccionCapturaController
                     ['e' => 'CONVERTIDA', 'ins' => $id, 'i' => $preinscripcionId]
                 );
 
+                // El video ya cumplió su función: sirvió para decidir la visita.
+                // Conservarlo llenaría el disco de un hosting compartido.
+                \App\Preinscripcion\Videos::purgarDeSolicitud($preinscripcionId);
+
                 Db::exec(
                     'INSERT INTO preinscripcion_historial
                         (preinscripcion_id, estado, nota, usuario_id, usuario_email)

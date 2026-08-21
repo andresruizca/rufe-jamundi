@@ -11,7 +11,9 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { ArrowLeft, ArrowRight, Check, LoaderCircle, MapPin, TriangleAlert } from '@lucide/svelte';
+	import {
+		ArrowLeft, ArrowRight, Check, LoaderCircle, MapPin, TriangleAlert, Video
+	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi, type PreinscripcionDetalle } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
@@ -49,6 +51,33 @@
 
 	const faltaMotivo = $derived(nuevoEstado === 'DESCARTADA' && nota.trim() === '');
 	const yaConvertida = $derived(p?.estado === 'CONVERTIDA');
+
+	/**
+	 * Los videos se traen de uno en uno, y solo cuando alguien los pide.
+	 *
+	 * Pesan megabytes: descargarlos todos al abrir la ficha gastaría la conexión
+	 * de la oficina en videos que quizá nadie va a mirar.
+	 */
+	let urlsVideo = $state<Record<number, string>>({});
+	let cargandoVideo = $state<Record<number, boolean>>({});
+
+	async function verVideo(idVideo: number) {
+		if (urlsVideo[idVideo] || cargandoVideo[idVideo]) return;
+
+		cargandoVideo = { ...cargandoVideo, [idVideo]: true };
+
+		try {
+			urlsVideo = { ...urlsVideo, [idVideo]: await preinscripcionApi.verVideo(id, idVideo) };
+		} catch {
+			error = 'No se pudo abrir el video.';
+		} finally {
+			cargandoVideo = { ...cargandoVideo, [idVideo]: false };
+		}
+	}
+
+	function pesoLegible(bytes: number): string {
+		return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+	}
 
 	const lugar = $derived(
 		p ? [p.direccion, p.vereda, p.corregimiento].filter(Boolean).join(' · ') : '—'
@@ -163,6 +192,52 @@
 		<div class="tarjeta">
 			<h2 class="tarjeta__titulo">Fotos que envió</h2>
 			<VisorEvidencias reporteId={Number(p.id)} evidencias={detalle.fotos} origen="preinscripcion" />
+		</div>
+	{/if}
+
+	{#if detalle.videos.length > 0}
+		<div class="tarjeta">
+			<h2 class="tarjeta__titulo">Videos que grabó</h2>
+
+			<ul class="videos">
+				{#each detalle.videos as v (v.id)}
+					<li class="video">
+						<p class="video__nombre">
+							<Video size={15} aria-hidden="true" />
+							{v.categoria_nombre}
+							<span class="video__meta">
+								{#if v.segundos}{v.segundos}s · {/if}{pesoLegible(v.tamano_bytes)}
+							</span>
+						</p>
+
+						{#if !v.disponible}
+							<!-- El archivo se borra al decidir la solicitud; la fila queda
+							     como constancia de que el video existió. -->
+							<p class="video__ido">
+								El archivo se eliminó al cerrarse la solicitud. Queda la constancia de que se
+								grabó.
+							</p>
+						{:else if urlsVideo[v.id]}
+							<!-- svelte-ignore a11y_media_has_caption -->
+							<video class="video__reproductor" src={urlsVideo[v.id]} controls playsinline></video>
+						{:else}
+							<button
+								type="button"
+								class="boton boton--suave"
+								onclick={() => verVideo(v.id)}
+								disabled={cargandoVideo[v.id]}
+							>
+								{#if cargandoVideo[v.id]}
+									<LoaderCircle size={15} class="girando" aria-hidden="true" />
+									Cargando…
+								{:else}
+									Ver el video
+								{/if}
+							</button>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		</div>
 	{/if}
 
@@ -337,6 +412,43 @@
 
 	.relato {
 		white-space: pre-wrap;
+	}
+
+	.videos {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.video__nombre {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+		margin: 0 0 0.4rem;
+		font-size: 0.9rem;
+		font-weight: 600;
+	}
+
+	.video__meta {
+		font-size: 0.78rem;
+		font-weight: 400;
+		color: var(--color-muted);
+	}
+
+	.video__ido {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--color-muted);
+	}
+
+	.video__reproductor {
+		width: 100%;
+		max-height: 60vh;
+		border-radius: 0.5rem;
+		background: #000;
 	}
 
 	.boton--grande {

@@ -473,7 +473,7 @@ final class Archivos
         }
     }
 
-    private static function asegurarDirectorio(string $ruta): void
+    public static function asegurarDirectorio(string $ruta): void
     {
         if (is_dir($ruta)) {
             return;

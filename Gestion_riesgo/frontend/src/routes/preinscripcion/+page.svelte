@@ -27,6 +27,7 @@
 	import logo from '$lib/assets/logo-jamundi.svg';
 	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
 	import { GestorEvidencias, RUTAS_PUBLICAS_CARGA } from '$lib/rufe-form/evidencias.svelte';
+	import GrabadorVideo from '$lib/preinscripcion/GrabadorVideo.svelte';
 
 	type Catalogos = Awaited<ReturnType<typeof preinscripcionApi.catalogos>>;
 
@@ -44,6 +45,15 @@
 	// nunca sale del aparato: lo que sube es siempre la versión optimizada.
 	let evidencias = $state<GestorEvidencias | null>(null);
 	let detenerEvidencias: (() => void) | null = null;
+
+	/**
+	 * Qué categorías ya tienen su video.
+	 *
+	 * No bloquea el envío ni siquiera para las obligatorias: quien tiene un
+	 * celular viejo o una conexión mala no puede quedarse sin turno por eso. Lo
+	 * que falta se marca en la bandeja, para que quien revisa lo sepa.
+	 */
+	let videosListos = $state<number[]>([]);
 
 	let ubicando = $state(false);
 	let avisoUbicacion = $state<string | null>(null);
@@ -86,6 +96,18 @@
 					RUTAS_PUBLICAS_CARGA
 				);
 				detenerEvidencias = evidencias.iniciar();
+
+				// Los videos van en la MISMA carga que las fotos, y la carga se abre
+				// sola al subir la primera foto. Si alguien solo graba videos, esa
+				// carga no existiría y se perderían: se abre aquí.
+				if ((catalogos.categorias_video ?? []).length > 0) {
+					try {
+						evidencias.carga = (await preinscripcionApi.abrirCarga()).carga;
+					} catch {
+						// Sin señal no hay carga y no habrá videos. La solicitud sigue
+						// pudiendo enviarse, que es lo que importa.
+					}
+				}
 			} catch {
 				errorCarga = 'No se pudo cargar el formulario. Revise su conexión e intente de nuevo.';
 			} finally {
@@ -357,6 +379,25 @@
 					{/if}
 				</label>
 			</section>
+
+			{#if (catalogos?.categorias_video ?? []).length > 0}
+				<section class="tarjeta">
+					<h2 class="tarjeta__titulo">Videos de la vivienda</h2>
+					<p class="tarjeta__nota">
+						Grabe cada uno siguiendo la indicación. Se cortan solos al llegar al máximo y puede
+						repetirlos antes de enviarlos. <strong>Si no puede grabar alguno, continúe igual</strong>:
+						no perderá su turno por eso.
+					</p>
+
+					{#each catalogos?.categorias_video ?? [] as c (c.id)}
+						<GrabadorVideo
+							categoria={c}
+							carga={evidencias?.carga ?? null}
+							alSubir={(id) => (videosListos = [...videosListos, id])}
+						/>
+					{/each}
+				</section>
+			{/if}
 
 			{#if evidencias}
 				<section class="tarjeta">

@@ -14,6 +14,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Preinscripcion\Radicado;
 use App\Preinscripcion\Validador;
+use App\Preinscripcion\Videos;
 use App\Rufe\Archivos;
 use App\Rufe\Catalogos as Rufe;
 use Throwable;
@@ -50,6 +51,11 @@ final class PreinscripcionController
     /** Cuatro fotos por solicitud, con margen para reintentos por mala señal. */
     private const MAX_ARCHIVOS_HORA = 30;
 
+    private const MAX_VIDEOS_HORA = 20;
+
+    /** Ocho videos de ocho trozos, con margen de reintento por mala señal. */
+    private const MAX_TROZOS_HORA = 300;
+
     // ── Público ──────────────────────────────────────────────────────────────
 
     /**
@@ -65,6 +71,24 @@ final class PreinscripcionController
         Response::ok([
             'corregimientos' => Rufe::CORREGIMIENTOS,
             'aviso_version'  => Rufe::AVISO_VERSION,
+            // Las categorías ACTIVAS, en su orden. El formulario las cachea en
+            // el teléfono para que el checklist funcione también sin señal.
+            'categorias_video' => array_map(
+                static fn (array $c): array => [
+                    'id' => (int) $c['id'],
+                    'nombre' => $c['nombre'],
+                    'instruccion' => $c['instruccion'],
+                    'obligatoria' => (bool) $c['obligatoria'],
+                    'segundos_min' => (int) $c['segundos_min'],
+                    'segundos_max' => (int) $c['segundos_max'],
+                ],
+                Db::all('SELECT * FROM categorias_video WHERE activa = 1 ORDER BY orden ASC, id ASC')
+            ),
+            'video' => [
+                'bytes_trozo' => Videos::BYTES_TROZO,
+                'max_bytes'   => Videos::MAX_BYTES_VIDEO,
+                'max_videos'  => Videos::MAX_VIDEOS_POR_CARGA,
+            ],
             'limites'        => [
                 'fotos_dano'       => Rufe::MAX_FOTOS_PREINSCRIPCION,
                 'fotos_cedula'     => 1,
@@ -147,6 +171,57 @@ final class PreinscripcionController
         Archivos::eliminarDeCarga(Archivos::hashDeCarga($req->param('carga')), $id);
 
         Response::sinContenido();
+    }
+
+    /** Reserva un video y devuelve cuántos trozos hay que mandar. */
+    public function iniciarVideo(Request $req): void
+    {
+        Limite::consumir(
+            'preinscripcion.video',
+            $req->ip(),
+            self::MAX_VIDEOS_HORA,
+            3600,
+            'Demasiados videos desde esta conexión. Espere unos minutos.'
+        );
+
+        Videos::purgarCaducados();
+
+        $categoria = (int) $req->texto('categoria_id');
+
+        Response::json([
+            'ok' => true,
+            'data' => Videos::iniciar(
+                Archivos::hashDeCarga($req->param('carga')),
+                $categoria > 0 ? $categoria : null,
+                $req->texto('mime'),
+                (int) $req->texto('bytes'),
+                (int) $req->texto('segundos')
+            ),
+        ], 201);
+    }
+
+    /** Un trozo del video. Llegan en orden y se pegan al final del archivo. */
+    public function subirTrozo(Request $req): void
+    {
+        Limite::consumir(
+            'preinscripcion.trozo',
+            $req->ip(),
+            self::MAX_TROZOS_HORA,
+            3600,
+            'Demasiadas peticiones desde esta conexión. Espere unos minutos.'
+        );
+
+        $trozo = $req->archivo('trozo');
+        if ($trozo === null) {
+            throw HttpError::validacion(['video' => 'No se recibió el trozo del video.']);
+        }
+
+        Response::ok(Videos::recibirTrozo(
+            Archivos::hashDeCarga($req->param('carga')),
+            (int) $req->param('id'),
+            (int) $req->campo('indice', '-1'),
+            $trozo
+        ));
     }
 
     public function crear(Request $req): void
@@ -291,7 +366,9 @@ final class PreinscripcionController
             $id = Db::lastId();
 
             if ($carga !== null) {
-                Archivos::adoptarPreinscripcion(Archivos::hashDeCarga($carga), $id);
+                $hash = Archivos::hashDeCarga($carga);
+                Archivos::adoptarPreinscripcion($hash, $id);
+                Videos::adoptar($hash, $id);
             }
 
             $pdo->commit();
@@ -360,6 +437,7 @@ final class PreinscripcionController
                    FROM rufe_evidencias WHERE preinscripcion_id = :i ORDER BY id',
                 ['i' => $id]
             ),
+            'videos' => Videos::deSolicitud($id),
             'historial' => Db::all(
                 'SELECT estado, nota, usuario_email, creado_en FROM preinscripcion_historial
                   WHERE preinscripcion_id = :i ORDER BY id',
@@ -396,6 +474,40 @@ final class PreinscripcionController
             'preinscripciones',
             (string) $ficha['radicado'],
             'foto '.$fila['id']
+        );
+
+        Archivos::emitir($fila);
+    }
+
+    /** Un video de la solicitud, para verlo desde la bandeja. */
+    public function descargarVideo(Request $req): void
+    {
+        $id = (int) $req->param('id');
+        $ficha = Db::first('SELECT id, radicado FROM preinscripciones WHERE id = :i', ['i' => $id]);
+
+        if ($ficha === null) {
+            throw HttpError::noEncontrado('No existe esa pre-inscripción.');
+        }
+
+        // Que el video sea DE ESTA solicitud, no solo que exista: sin esa
+        // condición el identificador de uno ajeno bastaría para verlo.
+        $fila = Db::first(
+            'SELECT * FROM preinscripcion_videos
+              WHERE id = :v AND preinscripcion_id = :i AND ruta_relativa <> ""',
+            ['v' => (int) $req->param('video'), 'i' => $ficha['id']]
+        );
+
+        if ($fila === null) {
+            throw HttpError::noEncontrado('Ese video ya no está disponible.');
+        }
+
+        Auditoria::registrar(
+            $req,
+            'preinscripcion.video_visto',
+            Auth::exigirUsuario($req),
+            'preinscripciones',
+            (string) $ficha['radicado'],
+            'video '.$fila['id']
         );
 
         Archivos::emitir($fila);
@@ -439,6 +551,13 @@ final class PreinscripcionController
              VALUES (:i, :e, :n, :u, :m)',
             ['i' => $id, 'e' => $estado, 'n' => $nota ?: null, 'u' => $actor['id'], 'm' => $actor['email']]
         );
+
+        // Los videos ocupan cien veces más que una foto y la cuenta es compartida
+        // con los demás sitios de la Alcaldía. Se borran al decidir la
+        // solicitud; la fila queda como constancia de que existieron.
+        if ($estado === 'DESCARTADA') {
+            Videos::purgarDeSolicitud($id);
+        }
 
         Auditoria::registrar(
             $req, 'preinscripcion.estado', $actor, 'preinscripciones', (string) $ficha['radicado'], $estado

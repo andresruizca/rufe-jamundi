@@ -2285,6 +2285,10 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         'POST /preinscripcion',
         'POST /preinscripcion/cargas',
         'POST /preinscripcion/cargas/{carga}/archivos',
+        // El video se sube por trozos: el tope por archivo del hosting es 1 MiB
+        // y uno de 30 segundos pesa unos 3 MB, así que no cabe de una vez.
+        'POST /preinscripcion/cargas/{carga}/videos',
+        'POST /preinscripcion/cargas/{carga}/videos/{id}/trozos',
     ], rutasPublicas($raiz));
 });
 
@@ -2324,6 +2328,28 @@ prueba('ninguna ruta pública devuelve pre-inscripciones', function () use ($rai
             "«{$ruta}» expondría solicitudes ciudadanas sin sesión"
         );
     }
+});
+
+prueba('los topes del video están acotados', function (): void {
+    // Es una ruta pública que escribe archivos en disco. Sin topes es
+    // alojamiento gratuito para cualquiera, y el disco lo comparten todos los
+    // sitios de la Alcaldía.
+    afirmarIgual(1048576, App\Preinscripcion\Videos::BYTES_TROZO, 'el trozo debe caber en una petición');
+    afirmar(App\Preinscripcion\Videos::MAX_BYTES_VIDEO <= 8 * 1048576, 'el tope por video se pasó');
+    afirmar(App\Preinscripcion\Videos::MAX_VIDEOS_POR_CARGA <= 10, 'demasiados videos por solicitud');
+
+    // El caso que importa: lo peor que puede subir una sola solicitud.
+    $peor = App\Preinscripcion\Videos::MAX_BYTES_VIDEO * App\Preinscripcion\Videos::MAX_VIDEOS_POR_CARGA;
+    afirmar($peor <= 80 * 1048576, 'una sola solicitud podría subir '.round($peor / 1048576).' MiB');
+});
+
+prueba('el trozo cabe en el tope por archivo del hosting', function (): void {
+    // Si el trozo fuera mayor que lo que admite una petición, la subida
+    // fallaría siempre y solo se vería con un video real.
+    afirmar(
+        App\Preinscripcion\Videos::BYTES_TROZO <= App\Rufe\Catalogos::MAX_BYTES_ARCHIVO,
+        'el trozo no cabe en una petición'
+    );
 });
 
 grupo('Pre-inscripción › validación');

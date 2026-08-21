@@ -244,6 +244,15 @@ export const preinscripcionApi = {
 				objetivo_bytes_foto: number;
 				extensiones: string[];
 			};
+			categorias_video: {
+				id: number;
+				nombre: string;
+				instruccion: string | null;
+				obligatoria: boolean;
+				segundos_min: number;
+				segundos_max: number;
+			}[];
+			video: { bytes_trozo: number; max_bytes: number; max_videos: number };
 		}>('/preinscripcion/catalogos', false),
 
 	/** Abre una carga para las fotos, sin sesión. */
@@ -308,12 +317,39 @@ export const preinscripcionApi = {
 	},
 
 	cambiarEstado: (id: number, estado: string, nota: string) =>
-		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota })
+		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota }),
+
+	/**
+	 * Un video de la solicitud, para verlo en la bandeja.
+	 *
+	 * Igual que las fotos: vive fuera del docroot y solo sale con el token en la
+	 * cabecera, algo que una etiqueta `<video src>` no sabe enviar.
+	 */
+	async verVideo(preinscripcionId: number, videoId: number): Promise<string> {
+		const respuesta = await fetch(
+			`${API_BASE}/preinscripcion/fichas/${preinscripcionId}/videos/${videoId}`,
+			{ headers: { Authorization: `Bearer ${leerToken() ?? ''}` } }
+		);
+
+		if (!respuesta.ok) throw new Error('No se pudo abrir el video.');
+
+		return URL.createObjectURL(await respuesta.blob());
+	}
 };
 
 export type PreinscripcionDetalle = {
 	preinscripcion: Record<string, string | number | null>;
 	fotos: { id: number; nombre_original: string; extension: string; tamano_bytes: number; mime: string }[];
+	videos: {
+		id: number;
+		categoria_nombre: string;
+		segundos: number | null;
+		tamano_bytes: number;
+		extension: string;
+		mime: string;
+		/** Falso cuando el archivo ya se purgó al decidir la solicitud. */
+		disponible: boolean;
+	}[];
 	historial: { estado: string; nota: string | null; usuario_email: string | null; creado_en: string }[];
 };
 
