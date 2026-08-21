@@ -18,13 +18,18 @@ import { API_BASE } from '$lib/api/client';
  * Los formatos que se intentan, en orden de preferencia.
  *
  * VP9 comprime bastante mejor que VP8 —y en una vereda cada megabyte son
- * segundos de subida—, así que va primero. El MP4 del final es para iPhone, que
- * no ofrece ninguno de los otros.
+ * segundos de subida—, así que va primero. Android suele darlo.
+ *
+ * El MP4 del final NO es un adorno: Safari, en iPhone y en Mac, **solo** sabe
+ * grabar MP4 con H.264 y AAC, y no soporta WebM en absoluto. Es lo que dice
+ * WebKit al anunciar la API (webkit.org/blog/11353/mediarecorder-api/). Sin esa
+ * entrada, ningún iPhone podría grabar.
  */
 const FORMATOS = [
 	'video/webm;codecs=vp9',
 	'video/webm;codecs=vp8',
 	'video/webm',
+	'video/mp4;codecs=avc1',
 	'video/mp4'
 ];
 
@@ -48,6 +53,14 @@ export const RESTRICCIONES: MediaStreamConstraints = {
 /** El primer formato que este navegador sepa grabar, o null si no sabe ninguno. */
 export function formatoSoportado(): string | null {
 	if (typeof MediaRecorder === 'undefined') return null;
+
+	// Hay implementaciones de Safari con MediaRecorder pero SIN `isTypeSupported`.
+	// El propio WebKit documenta la salida: dar por bueno MP4, que es lo único
+	// que graba. Sin este caso, esos teléfonos dirían «no se puede grabar»
+	// teniendo la cámara perfectamente disponible.
+	if (typeof MediaRecorder.isTypeSupported !== 'function') {
+		return 'video/mp4';
+	}
 
 	return FORMATOS.find((f) => MediaRecorder.isTypeSupported(f)) ?? null;
 }
