@@ -161,7 +161,7 @@ final class Archivos
         Db::exec(
             'UPDATE rufe_evidencias
                 SET descripcion = :de
-              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
+              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL AND preinscripcion_id IS NULL',
             ['de' => $pie, 'i' => $id, 'c' => $cargaHash]
         );
     }
@@ -172,7 +172,7 @@ final class Archivos
         $filas = Db::all(
             'SELECT id, tipo, descripcion, nombre_original, tamano_bytes, mime
                FROM rufe_evidencias
-              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL
+              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL AND preinscripcion_id IS NULL
               ORDER BY id',
             ['c' => $cargaHash]
         );
@@ -193,7 +193,7 @@ final class Archivos
     {
         $fila = Db::first(
             'SELECT id, ruta_relativa FROM rufe_evidencias
-              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
+              WHERE id = :i AND carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL AND preinscripcion_id IS NULL',
             ['i' => $id, 'c' => $cargaHash]
         );
 
@@ -237,6 +237,11 @@ final class Archivos
         return self::adoptarPara($cargaHash, 'inspeccion_id', $inspeccionId, 'inspeccion');
     }
 
+    public static function adoptarPreinscripcion(string $cargaHash, int $preinscripcionId): int
+    {
+        return self::adoptarPara($cargaHash, 'preinscripcion_id', $preinscripcionId, 'preinscripcion');
+    }
+
     /**
      * @param  string  $columna  la columna dueña; NO viene de la petición
      */
@@ -244,13 +249,13 @@ final class Archivos
     {
         // La columna es una constante del código, nunca entrada del usuario: si
         // algún día llegara de fuera, esto sería una inyección de SQL.
-        if (! in_array($columna, ['reporte_id', 'inspeccion_id'], true)) {
+        if (! in_array($columna, ['reporte_id', 'inspeccion_id', 'preinscripcion_id'], true)) {
             throw new RuntimeException('Columna de adopción no permitida.');
         }
 
         $filas = Db::all(
             'SELECT id, nombre_guardado, ruta_relativa FROM rufe_evidencias
-              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL',
+              WHERE carga_hash = :c AND reporte_id IS NULL AND inspeccion_id IS NULL AND preinscripcion_id IS NULL',
             ['c' => $cargaHash]
         );
 
@@ -291,7 +296,7 @@ final class Archivos
     {
         $filas = Db::all(
             'SELECT id, ruta_relativa, carga_hash FROM rufe_evidencias
-              WHERE reporte_id IS NULL AND inspeccion_id IS NULL
+              WHERE reporte_id IS NULL AND inspeccion_id IS NULL AND preinscripcion_id IS NULL
                 AND expira_en IS NOT NULL AND expira_en < NOW()
               LIMIT 200'
         );

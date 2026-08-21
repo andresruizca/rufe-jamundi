@@ -221,6 +221,65 @@ export const inspeccionApi = {
 		api.put<{ estado: string }>(`/inspeccion/fichas/${id}/estado`, { estado, nota })
 };
 
+/**
+ * Pre-inscripción ciudadana.
+ *
+ * Las dos primeras llamadas van SIN token: las hace alguien que no tiene cuenta.
+ * `api.get`/`api.post` aceptan `autenticada = false` justo para esto.
+ *
+ * No hay ninguna función para consultar una solicitud: no existe esa ruta en el
+ * servidor y no debe existir. Un endpoint público que devolviera solicitudes por
+ * radicado sería un buscador de damnificados.
+ */
+export const preinscripcionApi = {
+	catalogos: () =>
+		api.get<{
+			corregimientos: string[];
+			aviso_version: string;
+			limites: {
+				fotos: number;
+				bytes_archivo: number;
+				bytes_carga: number;
+				objetivo_bytes_foto: number;
+				extensiones: string[];
+			};
+		}>('/preinscripcion/catalogos', false),
+
+	enviar: (cuerpo: Record<string, unknown>) =>
+		api.post<{ radicado: string; recibido_en: string; reintento?: boolean; duplicada?: boolean }>(
+			'/preinscripcion',
+			cuerpo,
+			false
+		),
+
+	// ── Bandeja interna (con sesión) ──────────────────────────────────────
+	listar: (filtros: Record<string, string | number> = {}) => {
+		const p = new URLSearchParams();
+		for (const [clave, valor] of Object.entries(filtros)) {
+			if (valor !== undefined && valor !== '') p.set(clave, String(valor));
+		}
+		const consulta = p.toString();
+
+		return api.get<{
+			preinscripciones: Record<string, unknown>[];
+			total: number;
+			pagina: number;
+			por_pagina: number;
+		}>(`/preinscripcion/fichas${consulta ? `?${consulta}` : ''}`);
+	},
+
+	ver: (id: number) => api.get<PreinscripcionDetalle>(`/preinscripcion/fichas/${id}`),
+
+	cambiarEstado: (id: number, estado: string, nota: string) =>
+		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota })
+};
+
+export type PreinscripcionDetalle = {
+	preinscripcion: Record<string, string | number | null>;
+	fotos: { id: number; nombre_original: string; extension: string; tamano_bytes: number; mime: string }[];
+	historial: { estado: string; nota: string | null; usuario_email: string | null; creado_en: string }[];
+};
+
 export const mapaApi = {
 	fichas: () => api.get<{ fichas: FichaMapa[] }>('/mapa/fichas'),
 

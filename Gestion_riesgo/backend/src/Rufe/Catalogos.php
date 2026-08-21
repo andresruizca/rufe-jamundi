@@ -74,7 +74,21 @@ final class Catalogos
             'etiqueta' => 'Registro fotográfico de la inspección',
             'maximo' => InspeccionCatalogos::MAX_FOTOS,
         ],
+        'PREINSCRIPCION' => [
+            'etiqueta' => 'Foto del daño (pre-inscripción ciudadana)',
+            'maximo' => self::MAX_FOTOS_PREINSCRIPCION,
+        ],
     ];
+
+    /**
+     * Cuántas fotos puede adjuntar un ciudadano a su solicitud.
+     *
+     * Cuatro, como las del daño en el censo. Es una solicitud de turno, no un
+     * expediente: la evidencia que sustenta la decisión la levanta el
+     * profesional en la visita. Y cada foto de más en una ruta pública es
+     * almacenamiento que cualquiera puede consumir.
+     */
+    public const MAX_FOTOS_PREINSCRIPCION = 4;
 
     /**
      * Tope por evidencia. Baja de 8 MiB a 1 MiB porque el navegador ahora

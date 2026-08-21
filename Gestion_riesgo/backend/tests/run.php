@@ -731,7 +731,7 @@ prueba('los cupos de evidencia son uno de documento y cuatro de daño', function
     afirmarIgual(1, Catalogos::MAX_EVIDENCIAS_DOCUMENTO);
     afirmarIgual(4, Catalogos::MAX_EVIDENCIAS_DANO);
     afirmarIgual(5, Catalogos::MAX_EVIDENCIAS);
-    afirmarIgual(['DOCUMENTO', 'DANO', 'INSPECCION'], array_keys(Catalogos::TIPOS_EVIDENCIA));
+    afirmarIgual(['DOCUMENTO', 'DANO', 'INSPECCION', 'PREINSCRIPCION'], array_keys(Catalogos::TIPOS_EVIDENCIA));
 
     // Cinco fotos de 900 KB caben de sobra en el cupo total de la carga.
     afirmar(
@@ -2079,7 +2079,7 @@ function rutasConSusRoles(string $raiz): array
     foreach ($encontradas as $r) {
         // El último argumento, cuando lo hay, es la lista de roles. Sin él la
         // ruta es pública —solo `/health` y `/auth/login`— y se omite.
-        if (preg_match('/,\s*([A-Za-z:$\\\\]+)\s*$/', trim($r[3]), $m) !== 1) {
+        if (preg_match('/,\s*([A-Za-z_:$\\\\]+)\s*$/', trim($r[3]), $m) !== 1) {
             continue;
         }
 
@@ -2201,6 +2201,167 @@ prueba('cada rol tiene etiqueta y capacidades declaradas', function (): void {
         afirmar(isset(Auth::DESCRIPCION_ROLES[$rol]), "«{$rol}» no tiene etiqueta ni descripción");
         afirmar(Auth::capacidades($rol) !== [], "«{$rol}» no declara ninguna capacidad");
     }
+});
+
+grupo('Rutas › qué queda abierto a internet');
+
+/**
+ * Las rutas registradas SIN lista de roles, es decir, públicas.
+ *
+ * @return list<string>
+ */
+function rutasPublicas(string $raiz): array
+{
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+
+    preg_match_all(
+        "/\\\$router->(get|post|put|delete)\\(\\s*'([^']+)'(.*?)\\);/s",
+        $php,
+        $encontradas,
+        PREG_SET_ORDER
+    );
+
+    $salida = [];
+
+    foreach ($encontradas as $r) {
+        // Con lista de roles al final, no es pública.
+        if (preg_match('/,\s*([A-Za-z_:$\\\\]+)\s*$/', trim($r[3])) === 1) {
+            continue;
+        }
+
+        $salida[] = strtoupper($r[1]).' '.$r[2];
+    }
+
+    sort($salida);
+
+    return $salida;
+}
+
+prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
+    // La lista va escrita a mano porque cada entrada amplía lo que un
+    // desconocido puede tocar. Este sistema declaró desde el principio que todo
+    // exige sesión; la pre-inscripción es la excepción deliberada, y tiene que
+    // seguir siéndolo. Si aparece una ruta más, esto falla y obliga a pensarlo.
+    afirmarIgual([
+        'DELETE /preinscripcion/cargas/{carga}/archivos/{id}',
+        'GET /health',
+        'GET /preinscripcion/catalogos',
+        'POST /auth/login',
+        'POST /preinscripcion',
+        'POST /preinscripcion/cargas',
+        'POST /preinscripcion/cargas/{carga}/archivos',
+    ], rutasPublicas($raiz));
+});
+
+prueba('el cupo de fotos de una solicitud ciudadana es acotado', function (): void {
+    // Es una ruta de subida SIN sesión: cada foto de más es almacenamiento que
+    // cualquiera en internet puede consumir.
+    afirmarIgual(4, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PREINSCRIPCION']['maximo']);
+});
+
+prueba('ninguna ruta pública devuelve pre-inscripciones', function () use ($raiz): void {
+    // Consultar por radicado sin sesión sería un buscador de damnificados para
+    // cualquiera que probara combinaciones.
+    foreach (rutasPublicas($raiz) as $ruta) {
+        afirmar(
+            ! str_starts_with($ruta, 'GET /preinscripcion/fichas'),
+            "«{$ruta}» expondría solicitudes ciudadanas sin sesión"
+        );
+    }
+});
+
+grupo('Pre-inscripción › validación');
+
+function erroresPre(array $entrada): array
+{
+    return App\Preinscripcion\Validador::revisar($entrada)['errores'];
+}
+
+function datosPre(array $entrada): array
+{
+    return App\Preinscripcion\Validador::revisar($entrada)['datos'];
+}
+
+function preBase(array $cambios = []): array
+{
+    return array_replace([
+        'nombre_completo' => 'Pedro Antonio Pérez Gómez',
+        'documento' => '16.234.567',
+        'telefono' => '315 123 4567',
+        'direccion' => 'Carrera 11 # 8-26',
+        'autoriza_datos' => true,
+        'aviso_version' => App\Rufe\Catalogos::AVISO_VERSION,
+    ], $cambios);
+}
+
+prueba('una solicitud mínima y completa pasa', function (): void {
+    afirmarIgual([], erroresPre(preBase()));
+});
+
+prueba('la cédula y el teléfono se guardan sin puntos ni espacios', function (): void {
+    // La gente los escribe como los lee en su documento. Normalizar aquí evita
+    // que el mismo hogar quede con dos escrituras distintas.
+    $d = datosPre(preBase());
+
+    afirmarIgual('16234567', $d['documento']);
+    afirmarIgual('3151234567', $d['telefono']);
+});
+
+prueba('sin autorización de datos NO se guarda, aunque el navegador insista', function (): void {
+    // Es el ciudadano entregando sus propios datos sin nadie delante que se lo
+    // explique. La prueba de que aceptó no puede depender del navegador.
+    $e = erroresPre(preBase(['autoriza_datos' => false]));
+
+    afirmar(isset($e['autoriza_datos']), 'debe exigir la autorización');
+});
+
+prueba('una versión de aviso desconocida se rechaza', function (): void {
+    // Lo que prueba qué aceptó el ciudadano es la versión guardada. Si llega una
+    // que no existe, no hay nada que probar.
+    $e = erroresPre(preBase(['aviso_version' => 'inventada-v9']));
+
+    afirmar(isset($e['aviso_version']), 'debe exigir una versión conocida');
+});
+
+prueba('la ubicación es opcional y una imposible se descarta sin tumbar la solicitud', function (): void {
+    // Mucha gente rechaza el permiso de ubicación. Perder la solicitud por eso
+    // sería absurdo.
+    afirmarIgual([], erroresPre(preBase()));
+    afirmarIgual(null, datosPre(preBase())['latitud']);
+
+    $d = datosPre(preBase(['latitud' => 40.4168, 'longitud' => -3.7038]));
+    afirmarIgual(null, $d['latitud'], 'Madrid no es Jamundí');
+
+    $d = datosPre(preBase(['latitud' => 3.2611234, 'longitud' => -76.5412345, 'precision_m' => 12]));
+    afirmarIgual(3.2611234, $d['latitud']);
+    afirmarIgual(12, $d['precision_m']);
+});
+
+prueba('no se piden datos sensibles', function (): void {
+    // Género y pertenencia étnica son datos sensibles del art. 5 de la Ley 1581
+    // y los levanta el funcionario en la visita, con el aviso explicado de viva
+    // voz. Si alguien los mandara igual, no deben acabar guardados.
+    $d = datosPre(preBase(['genero' => 'M', 'pertenencia_etnica' => 'NINGUNA']));
+
+    afirmar(! isset($d['genero']), 'el género no debe guardarse aquí');
+    afirmar(! isset($d['pertenencia_etnica']), 'la pertenencia étnica no debe guardarse aquí');
+});
+
+prueba('el radicado ciudadano se distingue de los otros dos', function (): void {
+    $r = App\Preinscripcion\Radicado::componer(2026);
+
+    afirmar(str_starts_with($r, 'PRE-2026-'), "el radicado no lleva el prefijo esperado: {$r}");
+    afirmar(App\Preinscripcion\Radicado::esValido($r), 'debería validarse a sí mismo');
+    afirmar(! App\Preinscripcion\Radicado::esValido('RUFE-2026-ABCDEFGH'), 'no debe aceptar el del censo');
+});
+
+prueba('la huella junta la misma vivienda del mismo solicitante', function (): void {
+    $a = App\Preinscripcion\Radicado::huella('Carrera 11 # 8-26', '16234567');
+    $b = App\Preinscripcion\Radicado::huella('  carrera   11 # 8-26 ', '16234567');
+    $c = App\Preinscripcion\Radicado::huella('Carrera 11 # 8-26', '99999999');
+
+    afirmarIgual($a, $b, 'la misma casa y persona deben coincidir');
+    afirmar($a !== $c, 'otro solicitante es otra solicitud');
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────

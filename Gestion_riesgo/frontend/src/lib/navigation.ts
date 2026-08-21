@@ -35,15 +35,20 @@ import {
 import type { Component } from 'svelte';
 
 /**
- * Rutas que se sirven sin sesión. Solo el login.
+ * Rutas que se sirven sin sesión: el login y la pre-inscripción ciudadana.
  *
  * La lista existe para que añadir una ruta pública sea una decisión visible y
  * deliberada, en un solo archivo, y no un `if` escondido en el layout. Cada
  * entrada amplía lo que un desconocido puede abrir.
  *
  * Estas rutas se dibujan sin el armazón: ni menú lateral, ni barra superior.
+ *
+ * `/preinscripcion` es la excepción deliberada a «todo exige sesión»: la abre un
+ * ciudadano que no tiene cuenta ni va a tenerla. Por eso solo ESCRIBE una
+ * solicitud —nunca consulta nada— y el servidor la protege con límite por IP,
+ * trampa antirrobot e idempotencia.
  */
-export const RUTAS_PUBLICAS: string[] = ['/login'];
+export const RUTAS_PUBLICAS: string[] = ['/login', '/preinscripcion'];
 
 export function esRutaPublica(ruta: string): boolean {
 	return RUTAS_PUBLICAS.includes(ruta);

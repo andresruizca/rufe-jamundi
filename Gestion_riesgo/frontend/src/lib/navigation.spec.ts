@@ -16,8 +16,15 @@ import {
 } from './navigation';
 
 describe('rutas públicas', () => {
-	it('solo el login se sirve sin sesión', () => {
-		expect(RUTAS_PUBLICAS).toEqual(['/login']);
+	it('solo el login y la pre-inscripción se sirven sin sesión', () => {
+		// Cada entrada de esta lista amplía lo que un desconocido puede abrir.
+		// Que ampliarla obligue a tocar esta prueba es justo la intención.
+		expect(RUTAS_PUBLICAS).toEqual(['/login', '/preinscripcion']);
+	});
+
+	it('la pre-inscripción es pública; la bandeja que la revisa, no', () => {
+		expect(esRutaPublica('/preinscripcion')).toBe(true);
+		expect(esRutaPublica('/riesgo/preinscripciones')).toBe(false);
 	});
 
 	it('el formulario RUFE ya no es público', () => {

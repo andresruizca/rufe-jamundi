@@ -106,7 +106,10 @@ async function request<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
 }
 
 export const api = {
-	get: <T>(ruta: string) => request<T>(ruta),
+	// `autenticada = false` para la pre-inscripción ciudadana, que la abre
+	// alguien sin cuenta: mandar una cabecera con un token vacío haría que el
+	// servidor respondiera 401 en vez de servir la ruta pública.
+	get: <T>(ruta: string, autenticada = true) => request<T>(ruta, { autenticada }),
 	post: <T>(ruta: string, body?: unknown, autenticada = true) =>
 		request<T>(ruta, { method: 'POST', body, autenticada }),
 	put: <T>(ruta: string, body?: unknown) => request<T>(ruta, { method: 'PUT', body }),

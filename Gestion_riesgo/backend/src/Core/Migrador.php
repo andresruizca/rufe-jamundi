@@ -33,6 +33,8 @@ final class Migrador
         'inspeccion_02_ubicacion.sql',
         // Añade el rol del profesional que inspecciona y sus datos.
         'sistema_02_rol_inspector.sql',
+        // Va después de la inspección: apunta a `inspeccion_viviendas`.
+        'preinscripcion_01.sql',
     ];
 
     /**

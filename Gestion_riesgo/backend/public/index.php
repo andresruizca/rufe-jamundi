@@ -16,6 +16,7 @@ use App\Controllers\AuthController;
 use App\Controllers\InspeccionCapturaController;
 use App\Controllers\InspeccionController;
 use App\Controllers\MapaController;
+use App\Controllers\PreinscripcionController;
 use App\Controllers\RufeController;
 use App\Controllers\SistemaController;
 use App\Controllers\RufeCapturaController;
@@ -93,6 +94,7 @@ $sistema = new SistemaController;
 $mapa = new MapaController;
 $inspeccionCaptura = new InspeccionCapturaController;
 $inspeccion = new InspeccionController;
+$preinscripcion = new PreinscripcionController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
 $router->get('/health', static function (): void {
@@ -104,6 +106,19 @@ $router->post('/auth/login', [$auth, 'login']);
 // El sistema no expone ninguna otra ruta sin token. El formulario RUFE se
 // diligencia en campo por un funcionario, no por el ciudadano, así que su
 // captura vive con el resto de rutas de escritura.
+
+// Pre-inscripción ciudadana. Las DOS únicas rutas sin sesión aparte del login.
+//
+// Ampliar esta lista es la decisión más delicada de este archivo: abre una
+// superficie que cualquiera en internet puede tocar. Van con límite por IP,
+// trampa antirrobot e idempotencia por envio_id, y NO existe ninguna ruta
+// pública que devuelva pre-inscripciones: consultar por radicado sería un
+// buscador de damnificados para quien probara combinaciones.
+$router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
+$router->post('/preinscripcion/cargas', [$preinscripcion, 'abrirCarga']);
+$router->post('/preinscripcion/cargas/{carga}/archivos', [$preinscripcion, 'subirArchivo']);
+$router->delete('/preinscripcion/cargas/{carga}/archivos/{id}', [$preinscripcion, 'eliminarArchivo']);
+$router->post('/preinscripcion', [$preinscripcion, 'crear']);
 
 // ── Autenticadas (cualquier rol) ─────────────────────────────────────────
 $router->get('/auth/me', [$auth, 'me'], Auth::TODOS);
@@ -177,6 +192,14 @@ $router->get('/inspeccion/fichas/{id}/fotos/{foto}', [$inspeccion, 'descargarFot
 // Decidir NO: quien inspecciona no puede aprobar su propio trabajo. Es la misma
 // razón por la que la aprobación salió del formulario.
 $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], Auth::ESCRITURA);
+
+// Bandeja de pre-inscripciones. Consultarlas es de lectura del censo —son
+// solicitudes de ciudadanos con nombre, cédula y dirección—; decidir sobre
+// ellas, de escritura.
+$router->get('/preinscripcion/fichas', [$preinscripcion, 'listar'], Auth::LECTURA_RUFE);
+$router->get('/preinscripcion/fichas/{id}', [$preinscripcion, 'ver'], Auth::LECTURA_RUFE);
+$router->get('/preinscripcion/fichas/{id}/fotos/{foto}', [$preinscripcion, 'descargarFoto'], Auth::LECTURA_RUFE);
+$router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEstado'], Auth::ESCRITURA);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
