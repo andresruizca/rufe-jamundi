@@ -536,6 +536,11 @@ h3 {
 	color: var(--color-success);
 }
 
+.etiqueta--inspector {
+	background: var(--color-warning-bg, var(--color-surface-alt));
+	color: var(--nivel-moderado);
+}
+
 .etiqueta--visor {
 	background: var(--color-surface-alt);
 	color: var(--color-muted);

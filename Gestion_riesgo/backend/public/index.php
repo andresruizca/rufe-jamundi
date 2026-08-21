@@ -113,19 +113,28 @@ $router->post('/auth/password', [$auth, 'cambiarPassword'], Auth::TODOS);
 $router->get('/acerca/sistema', [$acerca, 'sistema'], Auth::TODOS);
 $router->get('/acerca/actualizaciones', [$acerca, 'actualizaciones'], Auth::TODOS);
 
-// Bandeja RUFE: consultar es de todos los roles, decidir no.
-$router->get('/rufe/reportes', [$rufe, 'listar'], Auth::TODOS);
-$router->get('/rufe/reportes/{id}', [$rufe, 'ver'], Auth::TODOS);
-$router->get('/rufe/reportes/{id}/evidencias/{evidencia}', [$rufe, 'descargarEvidencia'], Auth::TODOS);
+// Bandeja RUFE: consultar es de casi todos los roles, decidir no.
+//
+// `LECTURA_RUFE` y no `TODOS`: son fichas con nombres, cédulas y direcciones de
+// hogares damnificados, y el profesional que inspecciona viviendas no las
+// necesita para su trabajo.
+$router->get('/rufe/reportes', [$rufe, 'listar'], Auth::LECTURA_RUFE);
+$router->get('/rufe/reportes/{id}', [$rufe, 'ver'], Auth::LECTURA_RUFE);
+$router->get('/rufe/reportes/{id}/evidencias/{evidencia}', [$rufe, 'descargarEvidencia'], Auth::LECTURA_RUFE);
+
+$capturaArchivos = array_values(array_unique(array_merge(Auth::ESCRITURA, Auth::INSPECCION)));
 
 // ── Gestión de datos (ADMINISTRADOR y GESTOR) ────────────────────────────
 // Captura del formulario RUFE en campo.
 $router->get('/rufe/catalogos', [$rufeCaptura, 'catalogos'], Auth::ESCRITURA);
-$router->post('/rufe/cargas', [$rufeCaptura, 'abrirCarga'], Auth::ESCRITURA);
-$router->get('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'listarArchivos'], Auth::ESCRITURA);
-$router->post('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'subirArchivo'], Auth::ESCRITURA);
-$router->put('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'describirArchivo'], Auth::ESCRITURA);
-$router->delete('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'eliminarArchivo'], Auth::ESCRITURA);
+// Las cargas de archivos las comparten los dos formatos: por aquí suben tanto
+// las evidencias del censo como el registro fotográfico del numeral 11. Sin el
+// inspector en esta lista, levantaría la inspección y perdería todas sus fotos.
+$router->post('/rufe/cargas', [$rufeCaptura, 'abrirCarga'], $capturaArchivos);
+$router->get('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'listarArchivos'], $capturaArchivos);
+$router->post('/rufe/cargas/{carga}/archivos', [$rufeCaptura, 'subirArchivo'], $capturaArchivos);
+$router->put('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'describirArchivo'], $capturaArchivos);
+$router->delete('/rufe/cargas/{carga}/archivos/{id}', [$rufeCaptura, 'eliminarArchivo'], $capturaArchivos);
 $router->post('/rufe/reportes', [$rufeCaptura, 'crear'], Auth::ESCRITURA);
 
 $router->put('/rufe/reportes/{id}', [$rufe, 'actualizar'], Auth::ESCRITURA);
@@ -144,8 +153,8 @@ $router->post('/rufe/reportes/{id}/anonimizar', [$rufe, 'anonimizar'], $soloAdmi
 // Ubicaciones del mapa. Consultarlas es de lectura y lo hace cualquier usuario
 // con sesión; geocodificar gasta cupo de un servicio externo y lo lanza un
 // administrador desde su pantalla, por lotes, porque este hosting no tiene cron.
-$router->get('/mapa/fichas', [$mapa, 'fichas'], Auth::TODOS);
-$router->post('/mapa/ubicaciones', [$mapa, 'ubicaciones'], Auth::TODOS);
+$router->get('/mapa/fichas', [$mapa, 'fichas'], Auth::LECTURA_RUFE);
+$router->post('/mapa/ubicaciones', [$mapa, 'ubicaciones'], Auth::LECTURA_RUFE);
 $router->put('/mapa/ubicaciones/{clave}', [$mapa, 'corregir'], Auth::ESCRITURA);
 $router->get('/mapa/estado', [$mapa, 'estado'], $soloAdmin);
 $router->post('/mapa/geocodificar', [$mapa, 'geocodificar'], $soloAdmin);
@@ -155,12 +164,18 @@ $router->post('/mapa/reubicar', [$mapa, 'reubicar'], $soloAdmin);
 // afectado; esto evalúa la vivienda y determina qué materiales le corresponden.
 // Capturar es de escritura; consultar lo hace cualquiera con sesión, igual que
 // en el RUFE.
-$router->get('/inspeccion/catalogos', [$inspeccionCaptura, 'catalogos'], Auth::ESCRITURA);
-$router->get('/inspeccion/duplicados', [$inspeccionCaptura, 'duplicados'], Auth::ESCRITURA);
-$router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::ESCRITURA);
+$router->get('/inspeccion/catalogos', [$inspeccionCaptura, 'catalogos'], Auth::INSPECCION);
+$router->get('/inspeccion/duplicados', [$inspeccionCaptura, 'duplicados'], Auth::INSPECCION);
+$router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::INSPECCION);
+// Consultarlas sigue siendo de cualquier rol con sesión, incluido Visualización:
+// son las fichas que sustentan una entrega de recursos públicos y quitarle la
+// consulta al rol que existe para supervisar sería justo lo contrario de lo que
+// se busca.
 $router->get('/inspeccion/fichas', [$inspeccion, 'listar'], Auth::TODOS);
 $router->get('/inspeccion/fichas/{id}', [$inspeccion, 'ver'], Auth::TODOS);
 $router->get('/inspeccion/fichas/{id}/fotos/{foto}', [$inspeccion, 'descargarFoto'], Auth::TODOS);
+// Decidir NO: quien inspecciona no puede aprobar su propio trabajo. Es la misma
+// razón por la que la aprobación salió del formulario.
 $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], Auth::ESCRITURA);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);

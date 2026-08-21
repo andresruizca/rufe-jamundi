@@ -27,6 +27,7 @@ spl_autoload_register(static function (string $clase) use ($raiz): void {
     }
 });
 
+use App\Core\Auth;
 use App\Core\Migrador;
 use App\Sistema\Actualizador;
 use App\Rufe\Busqueda;
@@ -847,6 +848,56 @@ prueba('todos los .sql del Migrador se trocean y son idempotentes', function () 
     }
 });
 
+/**
+ * ¿Este ALTER solo ENSANCHA un ENUM?
+ *
+ * Cierto únicamente si es un `MODIFY COLUMN … ENUM(...)`, no toca nada más, y
+ * la lista de valores contiene todos los que la columna ya admitía. Los valores
+ * previos se toman del propio proyecto —`ROLES_ANTERIORES`— y no del archivo,
+ * porque leerlos del mismo sitio que se quiere comprobar no comprobaría nada.
+ */
+function ensanchaUnEnum(string $sentencia): bool
+{
+    // Solo la columna `rol` de `usuarios`: es el único ENUM del proyecto y
+    // dejar la excepción abierta a cualquier columna sería regalar el permiso.
+    if (preg_match('/MODIFY\s+COLUMN\s+rol\s+ENUM\s*\(([^)]*)\)/i', $sentencia, $m) !== 1) {
+        return false;
+    }
+
+    // Nada más en el mismo ALTER: ni DROP, ni CHANGE, ni otro MODIFY.
+    if (preg_match_all('/\b(DROP|CHANGE|MODIFY)\s+COLUMN\b/i', $sentencia) !== 1) {
+        return false;
+    }
+
+    preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1], $valores);
+    $nuevos = $valores[1];
+
+    foreach (ROLES_ANTERIORES as $previo) {
+        if (! in_array($previo, $nuevos, true)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** Los roles que la columna admitía antes de esta migración. */
+const ROLES_ANTERIORES = ['ADMINISTRADOR', 'GESTOR', 'VISUALIZACION'];
+
+prueba('la excepción del ENUM no vale para recortarlo', function (): void {
+    // Sin esto, «se permite un MODIFY de un ENUM» sería un agujero por el que
+    // cabría cualquier cosa. Se comprueba invirtiendo el caso.
+    $ensancha = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''GESTOR'',''VISUALIZACION'',''INSPECTOR'')";
+    $recorta  = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''INSPECTOR'')";
+    $otraCosa = "ALTER TABLE usuarios MODIFY COLUMN email VARCHAR(200) NOT NULL";
+    $conDrop  = "ALTER TABLE usuarios MODIFY COLUMN rol ENUM(''ADMINISTRADOR'',''GESTOR'',''VISUALIZACION'',''INSPECTOR''), DROP COLUMN activo";
+
+    afirmar(ensanchaUnEnum($ensancha), 'añadir un rol debería permitirse');
+    afirmar(! ensanchaUnEnum($recorta), 'quitar un rol NO puede permitirse');
+    afirmar(! ensanchaUnEnum($otraCosa), 'la excepción es solo para el ENUM de rol');
+    afirmar(! ensanchaUnEnum($conDrop), 'un DROP colado en el mismo ALTER debe bloquearlo');
+});
+
 prueba('ninguna migración puede borrar datos', function () use ($raiz): void {
     // Esto no es celo: estas migraciones se aplican sobre una base con fichas de
     // hogares damnificados que NO existen en ningún otro sitio. Una sentencia
@@ -868,15 +919,26 @@ prueba('ninguna migración puede borrar datos', function () use ($raiz): void {
 
             // Un ALTER escondido dentro de un SET @sql := IF(...) solo puede
             // AÑADIR: cambiar o quitar una columna con datos dentro los pierde.
+            //
+            // Con UNA excepción, la de ensanchar un ENUM. MySQL no sabe añadirle
+            // un valor a un ENUM que no sea redefinirlo entero, así que sin esto
+            // no se podría crear nunca un rol nuevo. La excepción es estrecha a
+            // propósito: se comprueba que la lista nueva CONTENGA todos los
+            // valores anteriores. Un MODIFY que quite un valor —o que toque
+            // cualquier otra cosa— sigue prohibido.
             if (preg_match('/\bALTER\s+TABLE\b/i', $s) === 1) {
-                afirmar(
-                    preg_match('/\b(DROP|MODIFY|CHANGE)\s+COLUMN\b/i', $s) !== 1,
-                    "{$archivo}: un ALTER TABLE quita o cambia una columna"
-                );
-                afirmar(
-                    preg_match('/\bADD\s+(COLUMN|KEY|CONSTRAINT|UNIQUE)\b/i', $s) === 1,
-                    "{$archivo}: un ALTER TABLE que no añade nada"
-                );
+                $ensancha = ensanchaUnEnum($s);
+
+                if (! $ensancha) {
+                    afirmar(
+                        preg_match('/\b(DROP|MODIFY|CHANGE)\s+COLUMN\b/i', $s) !== 1,
+                        "{$archivo}: un ALTER TABLE quita o cambia una columna"
+                    );
+                    afirmar(
+                        preg_match('/\bADD\s+(COLUMN|KEY|CONSTRAINT|UNIQUE)\b/i', $s) === 1,
+                        "{$archivo}: un ALTER TABLE que no añade nada"
+                    );
+                }
             }
         }
     }
@@ -1978,6 +2040,166 @@ prueba('todas las rutas resuelven a un método que existe', function () use ($ra
             method_exists($clase[$variable], $metodo),
             "{$clase[$variable]}::{$metodo}() no existe — registrarla tumbaría TODA la API"
         );
+    }
+});
+
+grupo('Rutas › hasta dónde llega el inspector de vivienda');
+
+/**
+ * Las rutas de `index.php` con la lista de roles que las protege, ya resuelta.
+ *
+ * Se lee el archivo en vez de consultar el router porque lo que hay que
+ * comprobar es lo que está escrito ahí: una ruta con la constante equivocada no
+ * da ningún error, simplemente abre datos a quien no debe verlos.
+ *
+ * @return array<string,string[]> «MÉTODO ruta» => roles
+ */
+function rutasConSusRoles(string $raiz): array
+{
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+
+    $listas = [
+        'Auth::TODOS'         => Auth::TODOS,
+        'Auth::ESCRITURA'     => Auth::ESCRITURA,
+        'Auth::LECTURA_RUFE'  => Auth::LECTURA_RUFE,
+        'Auth::INSPECCION'    => Auth::INSPECCION,
+        '$soloAdmin'          => [Auth::ADMINISTRADOR],
+        '$capturaArchivos'    => array_values(array_unique(array_merge(Auth::ESCRITURA, Auth::INSPECCION))),
+    ];
+
+    preg_match_all(
+        "/\\\$router->(get|post|put|delete)\\(\\s*'([^']+)'(.*?)\\);/s",
+        $php,
+        $encontradas,
+        PREG_SET_ORDER
+    );
+
+    $salida = [];
+
+    foreach ($encontradas as $r) {
+        // El último argumento, cuando lo hay, es la lista de roles. Sin él la
+        // ruta es pública —solo `/health` y `/auth/login`— y se omite.
+        if (preg_match('/,\s*([A-Za-z:$\\\\]+)\s*$/', trim($r[3]), $m) !== 1) {
+            continue;
+        }
+
+        $salida[strtoupper($r[1]).' '.$r[2]] = $listas[trim($m[1])] ?? [];
+    }
+
+    return $salida;
+}
+
+prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function () use ($raiz): void {
+    // La lista va escrita a mano a propósito. Derivarla del código haría que la
+    // prueba dijera «sí» a cualquier cosa que el código dijera; escrita así,
+    // añadir una ruta sin decidir su acceso rompe aquí y obliga a pensarlo.
+    //
+    // Lo que está en juego: las fichas del censo llevan nombres, cédulas y
+    // direcciones de hogares damnificados. El profesional que inspecciona
+    // viviendas —a menudo un contratista externo— no las necesita.
+    $esperadas = [
+        // Su sesión.
+        'GET /auth/me',
+        'POST /auth/logout',
+        'POST /auth/password',
+        // Información del sistema.
+        'GET /acerca/sistema',
+        'GET /acerca/actualizaciones',
+        // Su formato.
+        'GET /inspeccion/catalogos',
+        'GET /inspeccion/duplicados',
+        'POST /inspeccion/fichas',
+        'GET /inspeccion/fichas',
+        'GET /inspeccion/fichas/{id}',
+        'GET /inspeccion/fichas/{id}/fotos/{foto}',
+        // Las fotos del numeral 11 suben por las cargas, que comparte con el censo.
+        'POST /rufe/cargas',
+        'GET /rufe/cargas/{carga}/archivos',
+        'POST /rufe/cargas/{carga}/archivos',
+        'PUT /rufe/cargas/{carga}/archivos/{id}',
+        'DELETE /rufe/cargas/{carga}/archivos/{id}',
+    ];
+
+    $alcanza = [];
+
+    foreach (rutasConSusRoles($raiz) as $ruta => $roles) {
+        if (in_array(Auth::INSPECTOR, $roles, true)) {
+            $alcanza[] = $ruta;
+        }
+    }
+
+    sort($esperadas);
+    sort($alcanza);
+
+    afirmarIgual($esperadas, $alcanza);
+});
+
+prueba('el inspector no puede aprobar una inspección', function () use ($raiz): void {
+    // Sacamos la aprobación del formulario justo para que quien inspecciona no
+    // se validara a sí mismo. Dejarle esta ruta lo desharía por otra puerta.
+    $roles = rutasConSusRoles($raiz)['PUT /inspeccion/fichas/{id}/estado'] ?? null;
+
+    afirmar($roles !== null, 'no se encontró la ruta de cambio de estado');
+    afirmar(! in_array(Auth::INSPECTOR, $roles, true), 'el inspector NO puede decidir');
+});
+
+prueba('el inspector no ve ninguna ficha del censo ni el mapa', function () use ($raiz): void {
+    foreach (rutasConSusRoles($raiz) as $ruta => $roles) {
+        if (! str_contains($ruta, '/rufe/reportes') && ! str_contains($ruta, '/mapa/')) {
+            continue;
+        }
+
+        afirmar(
+            ! in_array(Auth::INSPECTOR, $roles, true),
+            "el inspector alcanza «{$ruta}», que expone datos del censo"
+        );
+    }
+});
+
+prueba('todas las rutas se leyeron con una lista de roles conocida', function () use ($raiz): void {
+    // Si aparece una constante nueva que `rutasConSusRoles` no sabe traducir,
+    // esa ruta quedaría con la lista vacía y las pruebas de arriba dirían que
+    // todo está bien sin haber mirado nada.
+    $rutas = rutasConSusRoles($raiz);
+
+    afirmar(count($rutas) >= 30, 'se leyeron solo '.count($rutas).' rutas');
+
+    foreach ($rutas as $ruta => $roles) {
+        afirmar($roles !== [], "«{$ruta}» se protege con una lista que la prueba no reconoce");
+    }
+});
+
+prueba('los mismos roles en PHP, en la migración y en el navegador', function () use ($raiz): void {
+    // Tres listas que tienen que decir lo mismo. Si se separan, aparece en el
+    // menú un rol que la base rechaza al guardarlo, o al revés: un rol guardable
+    // que el navegador no sabe dibujar y trata como si no tuviera permisos.
+    $sql = (string) file_get_contents($raiz.'/database/sistema_02_rol_inspector.sql');
+    preg_match("/MODIFY\s+COLUMN\s+rol\s+ENUM\s*\(([^)]*)\)/i", $sql, $m);
+    preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1] ?? '', $enEnum);
+
+    $ts = (string) file_get_contents($raiz.'/../frontend/src/lib/navigation.ts');
+    preg_match('/export const ROLES = \{(.*?)\} as const;/s', $ts, $m2);
+    preg_match_all("/(\w+):\s*'([A-Z_]+)'/", $m2[1] ?? '', $enTs);
+
+    $php = Auth::ROLES;
+    sort($php);
+
+    $enum = $enEnum[1];
+    sort($enum);
+
+    $navegador = $enTs[2];
+    sort($navegador);
+
+    afirmarIgual($php, $enum, 'el ENUM de la migración no coincide con Auth::ROLES');
+    afirmarIgual($php, $navegador, 'navigation.ts no coincide con Auth::ROLES');
+});
+
+prueba('cada rol tiene etiqueta y capacidades declaradas', function (): void {
+    // Un rol sin descripción se cuela en el selector de usuarios sin decir qué
+    // hace, y sin capacidades el frontend le esconde todo sin explicar por qué.
+    foreach (Auth::ROLES as $rol) {
+        afirmar(isset(Auth::DESCRIPCION_ROLES[$rol]), "«{$rol}» no tiene etiqueta ni descripción");
+        afirmar(Auth::capacidades($rol) !== [], "«{$rol}» no declara ninguna capacidad");
     }
 });
 

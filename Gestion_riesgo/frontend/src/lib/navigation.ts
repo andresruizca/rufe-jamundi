@@ -81,21 +81,35 @@ export function funcionaSinConexion(ruta: string): boolean {
 export const ROLES = {
 	ADMINISTRADOR: 'ADMINISTRADOR',
 	GESTOR: 'GESTOR',
+	/** El profesional que evalúa las viviendas. Solo alcanza su formato. */
+	INSPECTOR: 'INSPECTOR',
 	VISUALIZACION: 'VISUALIZACION'
 } as const;
 
 export type Rol = (typeof ROLES)[keyof typeof ROLES];
 
-/** Cualquier persona autenticada. */
-export const TODOS: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.VISUALIZACION];
-/** Quienes pueden escribir datos. */
+/**
+ * Cualquier persona autenticada.
+ *
+ * OJO: ya no sirve para proteger lo que muestra datos del censo. Desde que
+ * existe el inspector —que no debe ver fichas de hogares damnificados— eso es
+ * `LECTURA_RUFE`. Es la misma distinción que hace `Auth` en el servidor, que es
+ * quien manda.
+ */
+export const TODOS: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.INSPECTOR, ROLES.VISUALIZACION];
+/** Quienes pueden escribir datos del censo y decidir sobre las fichas. */
 export const ESCRITURA: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR];
+/** Quienes pueden consultar el censo y el mapa. */
+export const LECTURA_RUFE: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.VISUALIZACION];
+/** Quienes levantan y consultan inspecciones de vivienda. */
+export const INSPECCION: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.INSPECTOR];
 /** Solo administración. */
 export const SOLO_ADMIN: Rol[] = [ROLES.ADMINISTRADOR];
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
 	ADMINISTRADOR: 'Administrador',
 	GESTOR: 'Gestor',
+	INSPECTOR: 'Insp. de vivienda',
 	VISUALIZACION: 'Visualización'
 };
 
@@ -121,7 +135,7 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Tablero RUFE — Sismo Jamundí',
 		href: '/dashboard',
 		icon: LayoutDashboard,
-		roles: TODOS,
+		roles: LECTURA_RUFE,
 		match: ['/dashboard']
 	},
 
@@ -137,7 +151,9 @@ export const NAV_ITEMS: NavItem[] = [
 		type: 'group',
 		label: 'Registro',
 		icon: ClipboardPlus,
-		roles: ESCRITURA
+		// El grupo se muestra a quien pueda ver alguno de sus hijos; el inspector
+		// solo verá la inspección y Pendientes.
+		roles: INSPECCION
 	},
 	{
 		id: 'captura-rufe',
@@ -161,7 +177,7 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Inspección de viviendas afectadas — banco de materiales',
 		href: '/riesgo/inspeccionar',
 		icon: HardHat,
-		roles: ESCRITURA,
+		roles: INSPECCION,
 		match: ['/riesgo/inspeccionar']
 	},
 	{
@@ -172,7 +188,9 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Fichas pendientes de enviar',
 		href: '/riesgo/pendientes',
 		icon: CloudOff,
-		roles: ESCRITURA,
+		// La cola es de los dos formatos: sin ella, quien inspecciona no sabe si
+		// su trabajo salió del teléfono.
+		roles: INSPECCION,
 		match: ['/riesgo/pendientes']
 	},
 
@@ -198,7 +216,7 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Fichas RUFE registradas',
 		href: '/riesgo/reportes',
 		icon: FileText,
-		roles: TODOS,
+		roles: LECTURA_RUFE,
 		match: ['/riesgo/reportes', /^\/riesgo\/reportes\/[^/]+$/]
 	},
 	{
@@ -209,6 +227,8 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Inspecciones de vivienda registradas',
 		href: '/riesgo/inspecciones',
 		icon: ClipboardCheck,
+		// Todos, incluido Visualización: es el rol que supervisa, y estas fichas
+		// sustentan una entrega de recursos públicos.
 		roles: TODOS,
 		match: ['/riesgo/inspecciones', /^\/riesgo\/inspecciones\/[^/]+$/]
 	},
@@ -224,7 +244,7 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Mapa de la afectación',
 		href: '/riesgo/mapas',
 		icon: IconoMapa,
-		roles: TODOS,
+		roles: LECTURA_RUFE,
 		match: ['/riesgo/mapas']
 	},
 

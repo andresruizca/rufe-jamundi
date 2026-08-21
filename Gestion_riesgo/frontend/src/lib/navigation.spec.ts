@@ -11,7 +11,8 @@ import {
 	funcionaSinConexion,
 	menuParaRol,
 	puedeAcceder,
-	resolverTitulo
+	resolverTitulo,
+	type Rol
 } from './navigation';
 
 describe('rutas públicas', () => {
@@ -75,14 +76,14 @@ describe('la bandeja sigue siendo de lectura para todos', () => {
 });
 
 describe('menú por rol', () => {
-	function etiquetas(rol: 'ADMINISTRADOR' | 'GESTOR' | 'VISUALIZACION') {
+	function etiquetas(rol: Rol) {
 		return menuParaRol(rol).flatMap((s) =>
 			s.type === 'item' ? [s.item.label] : s.items.map((i) => i.label)
 		);
 	}
 
 	/** Los grupos que ve un rol, en el orden en que se dibujan. */
-	function grupos(rol: 'ADMINISTRADOR' | 'GESTOR' | 'VISUALIZACION') {
+	function grupos(rol: Rol) {
 		return menuParaRol(rol)
 			.filter((s) => s.type === 'group')
 			.map((s) => (s.type === 'group' ? s.group.label : ''));
@@ -142,6 +143,47 @@ describe('menú por rol', () => {
 
 		expect(por('captura-rufe')).toBe(por('reportes-rufe'));
 		expect(por('inspeccionar')).toBe(por('inspecciones'));
+	});
+
+	// ── El inspector de vivienda ─────────────────────────────────────────────
+	//
+	// Lo que está en juego: las fichas del censo llevan nombres, cédulas y
+	// direcciones de hogares damnificados. El profesional que inspecciona
+	// —a menudo un contratista externo— no las necesita para su trabajo. Estas
+	// pruebas escriben a mano lo que ve, para que ampliarlo sea una decisión y
+	// no un descuido.
+
+	it('el inspector ve exactamente su formato, la cola y sus fichas', () => {
+		expect(etiquetas('INSPECTOR')).toEqual([
+			'INSP DE VIVIENDA',
+			'Pendientes',
+			'INSP DE VIVIENDA',
+			'Acerca de'
+		]);
+	});
+
+	it('el inspector no ve nada del censo, ni el mapa, ni el tablero', () => {
+		const e = etiquetas('INSPECTOR');
+
+		expect(e).not.toContain('RUFE FR-1703-SMD-69');
+		expect(e).not.toContain('Dashboard');
+		expect(e).not.toContain('Mapas');
+		expect(e).not.toContain('Usuarios del sistema');
+	});
+
+	it('las rutas del censo le están cerradas también a él', () => {
+		// El menú es cortesía; esto es lo que decide la guardia de rutas. El
+		// permiso de verdad lo aplica PHP, pero si esto se abriera, el navegador
+		// dejaría entrar a una pantalla que luego muestra un error.
+		for (const ruta of ['/dashboard', '/riesgo/reportes', '/riesgo/reportes/1', '/riesgo/mapas']) {
+			expect(puedeAcceder(ruta, 'INSPECTOR'), ruta).toBe(false);
+		}
+	});
+
+	it('las suyas sí', () => {
+		for (const ruta of ['/riesgo/inspeccionar', '/riesgo/pendientes', '/riesgo/inspecciones']) {
+			expect(puedeAcceder(ruta, 'INSPECTOR'), ruta).toBe(true);
+		}
 	});
 
 	it('sin rol el menú queda vacío', () => {

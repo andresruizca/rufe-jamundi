@@ -24,6 +24,8 @@
 	} from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { ApiError } from '$lib/api/client';
+	import { sesion } from '$lib/stores/sesion.svelte';
+	import { ROLES } from '$lib/navigation';
 	import { inspeccionApi } from '$lib/api/servicios';
 	import CampoTexto from '$lib/rufe-form/componentes/CampoTexto.svelte';
 	import CampoSelect from '$lib/rufe-form/componentes/CampoSelect.svelte';
@@ -126,6 +128,31 @@
 				)
 			: ''
 	);
+
+	/**
+	 * El numeral 1, precargado con los datos de quien tiene la sesión.
+	 *
+	 * Solo para el rol de inspección de vivienda. Antes no se precargaba nada, y
+	 * con razón: quien tenía la aplicación abierta —un administrador, o quien
+	 * prestó el teléfono— no era necesariamente el profesional que firma, y un
+	 * nombre ya escrito se acepta sin leerlo. Ahora el rol lo dice: si quien
+	 * entró ES el inspector, sus datos son los que van en el formato.
+	 *
+	 * Se puede corregir todo en la visita: un dato mal cargado no puede dejar al
+	 * profesional atascado delante de una casa.
+	 */
+	function precargarProfesional() {
+		const u = sesion.usuario;
+		if (!u || u.rol !== ROLES.INSPECTOR) return;
+
+		datos.profesional_nombre = u.nombre;
+		datos.profesional_profesion = u.profesion ?? '';
+		datos.profesional_tarjeta = u.tarjeta_profesional ?? '';
+		datos.profesional_documento = u.documento ?? '';
+		datos.profesional_documento_de = u.documento_de ?? '';
+		datos.profesional_telefono = u.telefono ?? '';
+		datos.profesional_direccion = u.direccion ?? '';
+	}
 
 	// ── Ubicación ───────────────────────────────────────────────────────────
 	//
@@ -269,13 +296,8 @@
 			hayBorradorPrevio = true;
 			borrador.clave = previo.clave;
 		} else {
-			// Solo la fecha, que es hoy en el 99 % de los casos.
-			//
-			// El nombre NO se precarga con el de la sesión: quien tiene la
-			// aplicación abierta —un administrador, o quien prestó el teléfono— no
-			// es necesariamente el profesional que firma la inspección, y un
-			// nombre ya escrito se acepta sin leerlo.
 			datos.fecha_evaluacion = hoy();
+			precargarProfesional();
 		}
 
 		cargando = false;
@@ -309,6 +331,7 @@
 		datos = formularioVacio();
 		datos.fecha_evaluacion = hoy();
 		if (catalogos) datos = conValoresIniciales(datos, catalogos);
+		precargarProfesional();
 		indice = 0;
 		hayBorradorPrevio = false;
 		errores = {};

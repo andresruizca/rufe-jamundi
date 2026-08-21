@@ -29,11 +29,25 @@ export type DatosUsuario = {
 	rol: string;
 	activo: boolean;
 	password?: string;
+	/**
+	 * Datos propios del profesional que inspecciona viviendas.
+	 *
+	 * Son los del numeral 1 del formato. Viven en el usuario porque son suyos y
+	 * no de la vivienda: sin esto se reescriben a mano, en un teléfono y de pie,
+	 * en cada visita.
+	 */
+	profesion?: string | null;
+	tarjeta_profesional?: string | null;
+	documento?: string | null;
+	documento_de?: string | null;
+	telefono?: string | null;
+	direccion?: string | null;
 };
 
 /** Administración → Gestión de usuarios del sistema. */
 export const usuariosApi = {
-	listar: () => api.get<{ usuarios: Usuario[]; roles: RolCatalogo[] }>('/usuarios'),
+	listar: () =>
+		api.get<{ usuarios: Usuario[]; roles: RolCatalogo[]; profesiones: string[] }>('/usuarios'),
 	crear: (datos: DatosUsuario) => api.post<{ usuario: Usuario }>('/usuarios', datos),
 	actualizar: (id: number, datos: Partial<DatosUsuario>) =>
 		api.put<{ usuario: Usuario }>(`/usuarios/${id}`, datos),

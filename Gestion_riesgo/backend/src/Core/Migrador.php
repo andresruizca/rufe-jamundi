@@ -31,6 +31,8 @@ final class Migrador
         'inspeccion_01_viviendas.sql',
         // Añade el punto GPS a la inspección, como el que ya toma el censo.
         'inspeccion_02_ubicacion.sql',
+        // Añade el rol del profesional que inspecciona y sus datos.
+        'sistema_02_rol_inspector.sql',
     ];
 
     /**
