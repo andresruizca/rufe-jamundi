@@ -28,6 +28,7 @@ import {
 	MapPinned,
 	CloudOff,
 	FilePlus2,
+	FileText,
 	HardHat,
 	ClipboardCheck
 } from '@lucide/svelte';
@@ -124,9 +125,13 @@ export const NAV_ITEMS: NavItem[] = [
 		match: ['/dashboard']
 	},
 
-	// «Registro» agrupa el formulario y la cola local. Separarlos evita que la
-	// pantalla de captura tenga que hacer dos trabajos: levantar una ficha nueva y
-	// vigilar las que todavía no salieron.
+	// «Registro» agrupa los dos formatos que se levantan en campo y la cola local.
+	// Separar la cola de la captura evita que la pantalla del formulario tenga que
+	// hacer dos trabajos: levantar una ficha nueva y vigilar las que no salieron.
+	//
+	// Los formatos van primero y con su código oficial, que es como los nombra el
+	// equipo; «Pendientes» cierra el grupo porque no es un formato, es el estado de
+	// lo ya levantado.
 	{
 		id: 'grupo-registro',
 		type: 'group',
@@ -138,12 +143,26 @@ export const NAV_ITEMS: NavItem[] = [
 		id: 'captura-rufe',
 		type: 'item',
 		parentId: 'grupo-registro',
-		label: 'Nueva ficha',
+		label: 'RUFE FR-1703-SMD-69',
+		// El título de la barra superior sigue siendo el descriptivo: a esa pantalla
+		// también se llega por un enlace directo, sin haber pasado por el menú, y un
+		// encabezado que solo dijera el código no le diría nada a quien llega así.
 		title: 'Registro Unifamiliar de Emergencias — captura en campo',
 		href: '/riesgo/reportar',
 		icon: FilePlus2,
 		roles: ESCRITURA,
 		match: ['/riesgo/reportar']
+	},
+	{
+		id: 'inspeccionar',
+		type: 'item',
+		parentId: 'grupo-registro',
+		label: 'INSP DE VIVIENDA',
+		title: 'Inspección de viviendas afectadas — banco de materiales',
+		href: '/riesgo/inspeccionar',
+		icon: HardHat,
+		roles: ESCRITURA,
+		match: ['/riesgo/inspeccionar']
 	},
 	{
 		id: 'pendientes-rufe',
@@ -156,32 +175,37 @@ export const NAV_ITEMS: NavItem[] = [
 		roles: ESCRITURA,
 		match: ['/riesgo/pendientes']
 	},
+
+	// «Reportes» es el espejo de «Registro»: los mismos dos formatos, con los
+	// mismos nombres, pero para consultar lo ya registrado en vez de levantarlo.
+	// Que la pareja se repita a un lado y al otro es la intención, no un descuido:
+	// quien busca una inspección la encuentra escrita igual en los dos sitios.
+	//
+	// El grupo es de lectura para los tres roles, no solo para quien escribe:
+	// Visualización es justamente el rol que más consulta reportes.
 	{
-		id: 'inspeccionar',
-		type: 'item',
-		parentId: 'grupo-registro',
-		label: 'Inspección de vivienda',
-		title: 'Inspección de viviendas afectadas — banco de materiales',
-		href: '/riesgo/inspeccionar',
-		icon: HardHat,
-		roles: ESCRITURA,
-		match: ['/riesgo/inspeccionar']
+		id: 'grupo-reportes',
+		type: 'group',
+		label: 'Reportes',
+		icon: ClipboardList,
+		roles: TODOS
 	},
 	{
 		id: 'reportes-rufe',
 		type: 'item',
-		label: 'Reportes RUFE',
+		parentId: 'grupo-reportes',
+		label: 'RUFE FR-1703-SMD-69',
 		title: 'Fichas RUFE registradas',
 		href: '/riesgo/reportes',
-		icon: ClipboardList,
+		icon: FileText,
 		roles: TODOS,
 		match: ['/riesgo/reportes', /^\/riesgo\/reportes\/[^/]+$/]
 	},
-
 	{
 		id: 'inspecciones',
 		type: 'item',
-		label: 'Inspecciones',
+		parentId: 'grupo-reportes',
+		label: 'INSP DE VIVIENDA',
 		title: 'Inspecciones de vivienda registradas',
 		href: '/riesgo/inspecciones',
 		icon: ClipboardCheck,

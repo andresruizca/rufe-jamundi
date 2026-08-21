@@ -81,23 +81,67 @@ describe('menú por rol', () => {
 		);
 	}
 
+	/** Los grupos que ve un rol, en el orden en que se dibujan. */
+	function grupos(rol: 'ADMINISTRADOR' | 'GESTOR' | 'VISUALIZACION') {
+		return menuParaRol(rol)
+			.filter((s) => s.type === 'group')
+			.map((s) => (s.type === 'group' ? s.group.label : ''));
+	}
+
 	it('el visor no ve el enlace de registrar', () => {
-		expect(etiquetas('VISUALIZACION')).not.toContain('Nueva ficha');
+		expect(grupos('VISUALIZACION')).not.toContain('Registro');
 		expect(etiquetas('VISUALIZACION')).not.toContain('Pendientes');
 	});
 
 	it('el gestor sí lo ve, y no ve administración', () => {
-		expect(etiquetas('GESTOR')).toContain('Nueva ficha');
+		expect(etiquetas('GESTOR')).toContain('RUFE FR-1703-SMD-69');
 		expect(etiquetas('GESTOR')).toContain('Pendientes');
 		expect(etiquetas('GESTOR')).not.toContain('Usuarios del sistema');
 	});
 
 	it('el administrador lo ve todo', () => {
 		const e = etiquetas('ADMINISTRADOR');
-		expect(e).toContain('Nueva ficha');
+		expect(e).toContain('RUFE FR-1703-SMD-69');
+		expect(e).toContain('INSP DE VIVIENDA');
 		expect(e).toContain('Pendientes');
-		expect(e).toContain('Reportes RUFE');
 		expect(e).toContain('Usuarios del sistema');
+		expect(grupos('ADMINISTRADOR')).toEqual(['Registro', 'Reportes', 'Administración']);
+	});
+
+	it('dentro de Registro, los dos formatos van antes que Pendientes', () => {
+		// El orden es el del arreglo, y es lo que pidió el equipo: primero lo que se
+		// diligencia, al final el estado de lo ya diligenciado.
+		const registro = menuParaRol('GESTOR').find(
+			(s) => s.type === 'group' && s.group.id === 'grupo-registro'
+		);
+
+		expect(registro?.type === 'group' && registro.items.map((i) => i.href)).toEqual([
+			'/riesgo/reportar',
+			'/riesgo/inspeccionar',
+			'/riesgo/pendientes'
+		]);
+	});
+
+	// Un grupo nuevo con los roles equivocados no rompe nada visible: simplemente
+	// le esconde los reportes justo al rol que más los consulta.
+	it('Visualización ve el grupo Reportes completo', () => {
+		const reportes = menuParaRol('VISUALIZACION').find(
+			(s) => s.type === 'group' && s.group.id === 'grupo-reportes'
+		);
+
+		expect(reportes?.type === 'group' && reportes.items.map((i) => i.href)).toEqual([
+			'/riesgo/reportes',
+			'/riesgo/inspecciones'
+		]);
+	});
+
+	it('los dos formatos se llaman igual al registrarlos que al consultarlos', () => {
+		// La repetición es deliberada: quien busca una inspección la encuentra
+		// escrita igual en los dos sitios. Si alguien renombra uno solo, esto avisa.
+		const por = (id: string) => NAV_ITEMS.find((i) => i.id === id)?.label;
+
+		expect(por('captura-rufe')).toBe(por('reportes-rufe'));
+		expect(por('inspeccionar')).toBe(por('inspecciones'));
 	});
 
 	it('sin rol el menú queda vacío', () => {
