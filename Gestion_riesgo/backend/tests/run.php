@@ -827,6 +827,51 @@ prueba('todos los .sql del Migrador se trocean y son idempotentes', function () 
     }
 });
 
+prueba('ninguna migración puede borrar datos', function () use ($raiz): void {
+    // Esto no es celo: estas migraciones se aplican sobre una base con fichas de
+    // hogares damnificados que NO existen en ningún otro sitio. Una sentencia
+    // destructiva que se colara aquí no se notaría hasta que fuera irreversible.
+    //
+    // Se comprueban los verbos, no el texto: «ON DELETE CASCADE» dentro de una
+    // clave foránea define comportamiento referencial y no borra nada, mientras
+    // que un DROP o un TRUNCATE sueltos sí.
+    $permitidos = ['CREATE', 'SET', 'PREPARE', 'EXECUTE', 'DEALLOCATE', 'INSERT', 'DO'];
+
+    foreach (Migrador::ARCHIVOS as $archivo) {
+        foreach (Migrador::sentencias((string) file_get_contents($raiz.'/database/'.$archivo)) as $s) {
+            $verbo = strtoupper(strtok(trim($s), " (\n"));
+
+            afirmar(
+                in_array($verbo, $permitidos, true),
+                "{$archivo}: sentencia «{$verbo}» no permitida en una migración"
+            );
+
+            // Un ALTER escondido dentro de un SET @sql := IF(...) solo puede
+            // AÑADIR: cambiar o quitar una columna con datos dentro los pierde.
+            if (preg_match('/\bALTER\s+TABLE\b/i', $s) === 1) {
+                afirmar(
+                    preg_match('/\b(DROP|MODIFY|CHANGE)\s+COLUMN\b/i', $s) !== 1,
+                    "{$archivo}: un ALTER TABLE quita o cambia una columna"
+                );
+                afirmar(
+                    preg_match('/\bADD\s+(COLUMN|KEY|CONSTRAINT|UNIQUE)\b/i', $s) === 1,
+                    "{$archivo}: un ALTER TABLE que no añade nada"
+                );
+            }
+        }
+    }
+});
+
+prueba('el archivo de reversión NUNCA está en la lista del Migrador', function (): void {
+    // rufe_revertir.sql borra las siete tablas del censo. Existe para desarrollo
+    // y para deshacer una instalación fallida; que se colara en la lista que se
+    // ejecuta en cada despliegue vaciaría la base en producción.
+    afirmar(
+        ! in_array('rufe_revertir.sql', Migrador::ARCHIVOS, true),
+        'rufe_revertir.sql no puede aplicarse automáticamente'
+    );
+});
+
 prueba('la inspección se aplica después del RUFE, del que depende', function (): void {
     // Declara una foránea contra rufe_reportes y añade columnas a
     // rufe_evidencias: al revés, la migración reventaría en el primer despliegue.
