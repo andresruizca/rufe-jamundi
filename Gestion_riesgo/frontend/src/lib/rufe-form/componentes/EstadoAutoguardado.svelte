@@ -8,31 +8,54 @@
 	import { Check, CloudOff, LoaderCircle, TriangleAlert, RotateCcw } from '@lucide/svelte';
 	import { describirEstado, type EstadoGuardado } from '../borrador.svelte';
 
-	type Props = { estado: EstadoGuardado; guardadoEn: number | null; enLinea: boolean };
+	type Props = {
+		estado: EstadoGuardado;
+		guardadoEn: number | null;
+		enLinea: boolean;
+		/**
+		 * El aviso de que no hay señal, entero.
+		 *
+		 * Se pasa la frase completa y no solo el sustantivo porque en español hay
+		 * que concordar: «su reporte está guardado» pero «su inspección está
+		 * guardada». Un hueco donde meter la palabra produciría una de las dos mal.
+		 */
+		sinConexion?: string;
+		/**
+		 * El texto ya redactado. Cada formulario tiene su propio borrador y sus
+		 * propias frases; sin esto, la inspección heredaría las del censo.
+		 */
+		texto?: string;
+	};
 
-	let { estado, guardadoEn, enLinea }: Props = $props();
+	let {
+		estado,
+		guardadoEn,
+		enLinea,
+		sinConexion = 'Sin conexión. Su reporte está guardado en este dispositivo.',
+		texto
+	}: Props = $props();
 
-	const texto = $derived(describirEstado(estado, guardadoEn));
+	const mensaje = $derived(texto ?? describirEstado(estado, guardadoEn));
 </script>
 
 <p class="estado" class:estado--error={estado === 'error'} role="status" aria-live="polite">
 	{#if !enLinea}
 		<CloudOff size={14} aria-hidden="true" />
-		Sin conexión. Su reporte está guardado en este dispositivo.
+		{sinConexion}
 	{:else if estado === 'guardando'}
 		<LoaderCircle size={14} class="girando" aria-hidden="true" />
-		{texto}
+		{mensaje}
 	{:else if estado === 'error'}
 		<TriangleAlert size={14} aria-hidden="true" />
-		{texto}
+		{mensaje}
 	{:else if estado === 'recuperado'}
 		<RotateCcw size={14} aria-hidden="true" />
-		{texto}
+		{mensaje}
 	{:else if estado === 'guardado'}
 		<Check size={14} aria-hidden="true" />
-		{texto}
+		{mensaje}
 	{:else}
-		{texto}
+		{mensaje}
 	{/if}
 </p>
 

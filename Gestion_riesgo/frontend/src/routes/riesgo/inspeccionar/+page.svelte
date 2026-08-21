@@ -21,6 +21,8 @@
 	import CampoOpciones from '$lib/rufe-form/componentes/CampoOpciones.svelte';
 	import TablaEvaluacion from '$lib/inspeccion-form/componentes/TablaEvaluacion.svelte';
 	import ResultadoCombo from '$lib/inspeccion-form/componentes/ResultadoCombo.svelte';
+	import IndicadorProgreso from '$lib/rufe-form/componentes/IndicadorProgreso.svelte';
+	import EstadoAutoguardado from '$lib/rufe-form/componentes/EstadoAutoguardado.svelte';
 	import {
 		conValoresIniciales,
 		cumpleRequisitos,
@@ -62,6 +64,7 @@
 	let enviado = $state<{ numero: string; combo: string | null; motivo: string | null } | null>(null);
 	let hayBorradorPrevio = $state(false);
 	let avisoDuplicado = $state<string>('');
+	let enLinea = $state(true);
 
 	const borrador = new GestorBorrador();
 
@@ -140,6 +143,17 @@
 	onMount(() => {
 		detenerEnvio = envio.iniciar();
 		void iniciar();
+
+		enLinea = navigator.onLine;
+		const conectar = () => (enLinea = true);
+		const desconectar = () => (enLinea = false);
+		window.addEventListener('online', conectar);
+		window.addEventListener('offline', desconectar);
+
+		return () => {
+			window.removeEventListener('online', conectar);
+			window.removeEventListener('offline', desconectar);
+		};
 	});
 
 	onDestroy(() => {
@@ -399,21 +413,17 @@
 			</div>
 		{:else}
 			<div class="tarjeta">
-				<header class="cabecera">
-					<div>
-						<h2 class="tarjeta__titulo">{paso.titulo}</h2>
-						<p class="tarjeta__nota">{paso.ayuda}</p>
-					</div>
-					{#if avance > 0}
-						<span class="cabecera__paso">Paso {avance} de {conProgreso.length}</span>
-					{/if}
-				</header>
+				<IndicadorProgreso indice={avance} total={conProgreso.length} titulo={paso.titulo} />
 
-				{#if borrador.estado !== 'sin-cambios'}
-					<p class="autoguardado" class:autoguardado--error={borrador.estado === 'error'}>
-						{describirEstado(borrador.estado, borrador.guardadoEn)}
-					</p>
-				{/if}
+				<EstadoAutoguardado
+					estado={borrador.estado}
+					guardadoEn={borrador.guardadoEn}
+					{enLinea}
+					texto={describirEstado(borrador.estado, borrador.guardadoEn)}
+					sinConexion="Sin conexión. Su inspección está guardada en este dispositivo."
+				/>
+
+				<p class="tarjeta__nota">{paso.ayuda}</p>
 
 				{#if paso.id === 'inicio'}
 					<div class="intro">
@@ -909,30 +919,6 @@
 		width: 100%;
 		max-width: 44rem;
 		margin: 0 auto;
-	}
-
-	.cabecera {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.cabecera__paso {
-		font-size: 0.78rem;
-		color: var(--color-muted);
-		white-space: nowrap;
-	}
-
-	.autoguardado {
-		margin: 0 0 0.8rem;
-		font-size: 0.75rem;
-		color: var(--color-muted);
-	}
-
-	.autoguardado--error {
-		color: var(--aviso-error-texto);
 	}
 
 	.seccion {
