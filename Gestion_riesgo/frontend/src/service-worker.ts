@@ -83,7 +83,17 @@ const FUERA = [
 	// de ahí la descarga funciona sin conexión.
 	RUTA_PLANTILLA,
 	// Y por lo mismo el formato de inspección, que pesa otros 220 KB.
-	RUTA_INSPECCION
+	RUTA_INSPECCION,
+
+	// Los iconos de la aplicación instalada. Desde que llevan el escudo oficial
+	// en vez de tres letras sobre un cuadrado azul pesan unos 210 KB cada uno de
+	// los grandes, y no los pide NUNCA la aplicación en marcha: los descarga el
+	// sistema operativo al instalarla y a partir de ahí vive con su copia.
+	// Guardarlos en el armazón le costaba medio mega de datos a cada censador
+	// para dibujar algo que ya está en su pantalla de inicio.
+	'/icono-512.png',
+	'/icono-maskable-512.png',
+	'/apple-touch-icon.png'
 ];
 
 const ARMAZON = [`${base}/`, ...build, ...files].filter(

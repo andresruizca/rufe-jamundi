@@ -3,7 +3,20 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#1577d6" />
+		<!--
+			El color de la barra de estado cuando la aplicación corre instalada.
+
+			Son dos y no uno porque la barra superior de la aplicación es blanca en
+			modo claro y casi negra en oscuro: con un solo azul fijo —el que había
+			antes— quedaba una franja de color encima de una cabecera blanca, que
+			parecía un fallo de dibujado.
+
+			El azul institucional NO desaparece: vive en `theme_color` del
+			manifiesto, que es el que Chrome usa para la pantalla de arranque, junto
+			con `background_color`. Aquí manda lo que se ve una vez arrancada.
+		-->
+		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#101e33" media="(prefers-color-scheme: dark)" />
 
 		<!-- Título de arranque. La aplicación lo sustituye por el de cada pantalla
 		     al montarse, pero hasta entonces —y para quien no ejecute JavaScript,
@@ -48,7 +61,13 @@
 			content="Registro, seguimiento y mapa de la afectación por emergencias en el municipio."
 		/>
 		<meta name="twitter:image" content="https://grj.oticjamundi.com/og-sgr.jpg?v=1" />
-		<link rel="apple-touch-icon" href="%sveltekit.assets%/icono-192.png" />
+		<!--
+			iOS aplica su propia máscara al icono y no admite transparencia. Antes
+			esto apuntaba al icono de 192, que ya trae las esquinas redondeadas
+			dibujadas: iOS las redondeaba otra vez y dejaba un reborde oscuro
+			alrededor. Este va a sangre y en los 180 px que pide el sistema.
+		-->
+		<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
 
 		<!-- Instalable en el teléfono. No es solo comodidad: una aplicación
 		     instalada tiene muchas más probabilidades de que Chrome le conceda
