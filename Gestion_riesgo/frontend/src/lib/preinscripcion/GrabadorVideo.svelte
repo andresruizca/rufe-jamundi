@@ -36,9 +36,18 @@
 		carga: string | null;
 		/** Se avisa al terminar para que el formulario sepa qué falta. */
 		alSubir?: (categoriaId: number) => void;
+		/**
+		 * Se avisa mientras este video está subiendo.
+		 *
+		 * El formulario lo necesita para no dejar enviar a medias: un video que
+		 * no terminó de subir llega al servidor incompleto, y ahí se BORRA. La
+		 * persona vería «Solicitud registrada» y su video no existiría en ningún
+		 * sitio, sin que nadie se lo dijera.
+		 */
+		alSubiendo?: (categoriaId: number, subiendo: boolean) => void;
 	};
 
-	let { categoria, carga, alSubir }: Props = $props();
+	let { categoria, carga, alSubir, alSubiendo }: Props = $props();
 
 	type Fase = 'listo' | 'camara' | 'cuenta' | 'grabando' | 'revisando' | 'subiendo' | 'subido';
 
@@ -205,6 +214,7 @@
 		fase = 'subiendo';
 		progreso = 0;
 		error = '';
+		alSubiendo?.(categoria.id, true);
 
 		try {
 			await subirVideo(carga, categoria.id, grabado, mime, segundos, (e) => {
@@ -219,6 +229,11 @@
 					? e.message
 					: 'No se pudo subir el video. Puede intentarlo otra vez o continuar sin él.';
 			fase = 'revisando';
+		} finally {
+			// En `finally` y no solo en el camino bueno: si la subida falla y esto
+			// no se ejecutara, el formulario se quedaría bloqueado para siempre
+			// esperando un video que ya no está subiendo.
+			alSubiendo?.(categoria.id, false);
 		}
 	}
 </script>

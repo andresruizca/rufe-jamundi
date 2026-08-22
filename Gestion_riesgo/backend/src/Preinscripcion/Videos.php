@@ -236,13 +236,42 @@ final class Videos
      */
     public static function adoptar(string $cargaHash, int $preinscripcionId): int
     {
-        foreach (Db::all(
-            'SELECT id, ruta_relativa FROM preinscripcion_videos
+        // Los que se quedaron a medio subir no sirven: un archivo al que le
+        // faltan trozos no lo abre ningún reproductor. Se borran.
+        //
+        // Pero NO en silencio. Antes desaparecían sin dejar rastro, y quien
+        // revisaba la solicitud no tenía forma de saber que hubo un video: veía
+        // una ficha sin videos, igual que si la persona no hubiera grabado
+        // ninguno. El formulario ya no deja enviar con una subida en curso, así
+        // que llegar aquí significa que se cortó la señal a mitad — y eso es
+        // justo lo que hay que poder contarle a quien decide, para que sepa que
+        // puede valer la pena llamar y pedirlo otra vez.
+        $incompletos = Db::all(
+            'SELECT id, ruta_relativa, categoria_nombre FROM preinscripcion_videos
               WHERE carga_hash = :c AND preinscripcion_id IS NULL AND completo = 0',
             ['c' => $cargaHash]
-        ) as $suelto) {
+        );
+
+        foreach ($incompletos as $suelto) {
             @unlink(Archivos::base().'/'.$suelto['ruta_relativa']);
             Db::exec('DELETE FROM preinscripcion_videos WHERE id = :i', ['i' => $suelto['id']]);
+        }
+
+        if ($incompletos !== []) {
+            $nombres = implode(', ', array_column($incompletos, 'categoria_nombre'));
+
+            Db::exec(
+                'INSERT INTO preinscripcion_historial (preinscripcion_id, estado, nota)
+                 SELECT id, estado, :n FROM preinscripciones WHERE id = :i',
+                [
+                    'n' => mb_substr(
+                        'Se perdió por mala conexión un video que quedó a medio subir: '.$nombres,
+                        0,
+                        500
+                    ),
+                    'i' => $preinscripcionId,
+                ]
+            );
         }
 
         $completos = Db::all(

@@ -36,7 +36,13 @@
 	import GrabadorVideo from '$lib/preinscripcion/GrabadorVideo.svelte';
 	import SelectorSenales from '$lib/preinscripcion/SelectorSenales.svelte';
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
-	import { datosVacios, paraEnviar, pasosVigentes, validarPaso } from '$lib/preinscripcion/pasos';
+	import {
+		bloqueoDeAvance,
+		datosVacios,
+		paraEnviar,
+		pasosVigentes,
+		validarPaso
+	} from '$lib/preinscripcion/pasos';
 
 	type Catalogos = Awaited<ReturnType<typeof preinscripcionApi.catalogos>>;
 
@@ -67,6 +73,22 @@
 	 * que falta se marca en la bandeja, para que quien revisa lo sepa.
 	 */
 	let videosListos = $state<number[]>([]);
+
+	/**
+	 * Qué videos están subiendo en este momento.
+	 *
+	 * Enviar el formulario con uno a medias lo PIERDE: llega incompleto al
+	 * servidor y allí se descarta, así que la persona vería «Solicitud
+	 * registrada» y su video no existiría en ningún sitio. Es el mismo cuidado
+	 * que ya se tenía con las fotos a medio optimizar.
+	 */
+	let videosSubiendo = $state<number[]>([]);
+
+	function marcarSubiendo(categoriaId: number, subiendo: boolean) {
+		videosSubiendo = subiendo
+			? [...videosSubiendo.filter((c) => c !== categoriaId), categoriaId]
+			: videosSubiendo.filter((c) => c !== categoriaId);
+	}
 
 	let ubicando = $state(false);
 	let avisoUbicacion = $state<string | null>(null);
@@ -135,10 +157,15 @@
 			return;
 		}
 
-		// Avanzar con una foto a medio optimizar dejaría a la persona creyendo
-		// que ya la mandó.
-		if (evidencias?.optimizando) {
-			errorEnvio = 'Espere a que terminen de prepararse las fotos.';
+		// Avanzar con una foto a medio optimizar o un video a medio subir dejaría
+		// a la persona creyendo que ya los mandó. La regla vive en `pasos.ts`.
+		const bloqueo = bloqueoDeAvance({
+			optimizandoFotos: evidencias?.optimizando ?? false,
+			videosSubiendo: videosSubiendo.length
+		});
+
+		if (bloqueo) {
+			errorEnvio = bloqueo;
 
 			return;
 		}
@@ -214,6 +241,20 @@
 		const fallos = validarPaso('envio', datos);
 		errores = fallos;
 		if (Object.keys(fallos).length > 0) return;
+
+		// La última barrera, y la que de verdad importa: el paso de video queda
+		// atrás y nada impide llegar hasta aquí con una subida todavía en curso.
+		const bloqueo = bloqueoDeAvance({
+			optimizandoFotos: evidencias?.optimizando ?? false,
+			videosSubiendo: videosSubiendo.length
+		});
+
+		if (bloqueo) {
+			errorEnvio = bloqueo;
+			subirAlInicio();
+
+			return;
+		}
 
 		enviando = true;
 		errorEnvio = '';
@@ -560,6 +601,7 @@
 						categoria={c}
 						carga={evidencias?.carga ?? null}
 						alSubir={(id) => (videosListos = [...videosListos, id])}
+						alSubiendo={marcarSubiendo}
 					/>
 				{/each}
 			</section>

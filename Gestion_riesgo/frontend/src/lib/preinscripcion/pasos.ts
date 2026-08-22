@@ -198,3 +198,29 @@ export function paraEnviar(d: DatosPre): Record<string, unknown> {
 		sitio_web: d.sitio_web
 	};
 }
+
+/**
+ * Qué impide seguir adelante ahora mismo, aparte de los campos.
+ *
+ * Devuelve el aviso que hay que enseñar, o cadena vacía si se puede.
+ *
+ * Vive aquí y no dentro del componente porque es una REGLA, no un detalle de
+ * pantalla, y porque enviar con un video a medias no se nota: el servidor
+ * recibe un archivo incompleto, lo descarta —no se puede reproducir— y la
+ * persona ve «Solicitud registrada» creyendo que su video llegó. Es la clase de
+ * fallo que solo se descubre cuando alguien pregunta dónde quedó su video.
+ */
+export function bloqueoDeAvance(estado: {
+	optimizandoFotos: boolean;
+	videosSubiendo: number;
+}): string {
+	if (estado.optimizandoFotos) {
+		return 'Espere a que terminen de prepararse las fotos.';
+	}
+
+	if (estado.videosSubiendo > 0) {
+		return 'Espere unos segundos: todavía se está subiendo un video. Si sale ahora, ese video se perderá.';
+	}
+
+	return '';
+}

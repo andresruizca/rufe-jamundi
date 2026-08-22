@@ -2656,6 +2656,20 @@ prueba('un reenvío no puede tirar los archivos que trae', function (): void {
     );
 });
 
+prueba('un video que se cortó a mitad deja constancia, no desaparece', function (): void {
+    // Un archivo al que le faltan trozos no lo abre ningún reproductor, así que
+    // se borra. Pero antes se borraba EN SILENCIO: quien revisaba la solicitud
+    // veía una ficha sin videos, exactamente igual que si la persona no hubiera
+    // grabado ninguno, y nunca se le ocurriría llamar para pedirlo otra vez.
+    $fuente = file_get_contents(__DIR__.'/../src/Preinscripcion/Videos.php');
+    $adoptar = substr($fuente, strpos($fuente, 'public static function adoptar('));
+
+    afirmar(
+        str_contains($adoptar, 'preinscripcion_historial'),
+        'descartar un video incompleto debe quedar escrito en el historial'
+    );
+});
+
 prueba('el radicado ciudadano se distingue de los otros dos', function (): void {
     $r = App\Preinscripcion\Radicado::componer(2026);
 

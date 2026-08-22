@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	PASOS_PRE,
+	bloqueoDeAvance,
 	datosVacios,
 	paraEnviar,
 	pasosVigentes,
@@ -122,5 +123,25 @@ describe('lo que se manda al servidor', () => {
 		// Si dejara de mandarse, el servidor nunca vería el campo lleno y la
 		// trampa quedaría desarmada sin que nada fallara.
 		expect(paraEnviar(completos())).toHaveProperty('sitio_web');
+	});
+});
+
+describe('lo que impide avanzar aparte de los campos', () => {
+	it('deja pasar cuando no hay nada en curso', () => {
+		expect(bloqueoDeAvance({ optimizandoFotos: false, videosSubiendo: 0 })).toBe('');
+	});
+
+	it('frena con una foto a medio preparar', () => {
+		expect(bloqueoDeAvance({ optimizandoFotos: true, videosSubiendo: 0 })).not.toBe('');
+	});
+
+	it('frena con un video todavía subiendo, y dice qué se pierde', () => {
+		// El servidor descarta el video incompleto porque no se puede reproducir.
+		// Sin este freno, la persona ve «Solicitud registrada» y su video no
+		// existe en ningún sitio, sin que nadie se lo diga.
+		const aviso = bloqueoDeAvance({ optimizandoFotos: false, videosSubiendo: 1 });
+
+		expect(aviso).not.toBe('');
+		expect(aviso).toContain('perderá');
 	});
 });
