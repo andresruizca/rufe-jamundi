@@ -17,13 +17,25 @@
 	// Por eso el daño va SIEMPRE en el trazo grueso de color y la vivienda en el
 	// trazo fino: la mirada cae primero donde tiene que caer.
 
-	type Props = { icono: string };
+	type Props = {
+		icono: string;
+		/**
+		 * Versión de listado, a unos 30 px.
+		 *
+		 * No es solo cuestión de encogerlo: a ese tamaño un trazo de 2,2 px se
+		 * queda en menos de un píxel y el dibujo se deshace en una mancha gris.
+		 * Los trazos engordan y la vivienda sube de opacidad para que la silueta
+		 * siga leyéndose.
+		 */
+		compacto?: boolean;
+	};
 
-	let { icono }: Props = $props();
+	let { icono, compacto = false }: Props = $props();
 </script>
 
 <svg
 	class="dibujo"
+	class:dibujo--compacto={compacto}
 	viewBox="0 0 100 76"
 	fill="none"
 	stroke-linecap="round"
@@ -145,5 +157,14 @@
 	.dano {
 		stroke: var(--color-danger);
 		stroke-width: 3.4;
+	}
+
+	.dibujo--compacto .base {
+		stroke-width: 4;
+		opacity: 0.8;
+	}
+
+	.dibujo--compacto .dano {
+		stroke-width: 6;
 	}
 </style>

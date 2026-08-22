@@ -343,8 +343,14 @@ export const preinscripcionApi = {
 export type PreinscripcionDetalle = {
 	preinscripcion: Record<string, string | number | null>;
 	fotos: { id: number; nombre_original: string; extension: string; tamano_bytes: number; mime: string }[];
-	/** Lo que el ciudadano marcó, con la etiqueta que vio en su momento. */
-	senales: { codigo: string; etiqueta: string }[];
+	/**
+	 * Lo que el ciudadano marcó, con la etiqueta que vio en su momento.
+	 *
+	 * El `icono` NO viene guardado: lo resuelve el servidor contra el catálogo
+	 * de hoy. La etiqueta prueba qué se le mostró y queda congelada; el dibujo
+	 * es solo la forma de enseñárselo a quien revisa.
+	 */
+	senales: { codigo: string; etiqueta: string; icono: string }[];
 	videos: {
 		id: number;
 		categoria_nombre: string;

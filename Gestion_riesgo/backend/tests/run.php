@@ -2534,6 +2534,21 @@ prueba('las señales cubren todos los grupos de elementos evaluables', function 
     }
 });
 
+prueba('cada señal resuelve su dibujo, y una desconocida no revienta', function (): void {
+    // El dibujo NO se guarda con la solicitud: se resuelve contra el catálogo de
+    // hoy, para que mejorar una figura la mejore también en los expedientes
+    // viejos. La etiqueta sí queda congelada, que es la que prueba qué se le
+    // mostró a la persona.
+    foreach (App\Preinscripcion\Senales::CATALOGO as $senal) {
+        afirmarIgual($senal['icono'], App\Preinscripcion\Senales::icono($senal['codigo']));
+    }
+
+    // Un código retirado del catálogo sigue existiendo en las solicitudes ya
+    // enviadas. Devolver cadena vacía hace que se dibuje la marca de «señal sin
+    // dibujo», que se ve y se corrige; reventar dejaría la bandeja en blanco.
+    afirmarIgual('', App\Preinscripcion\Senales::icono('SENAL_RETIRADA'));
+});
+
 prueba('el catálogo público de señales no revela a qué elemento apunta cada una', function (): void {
     // Al ciudadano no le dice nada, y publicarlo solo invita a deducir desde
     // fuera cómo se clasificará técnicamente su caso.

@@ -134,6 +134,30 @@ final class Senales
     }
 
     /**
+     * El dibujo que le corresponde a un código.
+     *
+     * A diferencia de la etiqueta, el icono NO se guarda con la solicitud: se
+     * resuelve contra el catálogo de hoy. La etiqueta es prueba de qué se le
+     * mostró a la persona y tiene que quedar congelada; el dibujo es solo la
+     * forma de enseñárselo a quien revisa, y ahí conviene lo contrario — que
+     * mejorar un dibujo lo mejore también en los expedientes viejos.
+     *
+     * Devuelve cadena vacía si el código ya no existe. `IconoSenal` dibuja
+     * entonces su marca de «señal sin dibujo», que se ve y se corrige, en vez
+     * de dejar un hueco en blanco que nadie nota.
+     */
+    public static function icono(string $codigo): string
+    {
+        foreach (self::CATALOGO as $s) {
+            if ($s['codigo'] === $codigo) {
+                return $s['icono'];
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Los elementos del formato a los que apunta lo que marcó el ciudadano.
      *
      * Se usa al convertir la solicitud en inspección: no llena la tabla del

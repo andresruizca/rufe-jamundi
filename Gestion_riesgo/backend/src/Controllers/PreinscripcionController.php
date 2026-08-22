@@ -419,8 +419,9 @@ final class PreinscripcionController
         $total = (int) (Db::first("SELECT COUNT(*) AS n FROM preinscripciones{$where}", $filtros)['n'] ?? 0);
 
         $filas = Db::all(
-            "SELECT id, radicado, nombre_completo, documento, telefono, direccion,
-                    zona, corregimiento, vereda, estado, inspeccion_id, creado_en
+            "SELECT id, radicado, nombre_completo, documento, telefono, correo, direccion,
+                    zona, corregimiento, vereda, latitud, longitud, estado, inspeccion_id,
+                    creado_en
                FROM preinscripciones{$where}
               ORDER BY id DESC
               LIMIT {$porPagina} OFFSET {$desde}",
@@ -428,11 +429,98 @@ final class PreinscripcionController
         );
 
         Response::ok([
-            'preinscripciones' => $filas,
+            'preinscripciones' => $this->conLoQueMandaron($filas),
             'total'            => $total,
             'pagina'           => $pagina,
             'por_pagina'       => $porPagina,
         ]);
+    }
+
+    /**
+     * Añade a cada fila del listado lo que el ciudadano adjuntó.
+     *
+     * Quien abre la bandeja está decidiendo a qué casa ir primero, y esa
+     * decisión cambia por completo según lo que venga con la solicitud: no es
+     * lo mismo un renglón de texto que uno con cuatro señales de daño, foto de
+     * la cédula, tres fotos del muro y un video. Antes había que entrar una por
+     * una para saberlo.
+     *
+     * Son TRES consultas para toda la página, no tres por fila. Con 25 filas la
+     * versión ingenua son 75 consultas por pantalla, y esto corre en un hosting
+     * compartido: no es una optimización prematura, es la diferencia entre que
+     * la bandeja abra o que caduque. Medido: la página entera se sirve con el
+     * mismo número de consultas tenga 1 fila o 25.
+     *
+     * @param  list<array<string,mixed>>  $filas
+     * @return list<array<string,mixed>>
+     */
+    private function conLoQueMandaron(array $filas): array
+    {
+        if ($filas === []) {
+            return [];
+        }
+
+        // Vienen de la base de datos y se fuerzan a entero: no hay forma de que
+        // llegue aquí nada que no sea un número.
+        $ids = array_map(static fn (array $f): int => (int) $f['id'], $filas);
+        $lista = implode(',', $ids);
+
+        $senales = [];
+        foreach (Db::all("SELECT preinscripcion_id, codigo, etiqueta
+                            FROM preinscripcion_senales
+                           WHERE preinscripcion_id IN ({$lista})
+                           ORDER BY id") as $s) {
+            $senales[(int) $s['preinscripcion_id']][] = [
+                'codigo' => $s['codigo'],
+                'etiqueta' => $s['etiqueta'],
+                // El dibujo se resuelve contra el catálogo de hoy; la etiqueta
+                // es la que se guardó y no se toca. Ver `Senales::icono`.
+                'icono' => Senales::icono((string) $s['codigo']),
+            ];
+        }
+
+        // Fotos y videos en una sola pasada. La cédula se cuenta aparte porque
+        // es la que dice si la solicitud se puede verificar.
+        $adjuntos = [];
+        foreach (Db::all("SELECT preinscripcion_id,
+                                 SUM(tipo = 'PRE_CEDULA') AS cedulas,
+                                 SUM(tipo <> 'PRE_CEDULA') AS fotos
+                            FROM rufe_evidencias
+                           WHERE preinscripcion_id IN ({$lista})
+                           GROUP BY preinscripcion_id") as $a) {
+            $adjuntos[(int) $a['preinscripcion_id']] = [
+                'cedula' => (int) $a['cedulas'] > 0,
+                'fotos'  => (int) $a['fotos'],
+            ];
+        }
+
+        $videos = [];
+        foreach (Db::all("SELECT preinscripcion_id, COUNT(*) AS n
+                            FROM preinscripcion_videos
+                           WHERE preinscripcion_id IN ({$lista})
+                             AND ruta_relativa <> ''
+                           GROUP BY preinscripcion_id") as $v) {
+            // Solo los que conservan archivo: anunciar «2 videos» de una
+            // solicitud cuyos videos ya se purgaron mandaría a alguien a
+            // abrirla para no encontrar nada.
+            $videos[(int) $v['preinscripcion_id']] = (int) $v['n'];
+        }
+
+        foreach ($filas as $i => $fila) {
+            $id = (int) $fila['id'];
+
+            $filas[$i]['senales'] = $senales[$id] ?? [];
+            $filas[$i]['fotos'] = $adjuntos[$id]['fotos'] ?? 0;
+            $filas[$i]['cedula'] = $adjuntos[$id]['cedula'] ?? false;
+            $filas[$i]['videos'] = $videos[$id] ?? 0;
+            // Que exista el punto GPS, no cuál es: en un listado no hace falta
+            // y son las coordenadas de la casa de una familia.
+            $filas[$i]['ubicada'] = $fila['latitud'] !== null && $fila['longitud'] !== null;
+
+            unset($filas[$i]['latitud'], $filas[$i]['longitud']);
+        }
+
+        return $filas;
     }
 
     public function ver(Request $req): void
@@ -455,10 +543,17 @@ final class PreinscripcionController
                    FROM rufe_evidencias WHERE preinscripcion_id = :i ORDER BY id',
                 ['i' => $id]
             ),
-            'senales' => Db::all(
-                'SELECT codigo, etiqueta FROM preinscripcion_senales
-                  WHERE preinscripcion_id = :i ORDER BY id',
-                ['i' => $id]
+            'senales' => array_map(
+                static fn (array $s): array => [
+                    'codigo' => $s['codigo'],
+                    'etiqueta' => $s['etiqueta'],
+                    'icono' => Senales::icono((string) $s['codigo']),
+                ],
+                Db::all(
+                    'SELECT codigo, etiqueta FROM preinscripcion_senales
+                      WHERE preinscripcion_id = :i ORDER BY id',
+                    ['i' => $id]
+                )
             ),
             'videos' => Videos::deSolicitud($id),
             'historial' => Db::all(

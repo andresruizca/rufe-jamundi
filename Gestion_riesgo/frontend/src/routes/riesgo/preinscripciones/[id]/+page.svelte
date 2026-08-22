@@ -20,6 +20,7 @@
 	import { ESCRITURA } from '$lib/navigation';
 	import VisorEvidencias from '$lib/components/VisorEvidencias.svelte';
 	import VistaPreviaVideo from '$lib/preinscripcion/VistaPreviaVideo.svelte';
+	import IconoSenal from '$lib/preinscripcion/IconoSenal.svelte';
 	import { fechaHora } from '$lib/formato';
 
 	let detalle = $state<PreinscripcionDetalle | null>(null);
@@ -244,9 +245,15 @@
 					{#if detalle.senales.length === 0}
 						<span class="vacio">No marcó ninguno</span>
 					{:else}
+						<!-- Con su dibujo: es la misma figura que el ciudadano tenía
+						     delante al marcarla, y quien revisa está viendo exactamente
+						     lo que la persona creyó estar diciendo. -->
 						<ul class="senales">
 							{#each detalle.senales as s (s.codigo)}
-								<li>{s.etiqueta}</li>
+								<li>
+									<span class="senal__dibujo"><IconoSenal icono={s.icono} compacto /></span>
+									{s.etiqueta}
+								</li>
 							{/each}
 						</ul>
 					{/if}
@@ -501,11 +508,20 @@
 	}
 
 	.senales li {
-		padding: 0.15rem 0.55rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.2rem 0.6rem 0.2rem 0.3rem;
 		border: 1px solid var(--color-border-strong);
 		border-radius: 999px;
 		font-size: 0.8rem;
 		background: var(--color-surface-alt);
+	}
+
+	.senal__dibujo {
+		display: block;
+		width: 1.8rem;
+		flex: none;
 	}
 
 	.vacio {
