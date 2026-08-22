@@ -2543,6 +2543,36 @@ prueba('el catálogo público de señales no revela a qué elemento apunta cada 
     }
 });
 
+prueba('un video sale con su tipo, no como un archivo cualquiera', function (): void {
+    // Salía como `application/octet-stream`, y con `X-Content-Type-Options:
+    // nosniff` puesto —que sí queremos— el navegador se niega a decodificarlo.
+    // El reproductor mostraba un recuadro negro y nadie podía ver lo que el
+    // ciudadano grabó.
+    afirmarIgual('video/mp4', App\Rufe\Archivos::tipoDeSalida('mp4'));
+    afirmarIgual('video/webm', App\Rufe\Archivos::tipoDeSalida('webm'));
+    afirmarIgual('image/webp', App\Rufe\Archivos::tipoDeSalida('webp'));
+});
+
+prueba('todo formato que se puede subir se puede servir', function (): void {
+    // Son dos listas: una decide qué entra y otra con qué tipo sale. Añadir un
+    // formato a la primera y olvidar la segunda no rompe la subida —el video se
+    // guarda perfectamente— y solo se nota cuando alguien intenta verlo.
+    foreach (App\Preinscripcion\Videos::FORMATOS as $mime => $extension) {
+        afirmarIgual(
+            $mime,
+            App\Rufe\Archivos::tipoDeSalida($extension),
+            "el formato .{$extension} se puede subir pero no servir"
+        );
+    }
+});
+
+prueba('lo que no se reconoce sale como archivo opaco', function (): void {
+    // El caso por defecto tiene que seguir siendo el inofensivo: nada de
+    // devolver text/html para una extensión inesperada.
+    afirmarIgual('application/octet-stream', App\Rufe\Archivos::tipoDeSalida('svg'));
+    afirmarIgual('application/octet-stream', App\Rufe\Archivos::tipoDeSalida('html'));
+});
+
 prueba('el radicado ciudadano se distingue de los otros dos', function (): void {
     $r = App\Preinscripcion\Radicado::componer(2026);
 

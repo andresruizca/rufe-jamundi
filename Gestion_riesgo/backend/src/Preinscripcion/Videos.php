@@ -49,8 +49,15 @@ final class Videos
     /** Cuántos videos puede llevar una solicitud. Uno por categoría, con holgura. */
     public const MAX_VIDEOS_POR_CARGA = 8;
 
-    /** Lo que el navegador puede producir: WebM en Android, MP4 en iPhone. */
-    private const FORMATOS = [
+    /**
+     * Lo que el navegador puede producir: WebM en Android, MP4 en iPhone.
+     *
+     * Pública porque `Archivos::TIPOS_SALIDA` tiene que poder servir todo lo que
+     * esta lista deja entrar, y hay una prueba que lo comprueba: un formato
+     * añadido aquí y olvidado allí se sube sin problema y después no hay forma
+     * de verlo.
+     */
+    public const FORMATOS = [
         'video/webm' => 'webm',
         'video/mp4' => 'mp4',
         'video/quicktime' => 'mov',

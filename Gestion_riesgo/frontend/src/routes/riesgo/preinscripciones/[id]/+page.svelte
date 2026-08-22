@@ -9,7 +9,7 @@
 	// la inspección. Marcarla desde aquí permitiría cerrar una solicitud diciendo
 	// que se atendió sin que exista la ficha.
 
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import {
 		ArrowLeft, ArrowRight, Check, LoaderCircle, MapPin, TriangleAlert, Video
@@ -19,6 +19,7 @@
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { ESCRITURA } from '$lib/navigation';
 	import VisorEvidencias from '$lib/components/VisorEvidencias.svelte';
+	import VistaPreviaVideo from '$lib/preinscripcion/VistaPreviaVideo.svelte';
 	import { fechaHora } from '$lib/formato';
 
 	let detalle = $state<PreinscripcionDetalle | null>(null);
@@ -53,27 +54,70 @@
 	const yaConvertida = $derived(p?.estado === 'CONVERTIDA');
 
 	/**
-	 * Los videos se traen de uno en uno, y solo cuando alguien los pide.
+	 * Los videos se traen SEGUIDOS, no a la vez, y sin esperar a que los pidan.
 	 *
-	 * Pesan megabytes: descargarlos todos al abrir la ficha gastaría la conexión
-	 * de la oficina en videos que quizá nadie va a mirar.
+	 * Antes hacía falta pulsar «Ver el video» por cada uno, con el argumento de
+	 * que pesan megabytes y quizá nadie los mira. En la bandeja eso es cierto y
+	 * por eso allí no se traen; en ESTA pantalla no lo es: aquí solo se entra
+	 * para decidir una solicitud concreta, y para decidirla hay que verlos. El
+	 * botón obligaba a un clic a ciegas mientras las fotos de al lado ya estaban
+	 * dibujadas.
+	 *
+	 * De uno en uno y no en paralelo porque ocho peticiones de varios megabytes
+	 * a la vez se reparten el ancho de banda: ninguna termina, y la persona mira
+	 * ocho recuadros vacíos durante un minuto en vez de ver el primer video a
+	 * los pocos segundos.
 	 */
 	let urlsVideo = $state<Record<number, string>>({});
 	let cargandoVideo = $state<Record<number, boolean>>({});
+	let erroresVideo = $state<Record<number, string>>({});
 
-	async function verVideo(idVideo: number) {
+	async function traerVideo(idVideo: number) {
 		if (urlsVideo[idVideo] || cargandoVideo[idVideo]) return;
 
 		cargandoVideo = { ...cargandoVideo, [idVideo]: true };
+		erroresVideo = { ...erroresVideo, [idVideo]: '' };
 
 		try {
 			urlsVideo = { ...urlsVideo, [idVideo]: await preinscripcionApi.verVideo(id, idVideo) };
 		} catch {
-			error = 'No se pudo abrir el video.';
+			// El fallo se queda en la tarjeta del video que falló, con su propio
+			// botón de reintentar. Antes subía al aviso general de la página, donde
+			// tapaba el error de guardar un cambio de estado.
+			erroresVideo = { ...erroresVideo, [idVideo]: 'No se pudo cargar este video.' };
 		} finally {
 			cargandoVideo = { ...cargandoVideo, [idVideo]: false };
 		}
 	}
+
+	/**
+	 * Trae los videos uno detrás de otro.
+	 *
+	 * Se llama desde `cargar()` y no desde un `$effect`: el efecto leería
+	 * `cargandoVideo` y acto seguido lo escribiría, que es la receta para que se
+	 * vuelva a disparar solo. Aquí no hay nada que adivinar — se sabe
+	 * exactamente cuándo llegaron los datos.
+	 */
+	async function precargarVideos(videos: PreinscripcionDetalle['videos']) {
+		for (const v of videos) {
+			// Los purgados al cerrar la solicitud ya no tienen archivo: pedirlos
+			// sería un 404 por cada uno.
+			if (v.disponible) await traerVideo(v.id);
+		}
+	}
+
+	// Cada URL de objeto retiene su video entero en memoria. Sin esto, revisar
+	// diez solicitudes seguidas deja al navegador con todos los videos de las
+	// diez dentro.
+	onDestroy(() => {
+		for (const url of Object.values(urlsVideo)) URL.revokeObjectURL(url);
+	});
+
+	const pesoVideos = $derived(
+		(detalle?.videos ?? [])
+			.filter((v) => v.disponible)
+			.reduce((suma, v) => suma + v.tamano_bytes, 0)
+	);
 
 	function pesoLegible(bytes: number): string {
 		return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
@@ -100,6 +144,11 @@
 
 		try {
 			detalle = await preinscripcionApi.ver(id);
+
+			// Sin `await`: la ficha se dibuja ya, y los videos van llegando debajo.
+			// Esperarlos aquí dejaría la pantalla en «Cargando…» varios segundos
+			// para enseñar unos datos que están listos desde el primer momento.
+			void precargarVideos(detalle.videos);
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'No se pudo cargar la solicitud.';
 		} finally {
@@ -228,45 +277,42 @@
 
 	{#if detalle.videos.length > 0}
 		<div class="tarjeta">
-			<h2 class="tarjeta__titulo">Videos que grabó</h2>
+			<h2 class="tarjeta__titulo">
+				Videos que grabó
+				<span class="tarjeta__cuenta">
+					{detalle.videos.length}
+					{detalle.videos.length === 1 ? 'video' : 'videos'}
+					{#if pesoVideos > 0}· {pesoLegible(pesoVideos)}{/if}
+				</span>
+			</h2>
 
 			<ul class="videos">
 				{#each detalle.videos as v (v.id)}
-					<li class="video">
-						<p class="video__nombre">
-							<Video size={15} aria-hidden="true" />
-							{v.categoria_nombre}
-							<span class="video__meta">
-								{#if v.segundos}{v.segundos}s · {/if}{pesoLegible(v.tamano_bytes)}
-							</span>
-						</p>
-
-						{#if !v.disponible}
-							<!-- El archivo se borra al decidir la solicitud; la fila queda
-							     como constancia de que el video existió. -->
+					{#if v.disponible}
+						<VistaPreviaVideo
+							nombre={v.categoria_nombre}
+							segundos={v.segundos}
+							tamanoBytes={v.tamano_bytes}
+							extension={v.extension}
+							url={urlsVideo[v.id] ?? null}
+							cargando={cargandoVideo[v.id] ?? false}
+							error={erroresVideo[v.id] ?? ''}
+							alReintentar={() => traerVideo(v.id)}
+						/>
+					{:else}
+						<!-- El archivo se borra al decidir la solicitud; la fila queda
+						     como constancia de que el video existió. -->
+						<li class="video video--ido">
+							<p class="video__nombre">
+								<Video size={15} aria-hidden="true" />
+								{v.categoria_nombre}
+							</p>
 							<p class="video__ido">
 								El archivo se eliminó al cerrarse la solicitud. Queda la constancia de que se
 								grabó.
 							</p>
-						{:else if urlsVideo[v.id]}
-							<!-- svelte-ignore a11y_media_has_caption -->
-							<video class="video__reproductor" src={urlsVideo[v.id]} controls playsinline></video>
-						{:else}
-							<button
-								type="button"
-								class="boton boton--suave"
-								onclick={() => verVideo(v.id)}
-								disabled={cargandoVideo[v.id]}
-							>
-								{#if cargandoVideo[v.id]}
-									<LoaderCircle size={15} class="girando" aria-hidden="true" />
-									Cargando…
-								{:else}
-									Ver el video
-								{/if}
-							</button>
-						{/if}
-					</li>
+						</li>
+					{/if}
 				{/each}
 			</ul>
 		</div>
@@ -466,12 +512,30 @@
 		color: var(--color-muted);
 	}
 
+	/* En rejilla, como las fotos: puestos uno debajo de otro, tres videos
+	   obligaban a desplazarse para saber cuántos había. */
 	.videos {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 		gap: 0.8rem;
+	}
+
+	.tarjeta__cuenta {
+		margin-left: 0.5rem;
+		font-size: 0.78rem;
+		font-weight: 400;
+		color: var(--color-muted);
+	}
+
+	/* El video purgado no tiene reproductor, así que no comparte los estilos del
+	   componente: solo deja constancia de que existió. */
+	.video--ido {
+		padding: 0.75rem;
+		border: 1px dashed var(--color-border-strong);
+		border-radius: 12px;
 	}
 
 	.video__nombre {
@@ -484,23 +548,10 @@
 		font-weight: 600;
 	}
 
-	.video__meta {
-		font-size: 0.78rem;
-		font-weight: 400;
-		color: var(--color-muted);
-	}
-
 	.video__ido {
 		margin: 0;
 		font-size: 0.8rem;
 		color: var(--color-muted);
-	}
-
-	.video__reproductor {
-		width: 100%;
-		max-height: 60vh;
-		border-radius: 0.5rem;
-		background: #000;
 	}
 
 	.boton--grande {

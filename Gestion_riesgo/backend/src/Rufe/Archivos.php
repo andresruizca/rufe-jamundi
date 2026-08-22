@@ -362,9 +362,8 @@ final class Archivos
         }
 
         $extension = (string) $fila['extension'];
-        $mime = Catalogos::EXTENSIONES[$extension][0] ?? 'application/octet-stream';
 
-        header('Content-Type: '.$mime);
+        header('Content-Type: '.self::tipoDeSalida($extension));
         header('Content-Length: '.(string) filesize($ruta));
         header('Content-Disposition: attachment; filename="'.self::nombreDescarga($fila).'"');
         header('X-Content-Type-Options: nosniff');
@@ -374,10 +373,58 @@ final class Archivos
         readfile($ruta);
     }
 
-    /** @param array<string,mixed> $fila */
+    /**
+     * Los tipos con los que un archivo puede SALIR de aquí.
+     *
+     * Es una tabla aparte de `Catalogos::EXTENSIONES` porque esa solo conoce
+     * fotos, y por aquí también salen los videos ciudadanos. Mientras no
+     * estuvieron, todo video se emitía como `application/octet-stream`: con
+     * `X-Content-Type-Options: nosniff` puesto —que sí queremos— el navegador se
+     * niega a decodificarlo, así que la etiqueta <video> mostraba un recuadro
+     * negro y nadie podía ver lo que el ciudadano grabó.
+     *
+     * Se deriva de la EXTENSIÓN, que la pone el servidor a partir de una lista
+     * blanca, y NUNCA del `mime` que mandó el cliente: devolver como
+     * Content-Type una cadena que eligió quien sube el archivo es la forma
+     * clásica de convertir un endpoint de descarga en uno de XSS.
+     *
+     * `Videos::FORMATOS` decide qué se puede subir y esta qué se puede servir.
+     * Una prueba comprueba que no se separen: añadir un formato allí y olvidarlo
+     * aquí no rompe la subida, solo deja el video sin poder verse, que es
+     * justamente el fallo que costó encontrar.
+     *
+     * @var array<string,string>
+     */
+    public const TIPOS_SALIDA = [
+        'webp' => 'image/webp',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'webm' => 'video/webm',
+        'mp4' => 'video/mp4',
+        'mov' => 'video/quicktime',
+    ];
+
+    public static function tipoDeSalida(string $extension): string
+    {
+        return self::TIPOS_SALIDA[strtolower($extension)] ?? 'application/octet-stream';
+    }
+
+    /**
+     * El nombre con el que se guarda al descargar.
+     *
+     * Las fotos traen el `nombre_original` que puso el teléfono; los videos no
+     * —se graban dentro de la aplicación y nunca tuvieron nombre de archivo—,
+     * así que la clave puede no existir. Leerla a ciegas emitía un aviso de PHP
+     * que, en local, se colaba DENTRO del cuerpo de la respuesta y corrompía el
+     * archivo: los primeros bytes del video eran «<br /><b>Warning</b>».
+     *
+     * @param array<string,mixed> $fila
+     */
     private static function nombreDescarga(array $fila): string
     {
-        $base = pathinfo((string) $fila['nombre_original'], PATHINFO_FILENAME);
+        $origen = (string) ($fila['nombre_original'] ?? $fila['categoria_nombre'] ?? '');
+
+        $base = pathinfo($origen, PATHINFO_FILENAME);
         $base = preg_replace('/[^A-Za-z0-9 _\-]/', '', $base) ?: 'evidencia';
 
         return substr($base, 0, 60).'.'.$fila['extension'];
