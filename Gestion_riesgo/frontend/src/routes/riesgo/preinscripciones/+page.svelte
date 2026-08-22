@@ -5,10 +5,14 @@
 	// gente envía no lo ve nadie. Por defecto se muestran las que están sin
 	// atender, que es el trabajo pendiente; el resto se consulta con el filtro.
 
-	import { onMount } from 'svelte';
-	import { IdCard, Image, Inbox, LoaderCircle, MapPin, Video } from '@lucide/svelte';
+	import { onMount, tick } from 'svelte';
+	import {
+		IdCard, Image, Inbox, LoaderCircle, MapPin, Trash2, TriangleAlert, Video, X
+	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi } from '$lib/api/servicios';
+	import { sesion } from '$lib/stores/sesion.svelte';
+	import { SOLO_ADMIN } from '$lib/navigation';
 	import { fechaHora } from '$lib/formato';
 	import IconoSenal from '$lib/preinscripcion/IconoSenal.svelte';
 
@@ -92,6 +96,81 @@
 	}
 
 	const ETIQUETA_ZONA: Record<string, string> = { URBANA: 'Urbana', RURAL: 'Rural' };
+
+	// ── Eliminar ────────────────────────────────────────────────────────────
+	//
+	// Destruye los datos de un ciudadano y no se deshace, así que va detrás de un
+	// diálogo que nombra a quién se borra y exige escribir por qué. En una tabla
+	// el botón queda a un dedo de la fila de al lado: el diálogo es justamente lo
+	// que convierte un resbalón en un susto en vez de en una pérdida.
+
+	const puedeBorrar = $derived(!!sesion.rol && SOLO_ADMIN.includes(sesion.rol));
+
+	let aBorrar = $state<Fila | null>(null);
+	let motivoBorrado = $state('');
+	let borrando = $state(false);
+	let errorBorrado = $state('');
+	let avisoBorrado = $state('');
+	let campoMotivo = $state<HTMLInputElement | null>(null);
+
+	async function pedirBorrado(f: Fila) {
+		aBorrar = f;
+		motivoBorrado = '';
+		errorBorrado = '';
+
+		// `tick()` no es opcional: el campo solo existe en el DOM cuando el
+		// diálogo ya está dibujado, y Svelte lo dibuja DESPUÉS de esta línea.
+		await tick();
+		campoMotivo?.focus();
+	}
+
+	function cerrarBorrado() {
+		if (borrando) return;
+		aBorrar = null;
+		motivoBorrado = '';
+		errorBorrado = '';
+	}
+
+	async function confirmarBorrado() {
+		if (!aBorrar || borrando || motivoBorrado.trim().length < 5) return;
+
+		const ficha = aBorrar;
+		borrando = true;
+		errorBorrado = '';
+
+		try {
+			await preinscripcionApi.eliminar(ficha.id, motivoBorrado.trim());
+
+			// Se quita de la tabla en vez de recargar: recargar devolvería a la
+			// primera página y perdería el filtro que tuviera puesto.
+			filas = filas.filter((x) => x.id !== ficha.id);
+			total = Math.max(0, total - 1);
+			avisoBorrado = `Se eliminó ${ficha.radicado}.`;
+			aBorrar = null;
+			motivoBorrado = '';
+		} catch (e) {
+			errorBorrado = e instanceof ApiError ? e.message : 'No se pudo eliminar la solicitud.';
+		} finally {
+			borrando = false;
+		}
+	}
+
+	function cuantosArchivos(f: Fila): number {
+		return f.fotos + f.videos + (f.cedula ? 1 : 0);
+	}
+
+	// Con el diálogo abierto, la rueda del ratón movía la tabla de detrás y al
+	// cerrarlo uno aparecía en otro punto del listado sin saber por qué.
+	$effect(() => {
+		if (!aBorrar) return;
+
+		const previo = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+
+		return () => {
+			document.body.style.overflow = previo;
+		};
+	});
 </script>
 
 <div class="tarjeta">
@@ -115,6 +194,7 @@
 	</div>
 
 	{#if error}<p class="aviso aviso--error" role="alert">{error}</p>{/if}
+	{#if avisoBorrado}<p class="aviso aviso--exito" role="status">{avisoBorrado}</p>{/if}
 
 	{#if cargando}
 		<p class="cargando"><LoaderCircle size={18} class="girando" aria-hidden="true" /> Cargando…</p>
@@ -135,6 +215,9 @@
 						<th scope="col">Adjuntó</th>
 						<th scope="col">Recibida</th>
 						<th scope="col">Estado</th>
+						{#if puedeBorrar}
+							<th scope="col"><span class="solo-lectores">Acciones</span></th>
+						{/if}
 					</tr>
 				</thead>
 				<tbody>
@@ -211,6 +294,31 @@
 
 							<td class="fecha">{fechaHora(f.creado_en)}</td>
 							<td><span class="marca">{ETIQUETA_ESTADO[f.estado] ?? f.estado}</span></td>
+
+							{#if puedeBorrar}
+								<td>
+									<!--
+										Una solicitud ya convertida no se puede borrar: ninguna ficha
+										de inspección guarda de qué solicitud nació, y borrarla dejaría
+										esa visita sin nada que la explique. Se muestra el botón
+										desactivado y no se esconde, para que se entienda por qué.
+									-->
+									<button
+										type="button"
+										class="borrar"
+										disabled={f.estado === 'CONVERTIDA'}
+										title={f.estado === 'CONVERTIDA'
+											? 'Ya se convirtió en inspección: es lo único que explica por qué se hizo esa visita'
+											: `Eliminar ${f.radicado}`}
+										onclick={() => pedirBorrado(f)}
+									>
+										<Trash2 size={15} aria-hidden="true" />
+										<span class="solo-lectores">
+											Eliminar {f.radicado} de {f.nombre_completo}
+										</span>
+									</button>
+								</td>
+							{/if}
 						</tr>
 					{/each}
 				</tbody>
@@ -240,6 +348,94 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- ── Diálogo de borrado ───────────────────────────────────────────────── -->
+{#if aBorrar}
+	<!--
+		`role="dialog"` con `aria-modal`: sin ellos el lector de pantalla sigue
+		leyendo la tabla de detrás como si nada, y quien lo usa no se entera de que
+		hay una pregunta esperando respuesta.
+	-->
+	<div
+		class="velo"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="titulo-borrado"
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') cerrarBorrado();
+		}}
+	>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="velo__fondo" onclick={cerrarBorrado}></div>
+
+		<div class="dialogo">
+			<h2 class="dialogo__titulo" id="titulo-borrado">
+				<TriangleAlert size={18} aria-hidden="true" />
+				Eliminar la solicitud
+			</h2>
+
+			<p class="dialogo__texto">
+				Va a borrar <strong>{aBorrar.radicado}</strong>, de {aBorrar.nombre_completo}.
+				{#if cuantosArchivos(aBorrar) > 0}
+					Se llevará
+					{cuantosArchivos(aBorrar)}
+					{cuantosArchivos(aBorrar) === 1 ? 'archivo' : 'archivos'} y todo su historial.
+				{:else}
+					No tiene archivos adjuntos.
+				{/if}
+				<strong>No se puede deshacer.</strong>
+			</p>
+
+			<p class="dialogo__alternativa">
+				Si solo quiere sacarla de la cola, ábrala y márquela como «Descartada»: así deja de
+				aparecer sin destruir nada.
+			</p>
+
+			<div class="campo">
+				<label class="campo__etiqueta" for="motivo-borrado">¿Por qué se borra? *</label>
+				<input
+					id="motivo-borrado"
+					class="campo__control"
+					bind:this={campoMotivo}
+					bind:value={motivoBorrado}
+					placeholder="Ej.: registro de prueba"
+					disabled={borrando}
+				/>
+				<span class="campo__ayuda">
+					Queda en la auditoría con el radicado y su usuario. Es lo único que quedará de esta
+					solicitud.
+				</span>
+			</div>
+
+			{#if errorBorrado}
+				<p class="aviso aviso--error" role="alert">{errorBorrado}</p>
+			{/if}
+
+			<div class="dialogo__acciones">
+				<button type="button" class="boton boton--suave" onclick={cerrarBorrado} disabled={borrando}>
+					<X size={15} aria-hidden="true" />
+					Cancelar
+				</button>
+				<button
+					type="button"
+					class="boton boton--peligro"
+					onclick={confirmarBorrado}
+					disabled={borrando || motivoBorrado.trim().length < 5}
+				>
+					{#if borrando}
+						<LoaderCircle size={15} class="girando" aria-hidden="true" />
+						Eliminando…
+					{:else}
+						<Trash2 size={15} aria-hidden="true" />
+						Sí, eliminar
+					{/if}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.filtros {
@@ -362,6 +558,106 @@
 		de accesibilidad, y entonces la columna de señales sería ocho dibujos sin
 		una sola palabra que los nombre.
 	*/
+	.borrar {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 8px;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+
+	.borrar:hover:not(:disabled) {
+		border-color: var(--color-danger);
+		background: var(--color-danger-bg);
+		color: var(--color-danger);
+	}
+
+	.borrar:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+
+	.velo {
+		position: fixed;
+		inset: 0;
+		z-index: 80;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+	}
+
+	.velo__fondo {
+		position: absolute;
+		inset: 0;
+		background: rgb(4 12 26 / 68%);
+	}
+
+	.dialogo {
+		position: relative;
+		width: min(30rem, 100%);
+		max-height: 90vh;
+		overflow-y: auto;
+		padding: 1.2rem;
+		border: 1px solid var(--color-border);
+		border-radius: 14px;
+		background: var(--color-surface);
+		box-shadow: 0 20px 60px rgb(4 12 26 / 45%);
+	}
+
+	.dialogo__titulo {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin: 0 0 0.7rem;
+		font-size: 1.02rem;
+		color: var(--color-danger);
+	}
+
+	.dialogo__texto {
+		margin: 0 0 0.7rem;
+		font-size: 0.88rem;
+		line-height: 1.5;
+	}
+
+	.dialogo__alternativa {
+		margin: 0 0 1rem;
+		padding: 0.6rem 0.75rem;
+		border-left: 3px solid var(--color-border-strong);
+		border-radius: 0 8px 8px 0;
+		background: var(--color-surface-alt);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
+	.dialogo__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-top: 1rem;
+	}
+
+	.dialogo__acciones .boton {
+		flex: 1;
+		justify-content: center;
+		min-height: 42px;
+	}
+
+	.boton--peligro {
+		background: var(--color-danger);
+		color: #fff;
+	}
+
+	.boton--peligro:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-danger) 88%, black);
+	}
+
 	.solo-lectores {
 		position: absolute;
 		width: 1px;
