@@ -1,0 +1,16 @@
+node_modules/
+build/
+.svelte-kit/
+
+# Lo genera `cap add android`; se reconstruye y pesa decenas de megabytes.
+# Lo que SÍ se versiona son los archivos propios bajo android/app/src/main/java/
+# y los recursos: ver .gitignore de esa carpeta cuando exista.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# NUNCA en el repositorio: firma el APK que se distribuye a la ciudadanía.
+*.keystore
+*.jks
+firma.properties

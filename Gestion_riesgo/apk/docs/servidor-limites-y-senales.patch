@@ -1,0 +1,303 @@
+diff --git a/Gestion_riesgo/backend/src/Controllers/PreinscripcionController.php b/Gestion_riesgo/backend/src/Controllers/PreinscripcionController.php
+index 58b9347..2f21a6d 100644
+--- a/Gestion_riesgo/backend/src/Controllers/PreinscripcionController.php
++++ b/Gestion_riesgo/backend/src/Controllers/PreinscripcionController.php
+@@ -57,6 +57,77 @@ final class PreinscripcionController
+     /** Ocho videos de ocho trozos, con margen de reintento por mala señal. */
+     private const MAX_TROZOS_HORA = 300;
+ 
++    /**
++     * Cuánto se le permite a UNA conexión cuando quien pide se identifica como
++     * dispositivo. Ver `limitar()`.
++     *
++     * Ocho veces el tope por dispositivo: una brigada que ayuda a veinte
++     * familias en una vereda y baja al pueblo a sincronizar cabe holgada, y un
++     * robot desde una sola conexión sigue teniendo un techo.
++     */
++    private const FACTOR_POR_CONEXION = 8;
++
++    /**
++     * El identificador de instalación del APK, si viene y es plausible.
++     *
++     * Lo genera el teléfono al instalarse y no identifica a nadie: es un número
++     * aleatorio que solo sirve para repartir la cuota. Se acepta hexadecimal de
++     * 16 a 64 caracteres —lo que produce `random_bytes`— y cualquier otra cosa
++     * se ignora como si no hubiera venido.
++     */
++    private function dispositivo(Request $req): ?string
++    {
++        $id = trim($req->texto('dispositivo_id'));
++
++        if ($id === '') {
++            $id = trim((string) ($_SERVER['HTTP_X_DISPOSITIVO_ID'] ?? ''));
++        }
++
++        return preg_match('/^[a-f0-9]{16,64}$/i', $id) === 1 ? strtolower($id) : null;
++    }
++
++    /**
++     * Consume cuota repartiendo por dispositivo cuando se puede.
++     *
++     * El problema que resuelve: `Limite` contaba solo por IP, y los operadores
++     * móviles colombianos usan CGNAT —una vereda entera sale por la misma IP
++     * pública—. Con cinco envíos por hora y por IP, la sexta familia de un
++     * corregimiento recibía un rechazo por hacer exactamente lo que se le pidió.
++     *
++     * Cuando hay dispositivo se cuentan DOS presupuestos, con contadores
++     * separados:
++     *
++     *   • por dispositivo → el tope de siempre, que es el de una persona;
++     *   • por conexión    → un techo más alto, que sigue frenando a un robot.
++     *
++     * Sin dispositivo —el formulario web— nada cambia: se cuenta por IP con el
++     * tope original. Es un ensanche deliberado y acotado: quien falsifique
++     * identificadores consigue el techo por conexión, no el infinito.
++     */
++    private function limitar(
++        Request $req,
++        string $accion,
++        int $maximo,
++        string $mensaje = 'Ha realizado demasiadas solicitudes. Espere unos minutos e intente de nuevo.'
++    ): void {
++        $dispositivo = $this->dispositivo($req);
++
++        if ($dispositivo === null) {
++            Limite::consumir($accion, $req->ip(), $maximo, 3600, $mensaje);
++
++            return;
++        }
++
++        Limite::consumir($accion.'.disp', $dispositivo, $maximo, 3600, $mensaje);
++        Limite::consumir(
++            $accion.'.conexion',
++            $req->ip(),
++            $maximo * self::FACTOR_POR_CONEXION,
++            3600,
++            $mensaje
++        );
++    }
++
+     // ── Público ──────────────────────────────────────────────────────────────
+ 
+     /**
+@@ -118,11 +189,10 @@ final class PreinscripcionController
+      */
+     public function abrirCarga(Request $req): void
+     {
+-        Limite::consumir(
++        $this->limitar(
++            $req,
+             'preinscripcion.carga',
+-            $req->ip(),
+             self::MAX_CARGAS_HORA,
+-            3600,
+             'Demasiados intentos desde esta conexión. Espere unos minutos.'
+         );
+ 
+@@ -151,11 +221,10 @@ final class PreinscripcionController
+     /** Una foto por petición, para poder mostrar progreso y reintentar solo la que falló. */
+     public function subirArchivo(Request $req): void
+     {
+-        Limite::consumir(
++        $this->limitar(
++            $req,
+             'preinscripcion.archivo',
+-            $req->ip(),
+             self::MAX_ARCHIVOS_HORA,
+-            3600,
+             'Demasiadas fotos desde esta conexión. Espere unos minutos.'
+         );
+ 
+@@ -192,11 +261,10 @@ final class PreinscripcionController
+     /** Reserva un video y devuelve cuántos trozos hay que mandar. */
+     public function iniciarVideo(Request $req): void
+     {
+-        Limite::consumir(
++        $this->limitar(
++            $req,
+             'preinscripcion.video',
+-            $req->ip(),
+             self::MAX_VIDEOS_HORA,
+-            3600,
+             'Demasiados videos desde esta conexión. Espere unos minutos.'
+         );
+ 
+@@ -219,11 +287,10 @@ final class PreinscripcionController
+     /** Un trozo del video. Llegan en orden y se pegan al final del archivo. */
+     public function subirTrozo(Request $req): void
+     {
+-        Limite::consumir(
++        $this->limitar(
++            $req,
+             'preinscripcion.trozo',
+-            $req->ip(),
+             self::MAX_TROZOS_HORA,
+-            3600,
+             'Demasiadas peticiones desde esta conexión. Espere unos minutos.'
+         );
+ 
+@@ -242,11 +309,10 @@ final class PreinscripcionController
+ 
+     public function crear(Request $req): void
+     {
+-        Limite::consumir(
++        $this->limitar(
++            $req,
+             'preinscripcion.intento',
+-            $req->ip(),
+             self::MAX_INTENTOS_HORA,
+-            3600,
+             'Demasiadas solicitudes desde esta conexión. Espere unos minutos.'
+         );
+ 
+@@ -294,7 +360,7 @@ final class PreinscripcionController
+             return;
+         }
+ 
+-        Limite::consumir('preinscripcion.enviar', $req->ip(), self::MAX_ENVIOS_HORA, 3600);
++        $this->limitar($req, 'preinscripcion.enviar', self::MAX_ENVIOS_HORA);
+ 
+         $revision = Validador::revisar($req->todo());
+         if ($revision['errores'] !== []) {
+diff --git a/Gestion_riesgo/backend/src/Core/Limite.php b/Gestion_riesgo/backend/src/Core/Limite.php
+index 0f1e457..f4dea70 100644
+--- a/Gestion_riesgo/backend/src/Core/Limite.php
++++ b/Gestion_riesgo/backend/src/Core/Limite.php
+@@ -7,9 +7,14 @@ namespace App\Core;
+ /**
+  * Control de tasa por ventana fija sobre la tabla `rufe_limite`.
+  *
+- * No se guarda la IP: la clave es un SHA-256 de acción + IP + sal + número de
+- * ventana. Basta para contar a quien abusa y no conserva un dato personal que
+- * el proceso de atención no necesita.
++ * No se guarda el sujeto: la clave es un SHA-256 de acción + sujeto + sal +
++ * número de ventana. Basta para contar a quien abusa y no conserva un dato
++ * personal que el proceso de atención no necesita.
++ *
++ * El sujeto suele ser la IP, pero no tiene por qué serlo. El APK ciudadano manda
++ * además un identificador de instalación, porque los operadores móviles
++ * colombianos comparten una IP pública entre muchos abonados —CGNAT— y contar
++ * solo por IP dejaría a una vereda entera con la cuota de una sola persona.
+  *
+  * Ventana fija y no deslizante porque una deslizante exige guardar una fila por
+  * evento; con ventana fija basta un contador. El precio es que en el borde de
+@@ -24,17 +29,18 @@ final class Limite
+      * Suma uno al contador y falla con 429 si se pasó del máximo.
+      *
+      * @param  string  $accion      identificador corto, p. ej. 'rufe.enviar'
++     * @param  string  $sujeto      a quién se le cuenta: una IP o un dispositivo
+      * @param  int     $ventanaSeg  duración de la ventana en segundos
+      */
+     public static function consumir(
+         string $accion,
+-        string $ip,
++        string $sujeto,
+         int $maximo,
+         int $ventanaSeg,
+         string $mensaje = 'Ha realizado demasiadas solicitudes. Espere unos minutos e intente de nuevo.'
+     ): void {
+         $inicio = intdiv(time(), $ventanaSeg) * $ventanaSeg;
+-        $clave = self::clave($accion, $ip, $inicio);
++        $clave = self::clave($accion, $sujeto, $inicio);
+ 
+         // LAST_INSERT_ID(expr) fija el valor que devolverá lastInsertId() en esta
+         // conexión, así que el incremento y su lectura ocurren en una sola
+@@ -62,20 +68,20 @@ final class Limite
+     }
+ 
+     /** Cuántos usos lleva la ventana actual, sin consumir uno. */
+-    public static function usos(string $accion, string $ip, int $ventanaSeg): int
++    public static function usos(string $accion, string $sujeto, int $ventanaSeg): int
+     {
+         $inicio = intdiv(time(), $ventanaSeg) * $ventanaSeg;
+         $fila = Db::first(
+             'SELECT contador FROM rufe_limite WHERE clave = :c',
+-            ['c' => self::clave($accion, $ip, $inicio)]
++            ['c' => self::clave($accion, $sujeto, $inicio)]
+         );
+ 
+         return (int) ($fila['contador'] ?? 0);
+     }
+ 
+-    private static function clave(string $accion, string $ip, int $ventanaInicio): string
++    private static function clave(string $accion, string $sujeto, int $ventanaInicio): string
+     {
+-        return hash('sha256', $accion.'|'.$ip.'|'.$ventanaInicio.'|'.self::sal());
++        return hash('sha256', $accion.'|'.$sujeto.'|'.$ventanaInicio.'|'.self::sal());
+     }
+ 
+     /**
+diff --git a/Gestion_riesgo/backend/src/Preinscripcion/Senales.php b/Gestion_riesgo/backend/src/Preinscripcion/Senales.php
+index 3a71680..c276dd3 100644
+--- a/Gestion_riesgo/backend/src/Preinscripcion/Senales.php
++++ b/Gestion_riesgo/backend/src/Preinscripcion/Senales.php
+@@ -103,7 +103,26 @@ final class Senales
+         ],
+     ];
+ 
+-    /** @return list<string> */
++    /**
++     * Los códigos que un envío puede traer, HOY y siempre.
++     *
++     * De este catálogo **solo se añade, nunca se quita.** Es una regla y no una
++     * costumbre, y hay una prueba que la hace cumplir.
++     *
++     * El motivo: el APK ciudadano lleva el formulario embebido y funciona sin
++     * conexión, así que un teléfono puede estar mandando el catálogo de hace
++     * seis meses. `Validador::estadoVivienda` rechaza el envío ENTERO si llega
++     * un código desconocido —lo correcto para la web, donde el formulario
++     * siempre está al día— y con un APK viejo eso significaría perder la
++     * solicitud completa de una familia por un código retirado.
++     *
++     * Si algún día hay que dejar de OFRECER una señal, se saca de
++     * `paraApi()` marcándola inactiva; aquí se queda para siempre. Es la misma
++     * disciplina que ya protege a `categorias_video`, que se desactivan en vez
++     * de borrarse.
++     *
++     * @return list<string>
++     */
+     public static function codigos(): array
+     {
+         return array_column(self::CATALOGO, 'codigo');
+diff --git a/Gestion_riesgo/backend/tests/run.php b/Gestion_riesgo/backend/tests/run.php
+index ed8dea0..1978ee4 100644
+--- a/Gestion_riesgo/backend/tests/run.php
++++ b/Gestion_riesgo/backend/tests/run.php
+@@ -2576,6 +2576,37 @@ prueba('las señales cubren todos los grupos de elementos evaluables', function
+     }
+ });
+ 
++prueba('del catálogo de señales solo se añade, nunca se quita', function (): void {
++    // Esta lista está escrita a mano y a propósito. NO se deriva de
++    // `Senales::CATALOGO`: si se derivara, diría «sí» a cualquier cosa que el
++    // catálogo dijera, que es justo lo que hay que impedir.
++    //
++    // Lo que está en juego: el APK ciudadano lleva el formulario embebido y
++    // funciona sin conexión, así que un teléfono puede estar mandando el
++    // catálogo de hace seis meses. El validador rechaza el envío ENTERO ante un
++    // código desconocido, de modo que retirar una señal de aquí no dejaría un
++    // campo vacío: perdería la solicitud completa de una familia.
++    //
++    // Añadir una señal nueva no rompe esta prueba. Quitar una, sí.
++    $siempreAceptados = [
++        'PARED_AGRIETADA',
++        'PARED_CAIDA',
++        'COLUMNA_DANADA',
++        'TECHO_TEJAS',
++        'TECHO_CAIDO',
++        'PISO_DANADO',
++        'AGUA_DANADA',
++        'LUZ_DANADA',
++    ];
++
++    foreach ($siempreAceptados as $codigo) {
++        afirmar(
++            App\Preinscripcion\Senales::existe($codigo),
++            "se retiró la señal {$codigo}: un APK sin actualizar perdería la solicitud entera"
++        );
++    }
++});
++
+ prueba('cada señal resuelve su dibujo, y una desconocida no revienta', function (): void {
+     // El dibujo NO se guarda con la solicitud: se resuelve contra el catálogo de
+     // hoy, para que mejorar una figura la mejore también en los expedientes

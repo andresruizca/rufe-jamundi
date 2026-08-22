@@ -1,0 +1,44 @@
+{
+  "name": "sgr-jamundi-apk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "APK Android del formulario ciudadano de pre-inscripción. Registra sin conexión y sincroniza solo.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "npm run test:deriva && npm run test:esquema && npm run test:unit",
+    "test:unit": "vitest --run",
+    "test:deriva": "node scripts/comparar-con-web.mjs",
+    "cap:sync": "npm run build && cap sync android",
+    "cap:abrir": "cap open android",
+    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "apk:firmado": "npm run cap:sync && cd android && ./gradlew assembleRelease",
+    "test:esquema": "node scripts/comprobar-esquema.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/node": "^22",
+    "svelte": "^5.56.1",
+    "svelte-check": "^4.6.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
+  },
+  "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.0",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/camera": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/network": "^7.0.0",
+    "@lucide/svelte": "^1.31.0",
+    "browser-image-compression": "^2.0.2"
+  }
+}
