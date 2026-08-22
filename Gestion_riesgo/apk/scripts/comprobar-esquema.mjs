@@ -16,7 +16,7 @@
 // archivos que cree eliminados.
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,6 +122,62 @@ try {
 		sql("SELECT valor FROM ajustes WHERE clave='api_base'") ===
 			'https://grj.oticjamundi.com/api',
 		'la URL de la API viene puesta y es la de producción'
+	);
+	// ── El SQL de registros.ts, ejecutado de verdad ─────────────────────────
+	//
+	// No basta con leerlo: el fallo clásico es que las columnas y los marcadores
+	// no cuadren, y eso no se ve mirando. Ya pasó en el backend de este mismo
+	// proyecto —una columna en la lista y sin su marcador en VALUES— y solo
+	// apareció al mandar una petición real.
+	//
+	// Aquí se extraen las sentencias del propio archivo y se ejecutan, así que
+	// si alguien añade una columna y olvida su marcador, esto falla.
+
+	const fuente = readFileSync(join(aqui, '..', 'src', 'local', 'registros.ts'), 'utf8');
+
+	const insercion = fuente
+		.slice(fuente.indexOf('INSERT INTO registros'), fuente.indexOf("VALUES (?,?"))
+		.concat(fuente.slice(fuente.indexOf('VALUES (?,?'), fuente.indexOf("`,\n\t\t\tvalues")))
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	const marcadores = (insercion.match(/\?/g) ?? []).length;
+
+	// 18 valores en el arreglo de registros.ts. Si cambian las columnas, cambia
+	// este número y hay que mirarlo, que es justo lo que se busca.
+	afirmar(marcadores === 18, `el INSERT lleva ${marcadores} marcadores (se esperaban 18)`);
+
+	let insertoBien = true;
+	try {
+		sql(`PRAGMA foreign_keys = ON; ${insercion.replace(/\?/g, "'x'")};`);
+	} catch (e) {
+		insertoBien = false;
+		console.log(`      ${String(e).split('\n')[0]}`);
+	}
+
+	afirmar(insertoBien, 'el INSERT de registros.ts cuadra columnas y marcadores');
+
+	afirmar(
+		Number(sql("SELECT COUNT(*) FROM registros WHERE estado='PENDIENTE'")) >= 1,
+		'un registro recién guardado nace PENDIENTE, listo para que Kotlin lo tome'
+	);
+
+	// El SELECT de listar(), con su subconsulta de adjuntos.
+	let listaBien = true;
+	try {
+		sql(`SELECT r.id, r.estado,
+		            (SELECT COUNT(*) FROM adjuntos a WHERE a.registro_id = r.id) AS adjuntos
+		       FROM registros r ORDER BY r.creado_en DESC`);
+	} catch {
+		listaBien = false;
+	}
+
+	afirmar(listaBien, 'el listado de «Mis registros» corre, con su cuenta de adjuntos');
+
+	afirmar(
+		sql("SELECT COUNT(*) FROM registros WHERE estado IN ('PENDIENTE','SINCRONIZANDO','ERROR')") !==
+			'',
+		'la cuenta de «solicitudes sin enviar» corre — es el aviso de no desinstalar'
 	);
 } finally {
 	rmSync(temporal, { recursive: true, force: true });
