@@ -22,9 +22,10 @@ import { fileURLToPath } from 'node:url';
 const aqui = dirname(fileURLToPath(import.meta.url));
 const raizApk = join(aqui, '..');
 
-// El original vive fuera de esta carpeta. Es la ÚNICA referencia hacia afuera y
-// solo se lee: nada del APK se escribe ahí.
-const raizWeb = join(raizApk, '..', 'frontend', 'src', 'lib', 'preinscripcion');
+// Los originales viven fuera de esta carpeta. Es la ÚNICA referencia hacia
+// afuera y solo se lee: nada del APK se escribe ahí.
+const raizPre = join(raizApk, '..', 'frontend', 'src', 'lib', 'preinscripcion');
+const raizRufe = join(raizApk, '..', 'frontend', 'src', 'lib', 'rufe-form');
 
 /**
  * Qué se compara, y con qué permiso de apartarse.
@@ -52,7 +53,12 @@ const ARCHIVOS = [
 	},
 	{
 		nombre: 'video.ts',
-		motivo: null
+		motivo:
+			'El original trae además `subirVideo()`, que parte el video en trozos y ' +
+			'los manda uno a uno. En el APK sube `SyncWorker.kt`, con la aplicación ' +
+			'cerrada y sin WebView: una función de subida en TypeScript que nadie ' +
+			'llama sería código muerto. Se conserva la detección de formato, que es ' +
+			'lo que evita grabar en un códec que el servidor rechaza después.'
 	},
 	{
 		nombre: 'GrabadorVideo.svelte',
@@ -60,6 +66,17 @@ const ARCHIVOS = [
 			'En el APK el video se guarda en el teléfono y lo sube WorkManager más ' +
 			'tarde; en la web se sube en el momento. La grabación es la misma, el ' +
 			'destino no.'
+	},
+	{
+		nombre: 'imagen.ts',
+		origen: raizRufe,
+		motivo:
+			'Dos cambios. (1) No importa `./tipos`, que aquí no existe: declara el ' +
+			'suyo. (2) `escaleraPara` trata PRE_CEDULA como documento. En la web, ' +
+			'PRE_CEDULA cae en la escalera del daño y puede bajar a 1440 px, por ' +
+			'debajo del piso de 1600 px que el propio archivo declara necesario ' +
+			'para leer un número de cédula. Corregirlo en la web es un arreglo ' +
+			'aparte, no del APK.'
 	}
 ];
 
@@ -71,9 +88,9 @@ let iguales = 0;
 const distintos = [];
 const perdidos = [];
 
-for (const { nombre, motivo } of ARCHIVOS) {
+for (const { nombre, motivo, origen } of ARCHIVOS) {
 	const enApk = join(raizApk, 'src', 'formulario', nombre);
-	const enWeb = join(raizWeb, nombre);
+	const enWeb = join(origen ?? raizPre, nombre);
 
 	if (!existsSync(enWeb)) {
 		perdidos.push(`${nombre} — ya no existe en la web; revise si el APK debe seguir teniéndolo`);

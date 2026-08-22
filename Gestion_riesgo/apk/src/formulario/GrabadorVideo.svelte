@@ -20,7 +20,8 @@
 	import {
 		CheckCircle2, LoaderCircle, RotateCcw, Square, TriangleAlert, Video, X
 	} from '@lucide/svelte';
-	import { ErrorDeVideo, RESTRICCIONES, formatoSoportado, mimeBase, subirVideo } from './video';
+	import { RESTRICCIONES, formatoSoportado, mimeBase } from './video';
+	import { guardarVideo } from '../captura/video';
 
 	type Categoria = {
 		id: number;
@@ -33,21 +34,31 @@
 
 	type Props = {
 		categoria: Categoria;
-		carga: string | null;
+		/**
+		 * A qué solicitud pertenece.
+		 *
+		 * ⚠ Aquí el APK se aparta de la web. Allá la propiedad era `carga`: el
+		 * testigo de subida del servidor, porque el video salía en el acto. Aquí
+		 * el video se guarda en el teléfono y lo sube `SyncWorker.kt` horas
+		 * después, así que lo que hace falta es a qué registro local pertenece.
+		 */
+		registroId: string;
 		/** Se avisa al terminar para que el formulario sepa qué falta. */
 		alSubir?: (categoriaId: number) => void;
 		/**
-		 * Se avisa mientras este video está subiendo.
+		 * Se avisa mientras este video se está guardando.
 		 *
-		 * El formulario lo necesita para no dejar enviar a medias: un video que
-		 * no terminó de subir llega al servidor incompleto, y ahí se BORRA. La
-		 * persona vería «Solicitud registrada» y su video no existiría en ningún
-		 * sitio, sin que nadie se lo dijera.
+		 * En la web esto impedía enviar con una subida a medias, porque un video
+		 * incompleto llega al servidor y allí se BORRA. Aquí guardar en disco es
+		 * cosa de un instante, pero el aviso se conserva: escribir ocho megas en
+		 * un teléfono modesto tarda lo suyo, y salir de la pantalla a media
+		 * escritura dejaría un archivo truncado que el sincronizador daría por
+		 * bueno.
 		 */
 		alSubiendo?: (categoriaId: number, subiendo: boolean) => void;
 	};
 
-	let { categoria, carga, alSubir, alSubiendo }: Props = $props();
+	let { categoria, registroId, alSubir, alSubiendo }: Props = $props();
 
 	type Fase = 'listo' | 'camara' | 'cuenta' | 'grabando' | 'revisando' | 'subiendo' | 'subido';
 
@@ -208,8 +219,16 @@
 		fase = 'listo';
 	}
 
+	/**
+	 * Guarda el video en el teléfono. NO lo sube: de eso se encarga
+	 * `SyncWorker.kt` cuando haya señal, con la aplicación cerrada si hace falta.
+	 *
+	 * Por eso no hay barra de progreso de red ni reintentos aquí: escribir en
+	 * disco funciona o no funciona. Se conserva `progreso` para que la pantalla
+	 * siga siendo la misma que en la web mientras se escribe.
+	 */
 	async function subir() {
-		if (!grabado || !carga) return;
+		if (!grabado) return;
 
 		fase = 'subiendo';
 		progreso = 0;
@@ -217,22 +236,34 @@
 		alSubiendo?.(categoria.id, true);
 
 		try {
-			await subirVideo(carga, categoria.id, grabado, mime, segundos, (e) => {
-				progreso = Math.round((e.subidos / e.total) * 100);
+			const guardado = await guardarVideo(registroId, {
+				blob: grabado,
+				mime: mimeBase(mime),
+				segundos,
+				categoriaId: categoria.id,
+				categoriaNombre: categoria.nombre
 			});
 
+			if (!guardado.ok) {
+				error = guardado.motivo;
+				fase = 'revisando';
+
+				return;
+			}
+
+			progreso = 100;
 			fase = 'subido';
 			alSubir?.(categoria.id);
 		} catch (e) {
 			error =
-				e instanceof ErrorDeVideo
+				e instanceof Error && e.message !== ''
 					? e.message
-					: 'No se pudo subir el video. Puede intentarlo otra vez o continuar sin él.';
+					: 'No se pudo guardar el video en este teléfono. Puede intentarlo otra vez o continuar sin él.';
 			fase = 'revisando';
 		} finally {
-			// En `finally` y no solo en el camino bueno: si la subida falla y esto
-			// no se ejecutara, el formulario se quedaría bloqueado para siempre
-			// esperando un video que ya no está subiendo.
+			// En `finally` y no solo en el camino bueno: si falla y esto no se
+			// ejecutara, el formulario se quedaría bloqueado para siempre
+			// esperando un video que ya no se está guardando.
 			alSubiendo?.(categoria.id, false);
 		}
 	}
@@ -284,7 +315,11 @@
 				<RotateCcw size={15} aria-hidden="true" />
 				Repetir
 			</button>
-			<button type="button" class="boton" onclick={subir} disabled={!carga}>Enviar este video</button>
+			<!-- «Guardar» y no «Enviar»: el video se queda en el teléfono hasta que
+			     haya señal, y prometer un envío que no ocurre todavía es
+			     exactamente lo que hace que alguien desinstale creyendo que ya
+			     mandó su solicitud. -->
+			<button type="button" class="boton" onclick={subir}>Guardar este video</button>
 		</div>
 	{:else if fase === 'subiendo'}
 		<div class="grabador__contador" role="status" aria-live="polite">
