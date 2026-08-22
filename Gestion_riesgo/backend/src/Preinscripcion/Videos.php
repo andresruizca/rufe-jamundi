@@ -414,7 +414,14 @@ final class Videos
             'SELECT id, ruta_relativa FROM preinscripcion_videos
               WHERE preinscripcion_id IS NULL AND expira_en < NOW()'
         ) as $v) {
-            @unlink(Archivos::base().'/'.$v['ruta_relativa']);
+            $ruta = Archivos::base().'/'.$v['ruta_relativa'];
+
+            @unlink($ruta);
+            // Y su carpeta, si queda vacía. Sin esto, `temporal/` se llenaba de
+            // directorios vacíos que nadie volvía a mirar: uno por cada
+            // formulario que alguien empezó y no terminó.
+            @rmdir(dirname($ruta));
+
             Db::exec('DELETE FROM preinscripcion_videos WHERE id = :i', ['i' => $v['id']]);
             $borrados++;
         }

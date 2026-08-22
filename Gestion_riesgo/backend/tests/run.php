@@ -2628,6 +2628,20 @@ prueba('ninguna función obsoleta escribe avisos dentro de las respuestas', func
     }
 });
 
+prueba('abrir una carga limpia también los videos huérfanos', function () use ($raiz): void {
+    // Estaba solo en `iniciarVideo`, y eso los dejaba casi sin limpiar: una
+    // carga se abre cada vez que alguien entra al formulario, pero un video se
+    // empieza a subir en muy pocas de esas visitas. En producción se vio claro:
+    // las fotos huérfanas desaparecían solas y los videos —que pesan mil veces
+    // más— seguían en el disco un día después.
+    $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $metodo = substr($fuente, strpos($fuente, 'public function abrirCarga('));
+    $metodo = substr($metodo, 0, strpos($metodo, 'public function subirArchivo('));
+
+    afirmar(str_contains($metodo, 'Archivos::purgarCargasCaducadas('), 'debe purgar las fotos');
+    afirmar(str_contains($metodo, 'Videos::purgarCaducados('), 'debe purgar también los videos');
+});
+
 prueba('un video sale con su tipo, no como un archivo cualquiera', function (): void {
     // Salía como `application/octet-stream`, y con `X-Content-Type-Options:
     // nosniff` puesto —que sí queremos— el navegador se niega a decodificarlo.

@@ -128,6 +128,16 @@ final class PreinscripcionController
 
         Archivos::purgarCargasCaducadas();
 
+        // Los videos se purgan AQUÍ y no solo al iniciar uno nuevo.
+        //
+        // Estaban solo en `iniciarVideo`, y eso los dejaba casi sin limpiar: una
+        // carga se abre cada vez que alguien entra al formulario, pero un video
+        // se empieza a subir en muy pocas de esas visitas. El resultado en
+        // producción fue que las fotos huérfanas desaparecían solas y los videos
+        // huérfanos —que pesan mil veces más— seguían ahí un día después,
+        // ocupando el disco de un hosting compartido.
+        Videos::purgarCaducados();
+
         Response::json([
             'ok' => true,
             'data' => [
