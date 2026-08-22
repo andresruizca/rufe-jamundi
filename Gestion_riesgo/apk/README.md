@@ -36,8 +36,8 @@ funcionario. Pero:
 | 2 · Copia del formulario + detector de deriva | Hecho |
 | 3 · Captura de foto y video | Hecho |
 | 4 · Guardado local y «Mis registros» | Hecho |
-| 5 · `ApiCliente.kt` | Pendiente |
-| 6 · `SyncWorker.kt` | Pendiente |
+| 5 · `ApiCliente.kt` | Escrito — **sin compilar** |
+| 6 · `SyncWorker.kt` | Escrito — **sin compilar** |
 | 7-9 · Pruebas, campo, firma | Pendiente |
 
 ### Sobre el servidor
@@ -76,7 +76,28 @@ npm run apk:debug    # android/app/build/outputs/apk/debug/
 
 ---
 
-## Las dos comprobaciones propias
+## El Kotlin está sin compilar
+
+Hay que decirlo claro: **el Kotlin de `android/` no se ha compilado ni ejecutado
+nunca.** En el equipo donde se escribió no hay `kotlinc`, ni Gradle, ni SDK de
+Android. Se escribió a mano contra `src/local/sincronizacion.ts`, que sí tiene
+sus pruebas.
+
+Lo primero que hay que hacer al abrirlo en Android Studio es compilarlo y
+corregir lo que salga. Habrá algo.
+
+Lo que sí está comprobado es que **los dos lados dicen lo mismo**:
+`npm run test:kotlin` compara las escaleras de reintento, el tamaño del trozo,
+el tope de `Retry-After`, las cuatro reglas que deciden si una solicitud se
+pierde, el orden de los cinco pasos y el `PRAGMA`. Si alguien cambia la
+especificación en TypeScript y se olvida del APK, falla.
+
+Lo que **no** comprueba: que compile, que las consultas de `SyncWorker` sean
+correctas o que WorkManager despierte. Eso solo lo dice un teléfono.
+
+---
+
+## Las tres comprobaciones propias
 
 ### `npm run test:deriva`
 

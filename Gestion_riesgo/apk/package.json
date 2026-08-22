@@ -8,14 +8,15 @@
     "dev": "vite dev",
     "build": "vite build",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "npm run test:deriva && npm run test:esquema && npm run test:unit",
+    "test": "npm run test:deriva && npm run test:esquema && npm run test:kotlin && npm run test:unit",
     "test:unit": "vitest --run",
     "test:deriva": "node scripts/comparar-con-web.mjs",
     "cap:sync": "npm run build && cap sync android",
     "cap:abrir": "cap open android",
     "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "apk:firmado": "npm run cap:sync && cd android && ./gradlew assembleRelease",
-    "test:esquema": "node scripts/comprobar-esquema.mjs"
+    "test:esquema": "node scripts/comprobar-esquema.mjs",
+    "test:kotlin": "node scripts/comparar-kotlin.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
