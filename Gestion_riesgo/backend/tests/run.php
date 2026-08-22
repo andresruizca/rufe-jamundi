@@ -2600,6 +2600,34 @@ prueba('el catálogo público de señales no revela a qué elemento apunta cada 
     }
 });
 
+prueba('ninguna función obsoleta escribe avisos dentro de las respuestas', function () use ($raiz): void {
+    // Ya pasó dos veces en este módulo: PHP imprime el aviso DENTRO del cuerpo,
+    // así que el JSON llega precedido de «<br /><b>Deprecated</b>» y el
+    // navegador no puede leerlo. En producción los avisos están apagados y no
+    // se ve; en el equipo de quien desarrolla, subir una foto simplemente
+    // fallaba.
+    //
+    // La lista es corta a propósito: solo lo que este código usa de verdad y
+    // que PHP ya marcó como obsoleto. No pretende ser un analizador estático.
+    //
+    // Se busca la LLAMADA —el paréntesis seguido de una variable— y no el
+    // nombre suelto: la primera versión de esta prueba saltaba con el comentario
+    // que explica por qué la función ya no se usa, que es exactamente el texto
+    // que quiere uno conservar.
+    $obsoletas = ['finfo_close($'];
+
+    foreach (glob($raiz.'/src/*/*.php') as $archivo) {
+        $fuente = (string) file_get_contents($archivo);
+
+        foreach ($obsoletas as $llamada) {
+            afirmar(
+                ! str_contains($fuente, $llamada),
+                basename($archivo).' llama a '.rtrim($llamada, '($').'(), obsoleta desde PHP 8.5'
+            );
+        }
+    }
+});
+
 prueba('un video sale con su tipo, no como un archivo cualquiera', function (): void {
     // Salía como `application/octet-stream`, y con `X-Content-Type-Options:
     // nosniff` puesto —que sí queremos— el navegador se niega a decodificarlo.

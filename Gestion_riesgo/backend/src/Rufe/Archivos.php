@@ -465,11 +465,14 @@ final class Archivos
             ]);
         }
 
+        // Sin `finfo_close()`: está obsoleta desde PHP 8.5, que libera el objeto
+        // solo. Y no era un detalle de estilo — el aviso de obsolescencia se
+        // imprimía DENTRO del cuerpo de la respuesta, así que al subir una foto
+        // el JSON llegaba precedido de «<br /><b>Deprecated</b>» y el navegador
+        // no podía leerlo. En producción los avisos están apagados y no se veía;
+        // en cualquier equipo de desarrollo con PHP 8.5, subir una foto fallaba.
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = $finfo !== false ? (string) finfo_file($finfo, $ruta) : '';
-        if ($finfo !== false) {
-            finfo_close($finfo);
-        }
 
         if (! in_array($mime, Catalogos::EXTENSIONES[$extension], true)) {
             throw HttpError::validacion([
