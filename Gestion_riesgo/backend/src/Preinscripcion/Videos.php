@@ -245,12 +245,100 @@ final class Videos
             Db::exec('DELETE FROM preinscripcion_videos WHERE id = :i', ['i' => $suelto['id']]);
         }
 
-        return Db::exec(
-            'UPDATE preinscripcion_videos
-                SET preinscripcion_id = :p
+        $completos = Db::all(
+            'SELECT id, nombre_guardado, ruta_relativa FROM preinscripcion_videos
               WHERE carga_hash = :c AND preinscripcion_id IS NULL AND completo = 1',
-            ['p' => $preinscripcionId, 'c' => $cargaHash]
+            ['c' => $cargaHash]
         );
+
+        if ($completos === []) {
+            return 0;
+        }
+
+        return self::llevarACarpeta($completos, $preinscripcionId);
+    }
+
+    /**
+     * Mueve unos videos a la carpeta definitiva de su solicitud y los marca.
+     *
+     * Antes esto NO movía nada: solo escribía `preinscripcion_id` y el archivo
+     * se quedaba en `temporal/` para siempre, incluso el de una solicitud
+     * aceptada. No se perdía nada —la purga solo borra lo que no tiene dueño—
+     * pero dejaba una trampa puesta: el día que alguien limpiara una carpeta
+     * llamada «temporal» se llevaría por delante los videos de expedientes
+     * reales, y el nombre de la carpeta lo estaba invitando.
+     *
+     * Las fotos sí se movían desde el primer día. Esto es la mitad que faltaba.
+     *
+     * @param  list<array<string,mixed>>  $videos
+     */
+    private static function llevarACarpeta(array $videos, int $preinscripcionId): int
+    {
+        // La misma carpeta que las fotos de la solicitud, por el mismo cálculo:
+        // un expediente repartido en dos sitios es un expediente que alguien va
+        // a archivar a medias.
+        $carpeta = Archivos::carpetaDe('preinscripcion', $preinscripcionId);
+        Archivos::asegurarDirectorio(Archivos::base().'/'.$carpeta);
+
+        $movidos = 0;
+
+        foreach ($videos as $v) {
+            $nueva = $carpeta.'/'.$v['nombre_guardado'];
+            $origen = Archivos::base().'/'.$v['ruta_relativa'];
+            $destino = Archivos::base().'/'.$nueva;
+
+            // Si el archivo ya no está —purgado a mano, disco lleno— se corrige
+            // igual la fila: dejarla apuntando a `temporal/` sería peor, porque
+            // la próxima limpieza la daría por buena y volvería a intentarlo.
+            if (is_file($origen) && ! rename($origen, $destino)) {
+                throw new RuntimeException('No se pudo mover un video a su carpeta definitiva.');
+            }
+
+            Db::exec(
+                'UPDATE preinscripcion_videos
+                    SET preinscripcion_id = :p, ruta_relativa = :r
+                  WHERE id = :i',
+                ['p' => $preinscripcionId, 'r' => $nueva, 'i' => (int) $v['id']]
+            );
+
+            // La carpeta de origen, si queda vacía. `rmdir` falla solo si aún
+            // tiene algo dentro, así que no hace falta comprobarlo: las fotos ya
+            // lo intentaron antes y no pudieron porque los videos seguían ahí.
+            @rmdir(dirname($origen));
+
+            $movidos++;
+        }
+
+        return $movidos;
+    }
+
+    /**
+     * Recoloca los videos que quedaron en `temporal/` de cuando `adoptar()` no
+     * los movía.
+     *
+     * Se llama con el tráfico de la bandeja, que es el mismo criterio con el
+     * que este proyecto purga las cargas caducadas: aquí no hay consola ni
+     * tareas programadas, así que el mantenimiento va montado en peticiones que
+     * ya ocurren. Con tope, para que abrir la bandeja no se convierta nunca en
+     * un trabajo largo.
+     */
+    public static function reubicarPendientes(int $maximo = 20): int
+    {
+        $pendientes = Db::all(
+            "SELECT id, preinscripcion_id, nombre_guardado, ruta_relativa
+               FROM preinscripcion_videos
+              WHERE preinscripcion_id IS NOT NULL
+                AND ruta_relativa LIKE 'temporal/%'
+              LIMIT {$maximo}"
+        );
+
+        $movidos = 0;
+
+        foreach ($pendientes as $v) {
+            $movidos += self::llevarACarpeta([$v], (int) $v['preinscripcion_id']);
+        }
+
+        return $movidos;
     }
 
     /**

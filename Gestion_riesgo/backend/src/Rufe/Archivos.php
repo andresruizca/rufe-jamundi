@@ -267,6 +267,20 @@ final class Archivos
     /**
      * @param  string  $columna  la columna dueña; NO viene de la petición
      */
+    /**
+     * La carpeta definitiva de los archivos de una ficha.
+     *
+     * Vive aquí y la usan tanto las fotos como los videos porque el criterio es
+     * uno solo: todo lo de una misma solicitud tiene que caer en la misma
+     * carpeta. Con la fórmula escrita dos veces, un día una diría `Y/m` y la
+     * otra `Y-m` y los archivos de un expediente quedarían repartidos en dos
+     * sitios sin que nada fallara.
+     */
+    public static function carpetaDe(string $base, int $duenoId): string
+    {
+        return sprintf('%s/%s/%d', $base, date('Y/m'), $duenoId);
+    }
+
     private static function adoptarPara(string $cargaHash, string $columna, int $duenoId, string $carpetaBase): int
     {
         // La columna es una constante del código, nunca entrada del usuario: si
@@ -285,7 +299,7 @@ final class Archivos
             return 0;
         }
 
-        $carpeta = sprintf('%s/%s/%d', $carpetaBase, date('Y/m'), $duenoId);
+        $carpeta = self::carpetaDe($carpetaBase, $duenoId);
         self::asegurarDirectorio(self::base().'/'.$carpeta);
 
         foreach ($filas as $fila) {

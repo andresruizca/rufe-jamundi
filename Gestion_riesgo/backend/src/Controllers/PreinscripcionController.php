@@ -403,6 +403,12 @@ final class PreinscripcionController
 
     public function listar(Request $req): void
     {
+        // Mantenimiento montado en el tráfico, igual que la purga de cargas
+        // caducadas: aquí no hay consola ni tareas programadas. Recoloca los
+        // videos que quedaron en `temporal/` de cuando la adopción no los movía.
+        // Con tope, para que abrir la bandeja no se vuelva un trabajo largo.
+        Videos::reubicarPendientes();
+
         $estado = strtoupper($req->query('estado', '') ?? '');
         $where = '';
         $filtros = [];

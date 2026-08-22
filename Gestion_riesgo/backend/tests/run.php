@@ -2588,6 +2588,54 @@ prueba('lo que no se reconoce sale como archivo opaco', function (): void {
     afirmarIgual('application/octet-stream', App\Rufe\Archivos::tipoDeSalida('html'));
 });
 
+prueba('fotos y videos de una solicitud caen en la misma carpeta', function (): void {
+    // Un expediente repartido en dos sitios es un expediente que alguien archiva
+    // a medias. Las dos rutas salen del mismo cálculo justamente para que no
+    // puedan separarse.
+    $carpeta = App\Rufe\Archivos::carpetaDe('preinscripcion', 7);
+
+    afirmarIgual('preinscripcion/'.date('Y/m').'/7', $carpeta);
+});
+
+prueba('la carpeta definitiva nunca es la temporal', function (): void {
+    // Los videos vivían en `temporal/` incluso después de aceptarse la
+    // solicitud. No se perdía nada porque la purga solo borra lo que no tiene
+    // dueño, pero bastaba con que alguien limpiara una carpeta llamada
+    // «temporal» —cosa que el nombre invita a hacer— para perder los videos de
+    // expedientes reales.
+    foreach (['preinscripcion', 'rufe', 'inspeccion'] as $base) {
+        afirmar(
+            ! str_contains(App\Rufe\Archivos::carpetaDe($base, 1), 'temporal'),
+            "la carpeta de {$base} no puede ser la temporal"
+        );
+    }
+});
+
+prueba('la bandeja recoloca los videos que quedaron en temporal', function (): void {
+    // No hay consola ni tareas programadas en este hosting: el mantenimiento va
+    // montado en peticiones que ya ocurren, igual que la purga de cargas
+    // caducadas. Si alguien quita esta llamada, los videos antiguos se quedan
+    // en `temporal/` para siempre y nada falla hasta que se limpie la carpeta.
+    $fuente = file_get_contents(__DIR__.'/../src/Controllers/PreinscripcionController.php');
+    $desde = strpos($fuente, 'public function listar(');
+    afirmar($desde !== false, 'no se encontró listar()');
+
+    // Hasta la siguiente declaración de método, sea pública o privada: buscar un
+    // nombre concreto ataría la prueba al orden en que están escritos.
+    $siguiente = preg_match(
+        '/\n    (?:public|private|protected) function /',
+        $fuente,
+        $m,
+        PREG_OFFSET_CAPTURE,
+        $desde + 10
+    ) === 1 ? $m[0][1] : strlen($fuente);
+
+    afirmar(
+        str_contains(substr($fuente, $desde, $siguiente - $desde), 'Videos::reubicarPendientes('),
+        'listar() debe recolocar los videos pendientes'
+    );
+});
+
 prueba('el radicado ciudadano se distingue de los otros dos', function (): void {
     $r = App\Preinscripcion\Radicado::componer(2026);
 
