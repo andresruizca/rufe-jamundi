@@ -31,29 +31,28 @@ funcionario. Pero:
 
 | Fase | Estado |
 |---|---|
-| 0 · Cambios necesarios en el servidor | **Escritos y medidos**, sin aplicar — ver abajo |
+| 0 · Cambios en el servidor | Estudiados — §1 descartado, §2 pendiente |
 | 1 · Andamiaje del proyecto | Hecho |
 | 2 · Copia del formulario + detector de deriva | Hecho |
-| 3 · Captura de foto y video | Pendiente |
-| 4 · Guardado local y «Mis registros» | Esquema hecho; falta el acceso |
+| 3 · Captura de foto y video | Hecho |
+| 4 · Guardado local y «Mis registros» | Hecho |
 | 5 · `ApiCliente.kt` | Pendiente |
 | 6 · `SyncWorker.kt` | Pendiente |
 | 7-9 · Pruebas, campo, firma | Pendiente |
 
-### El servidor tiene que cambiar antes
+### Sobre el servidor
 
-Está en [`docs/servidor-requerido.md`](docs/servidor-requerido.md), con el parche
-listo. Resumido:
+Ver [`docs/servidor-requerido.md`](docs/servidor-requerido.md).
 
-- **El límite por IP bloqueará al APK.** Los operadores usan CGNAT: una vereda
-  entera sale por una IP, y hay cinco envíos por hora. Una brigada de veinte
-  familias recibiría cinco radicados y quince rechazos. **Sin este arreglo el APK
-  no sirve**, por bien construido que esté.
-- **Una señal de daño no puede desaparecer del catálogo**, o un APK de hace seis
-  meses perdería solicitudes enteras.
+- **El límite por IP: descartado.** Andrés decidió no tocarlo, y resultó que no
+  hacía falta: `Limite.php` ya manda `Retry-After` y el APK lo estaba ignorando.
+  Honrándolo, una brigada de veinte familias tras una misma IP pasa de 15 envíos
+  solos a **20 de 20**, sin tocar el servidor.
+- **Una señal de daño no debería desaparecer del catálogo**, o un APK de hace
+  seis meses perdería solicitudes enteras. Pendiente de autorizar.
 
-Esos cambios son de `backend/` y por eso **no están aplicados**: desde esta
-carpeta no se toca el servidor. Quedan a la espera de que se autoricen.
+Los cambios de `backend/` **no están aplicados**: desde esta carpeta no se toca
+el servidor.
 
 ---
 

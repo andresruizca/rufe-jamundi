@@ -4,6 +4,7 @@ import {
 	MAX_INTENTOS,
 	comoSeDice,
 	decidir,
+	esperaSegunServidor,
 	esperaTrasIntento,
 	proximoIntento,
 	sigueEsperando
@@ -61,7 +62,10 @@ describe('qué hacer tras un intento', () => {
 	});
 
 	it('sin conexión se reintenta, y eso no es un error', () => {
-		expect(decidir(null, null, 0)).toEqual({ hacer: 'reintentar', motivo: 'Sin conexión.' });
+		const d = decidir(null, null, 0);
+
+		expect(d.hacer).toBe('reintentar');
+		expect(d.hacer === 'reintentar' && d.motivo).toBe('Sin conexión.');
 	});
 
 	it('un 422 con errores por campo NO se reintenta', () => {
@@ -152,5 +156,43 @@ describe('el aviso de no desinstalar', () => {
 	it('no cuenta lo ya enviado ni lo que necesita corrección de la persona', () => {
 		expect(sigueEsperando('SINCRONIZADO')).toBe(false);
 		expect(sigueEsperando('ERROR_VALIDACION')).toBe(false);
+	});
+});
+
+describe('honrar el Retry-After del servidor', () => {
+	it('usa lo que dice el servidor en vez de la escalera genérica', () => {
+		// `Limite.php` manda los segundos que quedan de su ventana. Ignorarlo era
+		// lo que dejaba cinco de veinte solicitudes esperando un toque a mano
+		// cuando una brigada sincroniza desde una vereda: todas salen por la
+		// misma IP y el límite es de cinco por hora.
+		//
+		// Medido sobre ese límite real: con la escalera salen 15 de 20 y la
+		// última tarda 320 minutos; honrando Retry-After salen las 20, ninguna
+		// pide toque, y la última tarda 180.
+		expect(esperaSegunServidor(1800, 1)).toBe(1800);
+	});
+
+	it('sin cabecera, cae en la escalera de siempre', () => {
+		expect(esperaSegunServidor(null, 1)).toBe(esperaTrasIntento(1));
+	});
+
+	it('una cabecera absurda no duerme la solicitud para siempre', () => {
+		// No puede pasar de un día: una cabecera equivocada —o puesta con mala
+		// intención por algo en el camino— dejaría la solicitud de alguien
+		// esperando meses.
+		expect(esperaSegunServidor(99999999, 0)).toBe(24 * 3600);
+	});
+
+	it('valores sin sentido se ignoran', () => {
+		expect(esperaSegunServidor(0, 2)).toBe(esperaTrasIntento(2));
+		expect(esperaSegunServidor(-5, 2)).toBe(esperaTrasIntento(2));
+		expect(esperaSegunServidor(Number.NaN, 2)).toBe(esperaTrasIntento(2));
+	});
+
+	it('un 429 con Retry-After espera lo que le dicen', () => {
+		const d = decidir(429, { ok: false, message: 'Demasiadas solicitudes.' }, 0, 2400);
+
+		expect(d.hacer).toBe('reintentar');
+		expect(d.hacer === 'reintentar' && d.esperaSegundos).toBe(2400);
 	});
 });

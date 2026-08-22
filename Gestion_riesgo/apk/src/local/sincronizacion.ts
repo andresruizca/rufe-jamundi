@@ -71,8 +71,33 @@ export type RespuestaEnvio = {
 
 export type Decision =
 	| { hacer: 'listo'; radicado: string }
-	| { hacer: 'reintentar'; motivo: string }
+	| { hacer: 'reintentar'; motivo: string; esperaSegundos: number }
 	| { hacer: 'rendirse'; motivo: string };
+
+/**
+ * Cuánto esperar cuando el servidor dice explícitamente cuánto falta.
+ *
+ * `Limite.php` manda la cabecera `Retry-After` con los segundos que quedan de su
+ * ventana. Ignorarla y usar la escalera genérica es lo que hacía que una brigada
+ * de veinte familias en una vereda —todas tras la misma IP por CGNAT— dejara
+ * cinco solicitudes esperando un toque a mano.
+ *
+ * Simulado sobre el límite real de cinco envíos por hora: con la escalera
+ * genérica salen solas 15 de 20 y la última tarda 320 minutos; honrando
+ * `Retry-After` salen las 20, ninguna pide toque, y la última tarda 180.
+ *
+ * Se acota a 24 horas: una cabecera absurda —o maliciosa— no puede dormir la
+ * solicitud de alguien para siempre.
+ */
+const TOPE_RETRY_AFTER = 24 * 3600;
+
+export function esperaSegunServidor(retryAfter: number | null, intentos: number): number {
+	if (retryAfter !== null && Number.isFinite(retryAfter) && retryAfter > 0) {
+		return Math.min(retryAfter, TOPE_RETRY_AFTER);
+	}
+
+	return esperaTrasIntento(intentos);
+}
 
 /**
  * Qué hacer tras un intento de envío.
@@ -93,14 +118,17 @@ export type Decision =
  */
 export function decidir(
 	estado: number | null,
-    respuesta: RespuestaEnvio | null,
-	intentos: number
+	respuesta: RespuestaEnvio | null,
+	intentos: number,
+	retryAfter: number | null = null
 ): Decision {
+	const espera = () => esperaSegunServidor(retryAfter, intentos);
+
 	// Sin respuesta: no hubo red. Es el caso normal en una vereda, no un error.
 	if (estado === null) {
 		return intentos + 1 >= MAX_INTENTOS
 			? { hacer: 'rendirse', motivo: 'No hubo conexión en varios intentos.' }
-			: { hacer: 'reintentar', motivo: 'Sin conexión.' };
+			: { hacer: 'reintentar', motivo: 'Sin conexión.', esperaSegundos: espera() };
 	}
 
 	const radicado = respuesta?.data?.radicado;
@@ -126,7 +154,11 @@ export function decidir(
 		};
 	}
 
-	return { hacer: 'reintentar', motivo: respuesta?.message ?? `El servidor respondió ${estado}.` };
+	return {
+		hacer: 'reintentar',
+		motivo: respuesta?.message ?? `El servidor respondió ${estado}.`,
+		esperaSegundos: espera()
+	};
 }
 
 // ── Lo que ve la persona ────────────────────────────────────────────────────
