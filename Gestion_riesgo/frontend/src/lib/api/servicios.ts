@@ -235,6 +235,9 @@ export const preinscripcionApi = {
 	catalogos: () =>
 		api.get<{
 			corregimientos: string[];
+			zonas: string[];
+			/** Las señales de daño que el ciudadano puede reconocer a ojo. */
+			senales: { codigo: string; etiqueta: string; ayuda: string; icono: string }[];
 			aviso_version: string;
 			limites: {
 				fotos_dano: number;
@@ -340,6 +343,8 @@ export const preinscripcionApi = {
 export type PreinscripcionDetalle = {
 	preinscripcion: Record<string, string | number | null>;
 	fotos: { id: number; nombre_original: string; extension: string; tamano_bytes: number; mime: string }[];
+	/** Lo que el ciudadano marcó, con la etiqueta que vio en su momento. */
+	senales: { codigo: string; etiqueta: string }[];
 	videos: {
 		id: number;
 		categoria_nombre: string;

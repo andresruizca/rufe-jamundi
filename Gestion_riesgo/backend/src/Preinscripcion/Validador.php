@@ -24,6 +24,9 @@ use App\Rufe\Catalogos as Rufe;
  */
 final class Validador
 {
+    /** @var list<string> */
+    public const ZONAS = ['URBANA', 'RURAL'];
+
     /** @var array<string,string> */
     private array $errores = [];
 
@@ -40,6 +43,7 @@ final class Validador
 
         $v->identificacion($e);
         $v->ubicacion($e);
+        $v->estadoVivienda($e);
         $v->relato($e);
         $v->autorizacion($e);
 
@@ -86,16 +90,36 @@ final class Validador
     /** @param array<string,mixed> $e */
     private function ubicacion(array $e): void
     {
+        // Texto libre a propósito, y sin exigir formato de nomenclatura: media
+        // zona rural de Jamundí no tiene dirección con calle y número. Lo que
+        // sirve es «la casa azul pasando el puente de La Liberia», y eso es una
+        // dirección perfectamente válida para quien va a ir a buscarla.
         $direccion = $this->texto($e, 'direccion');
         if (mb_strlen($direccion) < 5 || mb_strlen($direccion) > 200) {
-            $this->errores['direccion'] = 'Escriba la dirección como se la daría a alguien que va a buscarla.';
+            $this->errores['direccion'] = 'Escriba dónde queda la vivienda, como se lo explicaría a alguien que va a buscarla.';
         } else {
             $this->datos['direccion'] = $direccion;
+        }
+
+        // Antes la zona se DEDUCÍA de si venía corregimiento, y esa deducción
+        // era falsa: quien vive en el campo y no sabe a qué corregimiento
+        // pertenece su vereda entraba al sistema como urbano.
+        $zona = strtoupper($this->texto($e, 'zona'));
+        if (! in_array($zona, self::ZONAS, true)) {
+            $this->errores['zona'] = 'Indique si la vivienda está en zona urbana o rural.';
+            $this->datos['zona'] = null;
+        } else {
+            $this->datos['zona'] = $zona;
         }
 
         $corregimiento = $this->texto($e, 'corregimiento');
         if ($corregimiento !== '' && ! in_array($corregimiento, Rufe::CORREGIMIENTOS, true)) {
             $this->errores['corregimiento'] = 'Seleccione un corregimiento de la lista.';
+        } elseif ($zona === 'URBANA') {
+            // En zona urbana no hay corregimiento. Se descarta en vez de
+            // rechazar: si alguien marcó uno y después corrigió la zona, el dato
+            // sobrante no puede costarle el envío.
+            $this->datos['corregimiento'] = null;
         } else {
             $this->datos['corregimiento'] = $corregimiento === '' ? null : $corregimiento;
         }
@@ -143,6 +167,49 @@ final class Validador
         if (is_numeric($precision) && $precision >= 0 && $precision <= 10000) {
             $this->datos['precision_m'] = (int) $precision;
         }
+    }
+
+    /**
+     * Las señales de daño que marcó el ciudadano.
+     *
+     * NINGUNA es obligatoria. Quien tiene la casa partida por la mitad puede no
+     * reconocerse en ninguno de los ocho dibujos, y negarle el turno por eso
+     * sería exactamente el error que este formulario existe para no cometer.
+     * Lo que sí se exige es que los códigos sean del catálogo: la ruta es
+     * pública y cualquiera puede mandar lo que quiera contra ella.
+     *
+     * @param array<string,mixed> $e
+     */
+    private function estadoVivienda(array $e): void
+    {
+        $this->datos['senales'] = [];
+
+        $marcadas = $e['senales'] ?? [];
+        if (! is_array($marcadas)) {
+            return;
+        }
+
+        $limpias = [];
+
+        foreach ($marcadas as $codigo) {
+            if (! is_string($codigo)) {
+                continue;
+            }
+
+            $codigo = strtoupper(trim($codigo));
+
+            if (! Senales::existe($codigo)) {
+                $this->errores['senales'] = 'Alguna de las opciones marcadas no se reconoce. Recargue la página e intente de nuevo.';
+
+                return;
+            }
+
+            // Marcar dos veces lo mismo no significa nada y la tabla lo
+            // rechazaría con un error que el ciudadano no sabría interpretar.
+            $limpias[$codigo] = true;
+        }
+
+        $this->datos['senales'] = array_keys($limpias);
     }
 
     /** @param array<string,mixed> $e */

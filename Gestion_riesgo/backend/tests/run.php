@@ -2371,6 +2371,7 @@ function preBase(array $cambios = []): array
         'documento' => '16.234.567',
         'telefono' => '315 123 4567',
         'direccion' => 'Carrera 11 # 8-26',
+        'zona' => 'URBANA',
         'autoriza_datos' => true,
         'aviso_version' => App\Rufe\Catalogos::AVISO_VERSION,
     ], $cambios);
@@ -2427,6 +2428,119 @@ prueba('no se piden datos sensibles', function (): void {
 
     afirmar(! isset($d['genero']), 'el género no debe guardarse aquí');
     afirmar(! isset($d['pertenencia_etnica']), 'la pertenencia étnica no debe guardarse aquí');
+});
+
+prueba('la zona urbana o rural es obligatoria', function (): void {
+    // Antes se DEDUCÍA de si venía corregimiento, y la deducción era falsa:
+    // quien vive en el campo y no sabe a qué corregimiento pertenece su vereda
+    // entraba al sistema como urbano, y la visita salía al pueblo.
+    $e = erroresPre(preBase(['zona' => '']));
+    afirmar(isset($e['zona']), 'debe exigir la zona');
+
+    $e = erroresPre(preBase(['zona' => 'SEMIRURAL']));
+    afirmar(isset($e['zona']), 'no debe aceptar una zona inventada');
+
+    afirmarIgual('RURAL', datosPre(preBase(['zona' => 'rural']))['zona']);
+});
+
+prueba('en zona urbana el corregimiento se descarta en vez de rechazarse', function (): void {
+    // Si alguien eligió corregimiento y después corrigió la zona, ese dato
+    // sobrante no puede costarle el envío.
+    $d = datosPre(preBase([
+        'zona' => 'URBANA',
+        'corregimiento' => App\Rufe\Catalogos::CORREGIMIENTOS[0],
+    ]));
+
+    afirmarIgual([], erroresPre(preBase([
+        'zona' => 'URBANA',
+        'corregimiento' => App\Rufe\Catalogos::CORREGIMIENTOS[0],
+    ])));
+    afirmarIgual(null, $d['corregimiento'], 'en la cabecera no hay corregimiento');
+});
+
+prueba('la dirección puede ser una referencia, no una nomenclatura', function (): void {
+    // Media zona rural de Jamundí no tiene calle y número. «La casa azul
+    // pasando el puente» es una dirección perfectamente válida para quien va a
+    // ir a buscarla, y exigir formato dejaría fuera justo a quien más lo
+    // necesita.
+    afirmarIgual([], erroresPre(preBase([
+        'zona' => 'RURAL',
+        'direccion' => 'La casa azul pasando el puente de La Liberia, al lado de la tienda',
+    ])));
+});
+
+prueba('ninguna señal de daño es obligatoria', function (): void {
+    // Quien tiene la casa partida por la mitad puede no reconocerse en ninguno
+    // de los ocho dibujos. Negarle el turno por eso sería el error que este
+    // formulario existe para no cometer.
+    afirmarIgual([], erroresPre(preBase()));
+    afirmarIgual([], datosPre(preBase())['senales']);
+});
+
+prueba('una señal inventada se rechaza y no se guarda a medias', function (): void {
+    // La ruta es pública: cualquiera puede mandar lo que quiera contra ella.
+    $e = erroresPre(preBase(['senales' => ['PARED_AGRIETADA', 'CASA_EMBRUJADA']]));
+
+    afirmar(isset($e['senales']), 'debe rechazar el código desconocido');
+    afirmarIgual([], datosPre(preBase(['senales' => ['PARED_AGRIETADA', 'CASA_EMBRUJADA']]))['senales']);
+});
+
+prueba('la misma señal marcada dos veces se guarda una sola vez', function (): void {
+    // La tabla tiene un único por (solicitud, código): sin limpiar aquí, el
+    // INSERT reventaría con un error que el ciudadano no sabría interpretar.
+    $d = datosPre(preBase(['senales' => ['PARED_AGRIETADA', 'PARED_AGRIETADA', 'TECHO_CAIDO']]));
+
+    afirmarIgual(['PARED_AGRIETADA', 'TECHO_CAIDO'], $d['senales']);
+});
+
+prueba('cada señal apunta a un elemento que el formato de inspección conoce', function (): void {
+    // Es lo que hace útil la conversión a inspección: lo que marcó el ciudadano
+    // le dice al profesional qué filas del numeral 5.4 mirar primero. Si una
+    // señal apuntara a un elemento inventado, ese puente se rompería en
+    // silencio y nadie se enteraría.
+    $delFormato = App\Preinscripcion\Senales::elementosDelFormato();
+
+    foreach (App\Preinscripcion\Senales::CATALOGO as $senal) {
+        afirmar(
+            in_array($senal['elemento'], $delFormato, true),
+            "la señal {$senal['codigo']} apunta a un elemento inexistente: {$senal['elemento']}"
+        );
+    }
+});
+
+prueba('las señales cubren todos los grupos de elementos evaluables', function (): void {
+    // Si el formato evalúa un elemento y ninguna señal apunta a él, hay un daño
+    // que el ciudadano no tiene cómo reportar. Muros y entrepisos de madera
+    // quedan cubiertos por sus equivalentes de mampostería, que es lo que la
+    // persona ve: una pared es una pared.
+    $equivalentes = ['MUROS_MADERA' => 'MUROS_CARGA', 'ENTREPISOS' => 'PLACA_PISO'];
+    $apuntados = App\Preinscripcion\Senales::elementosApuntados(
+        App\Preinscripcion\Senales::codigos()
+    );
+
+    foreach (App\Preinscripcion\Senales::elementosDelFormato() as $elemento) {
+        // Los muros divisorios no deciden nada estructural y pedirle al
+        // ciudadano que los distinga de los de carga sería pedirle criterio
+        // técnico.
+        if ($elemento === 'MUROS_DIVISORIOS') {
+            continue;
+        }
+
+        $buscado = $equivalentes[$elemento] ?? $elemento;
+        afirmar(
+            in_array($buscado, $apuntados, true),
+            "ninguna señal permite reportar daño en {$elemento}"
+        );
+    }
+});
+
+prueba('el catálogo público de señales no revela a qué elemento apunta cada una', function (): void {
+    // Al ciudadano no le dice nada, y publicarlo solo invita a deducir desde
+    // fuera cómo se clasificará técnicamente su caso.
+    foreach (App\Preinscripcion\Senales::paraApi() as $senal) {
+        afirmar(! isset($senal['elemento']), 'el elemento no debe salir al público');
+        afirmar($senal['icono'] !== '', 'cada señal necesita su dibujo');
+    }
 });
 
 prueba('el radicado ciudadano se distingue de los otros dos', function (): void {

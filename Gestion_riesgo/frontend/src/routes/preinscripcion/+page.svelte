@@ -10,24 +10,33 @@
 	//  • Nada de datos sensibles. Género, pertenencia étnica y composición del
 	//    hogar los levanta el funcionario en la visita, explicando el aviso de
 	//    viva voz, como manda la Ley 1581.
-	//  • Una sola página con secciones, no ocho pasos: quien llena esto lo hace
-	//    una vez en su vida y necesita ver de un vistazo qué le van a preguntar.
+	//  • Por PASOS, como el censo. La versión anterior era una sola página con
+	//    siete secciones, y el argumento escrito entonces era que así se veía de
+	//    un vistazo todo lo que se iba a preguntar. En un celular ese vistazo no
+	//    existe: es un rollo largo donde no se sabe cuánto falta y donde un error
+	//    de validación al final obliga a subir a buscarlo. El censo lleva meses
+	//    en producción con pasos y es el patrón que la gente de aquí reconoce.
 	//
 	// Y lo que esto NO es: una inspección. Es una solicitud de turno. La
 	// evaluación del daño y el combo de materiales siguen siendo del profesional
-	// con tarjeta.
+	// con tarjeta. Por eso el paso 2 pregunta QUÉ VE la persona y no en qué nivel
+	// del Anexo 1 clasificaría su casa.
 
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
-		CheckCircle2, LoaderCircle, MapPin, Send, ShieldCheck, TriangleAlert
+		ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, MapPin, Send, TriangleAlert
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi } from '$lib/api/servicios';
 	import logo from '$lib/assets/logo-jamundi.svg';
+	import IndicadorProgreso from '$lib/rufe-form/componentes/IndicadorProgreso.svelte';
 	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
 	import { GestorEvidencias, RUTAS_PUBLICAS_CARGA } from '$lib/rufe-form/evidencias.svelte';
 	import GrabadorVideo from '$lib/preinscripcion/GrabadorVideo.svelte';
+	import SelectorSenales from '$lib/preinscripcion/SelectorSenales.svelte';
+	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
+	import { datosVacios, paraEnviar, pasosVigentes, validarPaso } from '$lib/preinscripcion/pasos';
 
 	type Catalogos = Awaited<ReturnType<typeof preinscripcionApi.catalogos>>;
 
@@ -63,22 +72,15 @@
 	// en vez de inscribir dos veces a la misma familia.
 	const envioId = crypto.randomUUID();
 
-	let datos = $state({
-		nombre_completo: '',
-		documento: '',
-		telefono: '',
-		correo: '',
-		direccion: '',
-		corregimiento: '',
-		vereda: '',
-		descripcion_dano: '',
-		autoriza_datos: false,
-		latitud: null as number | null,
-		longitud: null as number | null,
-		precision_m: null as number | null,
-		// Trampa para robots: oculta por CSS, una persona nunca la ve.
-		sitio_web: ''
-	});
+	let datos = $state(datosVacios());
+
+	let indice = $state(0);
+
+	const hayVideos = $derived((catalogos?.categorias_video ?? []).length > 0);
+	const pasos = $derived(pasosVigentes(hayVideos));
+	const paso = $derived(pasos[Math.min(indice, pasos.length - 1)]);
+	const esPrimero = $derived(indice === 0);
+	const esUltimo = $derived(indice === pasos.length - 1);
 
 	onMount(() => {
 		void (async () => {
@@ -118,6 +120,43 @@
 		return () => detenerEvidencias?.();
 	});
 
+	// ── Navegación ──────────────────────────────────────────────────────────
+
+	function siguiente() {
+		const fallos = validarPaso(paso.id, datos);
+		errores = fallos;
+		if (Object.keys(fallos).length > 0) {
+			subirAlInicio();
+
+			return;
+		}
+
+		// Avanzar con una foto a medio optimizar dejaría a la persona creyendo
+		// que ya la mandó.
+		if (evidencias?.optimizando) {
+			errorEnvio = 'Espere a que terminen de prepararse las fotos.';
+
+			return;
+		}
+
+		errorEnvio = '';
+		indice = Math.min(indice + 1, pasos.length - 1);
+		subirAlInicio();
+	}
+
+	function anterior() {
+		errores = {};
+		errorEnvio = '';
+		indice = Math.max(indice - 1, 0);
+		subirAlInicio();
+	}
+
+	function subirAlInicio() {
+		if (browser) window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
+
+	// ── Ubicación ───────────────────────────────────────────────────────────
+
 	function usarMiUbicacion() {
 		if (!browser || !navigator.geolocation) {
 			avisoUbicacion = 'Su navegador no permite compartir la ubicación.';
@@ -152,17 +191,32 @@
 		avisoUbicacion = 'Ubicación retirada.';
 	}
 
-	async function enviar(evento: SubmitEvent) {
-		evento.preventDefault();
+	// ── Envío ───────────────────────────────────────────────────────────────
+
+	/** Los campos que se corrigen en el paso 1, para saber a dónde devolver. */
+	const CAMPOS_PASO_1 = [
+		'nombre_completo',
+		'documento',
+		'telefono',
+		'correo',
+		'direccion',
+		'zona',
+		'corregimiento'
+	];
+
+	async function enviar() {
 		if (!catalogos || enviando) return;
+
+		const fallos = validarPaso('envio', datos);
+		errores = fallos;
+		if (Object.keys(fallos).length > 0) return;
 
 		enviando = true;
 		errorEnvio = '';
-		errores = {};
 
 		try {
 			const r = await preinscripcionApi.enviar({
-				...datos,
+				...paraEnviar(datos),
 				envio_id: envioId,
 				aviso_version: catalogos.aviso_version,
 				// El servidor adopta las fotos de esta carga al recibir la
@@ -171,14 +225,23 @@
 			});
 
 			resultado = { radicado: r.radicado, duplicada: r.duplicada };
-			if (browser) window.scrollTo({ top: 0, behavior: 'smooth' });
+			subirAlInicio();
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errorEnvio = e.message;
 				errores = e.errors;
+
+				// Un error en un campo del paso 1 no se puede corregir desde el
+				// paso 4. Se devuelve a la persona a donde está el campo, en vez
+				// de dejarla mirando un mensaje sobre algo que no tiene delante.
+				if (Object.keys(e.errors).some((c) => CAMPOS_PASO_1.includes(c))) {
+					indice = 0;
+				}
 			} else {
 				errorEnvio = 'No se pudo enviar su solicitud. Intente de nuevo en unos minutos.';
 			}
+
+			subirAlInicio();
 		} finally {
 			enviando = false;
 		}
@@ -229,11 +292,10 @@
 				materiales</strong>: eso lo decide la inspección técnica de la vivienda.
 			</p>
 		</div>
-	{:else}
-		<p class="intro">
-			Si su vivienda resultó afectada, regístrela aquí para que la Alcaldía programe una visita
-			técnica. Le tomará unos tres minutos y solo necesita sus datos de contacto y la dirección.
-		</p>
+	{:else if catalogos}
+		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
+
+		<p class="ayuda-paso">{paso.ayuda}</p>
 
 		{#if errorEnvio}
 			<p class="aviso aviso--error" role="alert">
@@ -242,9 +304,10 @@
 			</p>
 		{/if}
 
-		<form onsubmit={enviar} novalidate>
+		<!-- ── Paso 1: sus datos ───────────────────────────────────────── -->
+		{#if paso.id === 'datos'}
 			<section class="tarjeta">
-				<h2 class="tarjeta__titulo">Sus datos</h2>
+				<h2 class="tarjeta__titulo">Quién es</h2>
 
 				<label class="campo">
 					<span class="campo__etiqueta">Nombre y apellidos *</span>
@@ -280,13 +343,11 @@
 
 				<label class="campo">
 					<span class="campo__etiqueta">Correo electrónico</span>
-					<input
-						class="campo__control"
-						type="email"
-						bind:value={datos.correo}
-						autocomplete="email"
-					/>
-					<span class="campo__ayuda">Opcional.</span>
+					<input class="campo__control" type="email" bind:value={datos.correo} autocomplete="email" />
+					<span class="campo__ayuda">
+						Opcional. Déjelo en blanco si no tiene o no lo recuerda: no hace falta para su
+						solicitud.
+					</span>
 					{#if errores.correo}<span class="campo__error">{errores.correo}</span>{/if}
 				</label>
 			</section>
@@ -294,30 +355,82 @@
 			<section class="tarjeta">
 				<h2 class="tarjeta__titulo">Dónde queda la vivienda</h2>
 
+				<!--
+					La zona se PREGUNTA, no se deduce del corregimiento. Antes se
+					deducía y la deducción era falsa: quien vive en el campo y no sabe
+					a qué corregimiento pertenece su vereda entraba como urbano, y la
+					visita salía a buscarlo al pueblo.
+				-->
+				<fieldset class="campo grupo" role="radiogroup" aria-required="true">
+					<legend class="campo__etiqueta">¿La vivienda está en zona urbana o rural? *</legend>
+
+					<div class="opciones opciones--dos">
+						<label class="opcion" class:opcion--activa={datos.zona === 'URBANA'}>
+							<input
+								type="radio"
+								name="zona"
+								value="URBANA"
+								checked={datos.zona === 'URBANA'}
+								onchange={() => (datos.zona = 'URBANA')}
+							/>
+							<span class="opcion__texto">
+								Urbana
+								<span class="opcion__nota">En la cabecera del municipio</span>
+							</span>
+						</label>
+
+						<label class="opcion" class:opcion--activa={datos.zona === 'RURAL'}>
+							<input
+								type="radio"
+								name="zona"
+								value="RURAL"
+								checked={datos.zona === 'RURAL'}
+								onchange={() => (datos.zona = 'RURAL')}
+							/>
+							<span class="opcion__texto">
+								Rural
+								<span class="opcion__nota">En un corregimiento o vereda</span>
+							</span>
+						</label>
+					</div>
+
+					{#if errores.zona}<span class="campo__error">{errores.zona}</span>{/if}
+				</fieldset>
+
 				<label class="campo">
-					<span class="campo__etiqueta">Dirección *</span>
-					<input
+					<span class="campo__etiqueta">Dirección o cómo llegar *</span>
+					<textarea
 						class="campo__control"
+						rows="2"
+						maxlength="200"
 						bind:value={datos.direccion}
-						placeholder="Calle 10 # 5-32, casa de dos pisos"
-					/>
-					<span class="campo__ayuda">Escríbala como se la daría a alguien que va a buscarla.</span>
+						placeholder="Carrera 11 # 8-26 — o bien: la casa azul pasando el puente, al lado de la tienda"
+					></textarea>
+					<span class="campo__ayuda">
+						Escríbala como se la explicaría a alguien que va a buscarla. Si no tiene nomenclatura,
+						sirven las referencias.
+					</span>
 					{#if errores.direccion}<span class="campo__error">{errores.direccion}</span>{/if}
 				</label>
 
-				<label class="campo">
-					<span class="campo__etiqueta">Corregimiento</span>
-					<select class="campo__control" bind:value={datos.corregimiento}>
-						<option value="">Ninguno (zona urbana)</option>
-						{#each catalogos?.corregimientos ?? [] as c (c)}
-							<option value={c}>{c}</option>
-						{/each}
-					</select>
-					{#if errores.corregimiento}<span class="campo__error">{errores.corregimiento}</span>{/if}
-				</label>
+				{#if datos.zona === 'RURAL'}
+					<label class="campo">
+						<span class="campo__etiqueta">Corregimiento</span>
+						<select class="campo__control" bind:value={datos.corregimiento}>
+							<option value="">No lo sé</option>
+							{#each catalogos.corregimientos as c (c)}
+								<option value={c}>{c}</option>
+							{/each}
+						</select>
+						<span class="campo__ayuda">Si no sabe cuál es, déjelo así y siga.</span>
+						{#if errores.corregimiento}
+							<span class="campo__error">{errores.corregimiento}</span>
+						{/if}
+					</label>
+				{/if}
 
 				<label class="campo">
-					<span class="campo__etiqueta">Vereda o barrio</span>
+					<span class="campo__etiqueta">{datos.zona === 'RURAL' ? 'Vereda' : 'Barrio'}</span>
 					<input class="campo__control" bind:value={datos.vereda} />
 				</label>
 
@@ -358,11 +471,35 @@
 				</div>
 			</section>
 
+			{#if evidencias}
+				<!-- La cédula va aquí y no al final: es un dato de identidad, y este
+				     es el momento en que la persona la tiene a mano. -->
+				<section class="tarjeta">
+					<SubidaEvidencias
+						gestor={evidencias}
+						tipo="PRE_CEDULA"
+						titulo="Foto de su cédula"
+						ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que la solicitud es suya. La foto se reduce en su celular antes de enviarse."
+						textoCamara="Tomar foto de la cédula"
+					/>
+				</section>
+			{/if}
+
+		<!-- ── Paso 2: cómo quedó la vivienda ──────────────────────────── -->
+		{:else if paso.id === 'vivienda'}
 			<section class="tarjeta">
-				<h2 class="tarjeta__titulo">Qué le pasó a la vivienda</h2>
+				<SelectorSenales
+					senales={catalogos.senales}
+					bind:marcadas={datos.senales}
+					error={errores.senales ?? ''}
+				/>
+			</section>
+
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">¿Quiere contarnos algo más?</h2>
 
 				<label class="campo">
-					<span class="campo__etiqueta">Cuéntenos brevemente</span>
+					<span class="campo__etiqueta">Con sus palabras</span>
 					<textarea
 						class="campo__control"
 						rows="4"
@@ -371,8 +508,7 @@
 						placeholder="Ej.: se agrietaron los muros de la sala y se cayó parte del techo de la cocina."
 					></textarea>
 					<span class="campo__ayuda">
-						Opcional, pero ayuda a priorizar. No hace falta que sea técnico: descríbalo con sus
-						palabras.
+						Opcional. No hace falta que sea técnico: es para entender mejor su caso.
 					</span>
 					{#if errores.descripcion_dano}
 						<span class="campo__error">{errores.descripcion_dano}</span>
@@ -380,102 +516,120 @@
 				</label>
 			</section>
 
-			{#if (catalogos?.categorias_video ?? []).length > 0}
-				<section class="tarjeta">
-					<h2 class="tarjeta__titulo">Videos de la vivienda</h2>
-					<p class="tarjeta__nota">
-						Grabe cada uno siguiendo la indicación. Se cortan solos al llegar al máximo y puede
-						repetirlos antes de enviarlos. <strong>Si no puede grabar alguno, continúe igual</strong>:
-						no perderá su turno por eso.
-					</p>
-
-					{#each catalogos?.categorias_video ?? [] as c (c.id)}
-						<GrabadorVideo
-							categoria={c}
-							carga={evidencias?.carga ?? null}
-							alSubir={(id) => (videosListos = [...videosListos, id])}
-						/>
-					{/each}
-				</section>
-			{/if}
-
 			{#if evidencias}
 				<section class="tarjeta">
-					<h2 class="tarjeta__titulo">Fotos</h2>
-					<p class="tarjeta__nota">
-						Las fotos se reducen en su celular antes de enviarse, así que gastan pocos datos. Si
-						está sin señal, espere un momento y se enviarán solas.
-					</p>
-
-					<SubidaEvidencias
-						gestor={evidencias}
-						tipo="PRE_CEDULA"
-						titulo="Foto de su cédula"
-						ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que la solicitud es suya."
-						textoCamara="Tomar foto de la cédula"
-					/>
-
 					<SubidaEvidencias
 						gestor={evidencias}
 						tipo="PRE_DANO"
 						titulo="Fotos del daño"
-						ayuda="Cómo quedó la vivienda. No son obligatorias, pero ayudan a priorizar la visita."
+						ayuda="Cómo quedó la vivienda. No son obligatorias, pero ayudan a priorizar la visita. Se reducen en su celular antes de enviarse, así que gastan pocos datos."
 						textoCamara="Tomar foto del daño"
 					/>
 				</section>
 			{/if}
 
+		<!-- ── Paso 3: los videos ──────────────────────────────────────── -->
+		{:else if paso.id === 'video'}
 			<section class="tarjeta">
-				<h2 class="tarjeta__titulo">Autorización de datos</h2>
-
-				<!--
-					La Ley 1581 exige que la autorización sea informada, y aquí no hay un
-					funcionario delante que la explique. Por eso el texto es largo y dice
-					para qué se usan los datos, quién los trata y qué derechos tiene.
-					La versión aceptada se guarda con la solicitud: eso es lo que prueba
-					el consentimiento, no lo que hoy diga esta pantalla.
-				-->
-				<label class="opcion" class:opcion--activa={datos.autoriza_datos}>
-					<input type="checkbox" bind:checked={datos.autoriza_datos} />
-					<span class="opcion__texto">
-						Autorizo de manera libre, previa, expresa e informada a la
-						<strong>Alcaldía de Jamundí</strong> a tratar los datos personales que entrego en este
-						formulario —nombre, cédula, teléfono, correo, dirección, ubicación de mi vivienda y las
-						<strong>fotografías que adjunto, incluida la de mi documento de identidad</strong>— con
-						la única finalidad de programar y realizar la inspección técnica de la vivienda
-						afectada y adelantar la atención de la emergencia. Sé que puedo conocer, actualizar,
-						rectificar y solicitar la supresión de mis datos ante la Alcaldía de Jamundí.
-					</span>
-				</label>
-				{#if errores.autoriza_datos}
-					<span class="campo__error">{errores.autoriza_datos}</span>
-				{/if}
-
-				<p class="legal">
-					<ShieldCheck size={14} aria-hidden="true" />
-					<span>
-						No le pedimos datos sensibles. Si su caso avanza, el resto de la información la tomará
-						un funcionario durante la visita.
-					</span>
+				<p class="tarjeta__nota">
+					Grabe cada uno siguiendo la indicación. Se cortan solos al llegar al máximo y puede
+					repetirlos antes de enviarlos. <strong>Si no puede grabar alguno, continúe igual</strong>:
+					no perderá su turno por eso.
 				</p>
+
+				{#each catalogos.categorias_video as c (c.id)}
+					<GrabadorVideo
+						categoria={c}
+						carga={evidencias?.carga ?? null}
+						alSubir={(id) => (videosListos = [...videosListos, id])}
+					/>
+				{/each}
 			</section>
 
-			<!-- Trampa antirrobot. Oculta y fuera del orden de tabulación. -->
-			<div class="trampa" aria-hidden="true">
-				<label for="sitio_web">No llene este campo</label>
-				<input id="sitio_web" name="sitio_web" tabindex="-1" autocomplete="off" bind:value={datos.sitio_web} />
-			</div>
+		<!-- ── Paso 4: autorización y envío ────────────────────────────── -->
+		{:else if paso.id === 'envio'}
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Lo que va a enviar</h2>
 
-			<button class="boton boton--grande" type="submit" disabled={enviando}>
-				{#if enviando}
-					<LoaderCircle size={17} class="girando" aria-hidden="true" />
-					Enviando…
-				{:else}
-					<Send size={17} aria-hidden="true" />
-					Enviar mi solicitud
-				{/if}
-			</button>
-		</form>
+				<dl class="resumen">
+					<div><dt>Nombre</dt><dd>{datos.nombre_completo || '—'}</dd></div>
+					<div><dt>Cédula</dt><dd>{datos.documento || '—'}</dd></div>
+					<div><dt>Teléfono</dt><dd>{datos.telefono || '—'}</dd></div>
+					<div>
+						<dt>Vivienda</dt>
+						<dd>
+							{datos.direccion || '—'}
+							{#if datos.vereda}· {datos.vereda}{/if}
+							{#if datos.zona === 'RURAL' && datos.corregimiento}· {datos.corregimiento}{/if}
+							{#if datos.zona}({datos.zona === 'RURAL' ? 'zona rural' : 'zona urbana'}){/if}
+						</dd>
+					</div>
+					<div>
+						<dt>Daños marcados</dt>
+						<dd>
+							{#if datos.senales.length === 0}
+								Ninguno
+							{:else}
+								{catalogos.senales
+									.filter((s) => datos.senales.includes(s.codigo))
+									.map((s) => s.etiqueta)
+									.join(', ')}
+							{/if}
+						</dd>
+					</div>
+				</dl>
+
+				<button type="button" class="volver" onclick={() => (indice = 0)}>
+					Corregir mis datos
+				</button>
+			</section>
+
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Autorización de datos</h2>
+				<AutorizacionDatos
+					bind:aceptado={datos.autoriza_datos}
+					error={errores.autoriza_datos ?? ''}
+				/>
+			</section>
+		{/if}
+
+		<!-- Trampa antirrobot. Oculta y fuera del orden de tabulación. -->
+		<div class="trampa" aria-hidden="true">
+			<label for="sitio_web">No llene este campo</label>
+			<input
+				id="sitio_web"
+				name="sitio_web"
+				tabindex="-1"
+				autocomplete="off"
+				bind:value={datos.sitio_web}
+			/>
+		</div>
+
+		<nav class="navegacion" aria-label="Navegación del formulario">
+			{#if !esPrimero}
+				<button type="button" class="boton boton--suave" onclick={anterior} disabled={enviando}>
+					<ArrowLeft size={16} aria-hidden="true" />
+					Atrás
+				</button>
+			{/if}
+
+			{#if esUltimo}
+				<button type="button" class="boton boton--enviar" onclick={enviar} disabled={enviando}>
+					{#if enviando}
+						<LoaderCircle size={16} class="girando" aria-hidden="true" />
+						Enviando…
+					{:else}
+						<Send size={16} aria-hidden="true" />
+						Enviar mi solicitud
+					{/if}
+				</button>
+			{:else}
+				<button type="button" class="boton" onclick={siguiente}>
+					Siguiente
+					<ArrowRight size={16} aria-hidden="true" />
+				</button>
+			{/if}
+		</nav>
 	{/if}
 </div>
 
@@ -513,9 +667,9 @@
 		line-height: 1.25;
 	}
 
-	.intro {
-		margin: 0 0 1.2rem;
-		font-size: 0.9rem;
+	.ayuda-paso {
+		margin: 0.6rem 0 1rem;
+		font-size: 0.88rem;
 		line-height: 1.5;
 		color: var(--color-muted);
 	}
@@ -531,26 +685,80 @@
 		margin-bottom: 1rem;
 	}
 
-	.legal {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.4rem;
-		margin: 0.8rem 0 0;
-		font-size: 0.78rem;
-		line-height: 1.45;
+	.grupo {
+		border: 0;
+		padding: 0;
+		margin: 0 0 0.9rem;
+		min-width: 0;
+	}
+
+	.grupo legend {
+		padding: 0;
+	}
+
+	/* Dos columnas solo cuando hay sitio, como en el censo. */
+	@media (min-width: 560px) {
+		.opciones--dos {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.resumen {
+		display: grid;
+		gap: 0.55rem;
+		margin: 0;
+		font-size: 0.87rem;
+	}
+
+	.resumen div {
+		display: grid;
+		grid-template-columns: 8.5rem 1fr;
+		gap: 0.5rem;
+	}
+
+	.resumen dt {
 		color: var(--color-muted);
 	}
 
-	.legal :global(svg) {
-		flex: none;
-		margin-top: 0.15rem;
+	.resumen dd {
+		margin: 0;
+		line-height: 1.4;
 	}
 
-	.boton--grande {
-		width: 100%;
+	.volver {
+		margin-top: 0.9rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-size: 0.83rem;
+		color: var(--color-primary);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+	}
+
+	.navegacion {
+		display: flex;
+		gap: 0.6rem;
+		margin-top: 1.6rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.navegacion .boton {
+		flex: 1;
 		justify-content: center;
-		min-height: 3rem;
-		font-size: 1rem;
+		min-height: 48px;
+		font-size: 0.95rem;
+	}
+
+	.boton--enviar {
+		background: var(--color-success);
+	}
+
+	.boton--enviar:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-success) 82%, black);
 	}
 
 	.cierre {

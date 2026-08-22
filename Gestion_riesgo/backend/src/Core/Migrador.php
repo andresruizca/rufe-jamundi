@@ -40,6 +40,8 @@ final class Migrador
         'evidencias_03_tipos.sql',
         // Catálogo de categorías de video y los videos ciudadanos.
         'preinscripcion_02_video.sql',
+        // Zona urbana/rural y las señales de daño que marca el ciudadano.
+        'preinscripcion_03_pasos.sql',
     ];
 
     /**

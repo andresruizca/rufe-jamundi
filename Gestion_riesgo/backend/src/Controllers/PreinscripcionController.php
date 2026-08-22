@@ -13,6 +13,7 @@ use App\Core\Limite;
 use App\Core\Request;
 use App\Core\Response;
 use App\Preinscripcion\Radicado;
+use App\Preinscripcion\Senales;
 use App\Preinscripcion\Validador;
 use App\Preinscripcion\Videos;
 use App\Rufe\Archivos;
@@ -70,6 +71,11 @@ final class PreinscripcionController
 
         Response::ok([
             'corregimientos' => Rufe::CORREGIMIENTOS,
+            'zonas'          => Validador::ZONAS,
+            // Las señales de daño que el ciudadano puede reconocer a ojo. Van
+            // en el catálogo y no escritas en la pantalla para que el servidor
+            // y el formulario no puedan discrepar sobre qué códigos existen.
+            'senales'        => Senales::paraApi(),
             'aviso_version'  => Rufe::AVISO_VERSION,
             // Las categorías ACTIVAS, en su orden. El formulario las cachea en
             // el teléfono para que el checklist funcione también sin señal.
@@ -330,12 +336,12 @@ final class PreinscripcionController
             Db::exec(
                 'INSERT INTO preinscripciones
                     (radicado, envio_id, nombre_completo, documento, telefono, correo,
-                     direccion, corregimiento, vereda, latitud, longitud, precision_m,
+                     direccion, zona, corregimiento, vereda, latitud, longitud, precision_m,
                      descripcion_dano, autoriza_datos, aviso_version, autorizacion_en,
                      huella, estado, origen_hash)
                  VALUES
                     (:radicado, :envio_id, :nombre, :documento, :telefono, :correo,
-                     :direccion, :corregimiento, :vereda, :latitud, :longitud, :precision_m,
+                     :direccion, :zona, :corregimiento, :vereda, :latitud, :longitud, :precision_m,
                      :descripcion, :autoriza, :aviso, NOW(),
                      :huella, :estado, :origen)',
                 [
@@ -346,6 +352,7 @@ final class PreinscripcionController
                     'telefono'      => $datos['telefono'],
                     'correo'        => $datos['correo'],
                     'direccion'     => $datos['direccion'],
+                    'zona'          => $datos['zona'],
                     'corregimiento' => $datos['corregimiento'],
                     'vereda'        => $datos['vereda'],
                     'latitud'       => $datos['latitud'],
@@ -364,6 +371,17 @@ final class PreinscripcionController
             );
 
             $id = Db::lastId();
+
+            // La etiqueta se copia tal como se le mostró a la persona: si algún
+            // día se reescribe un texto del catálogo, el expediente tiene que
+            // seguir diciendo qué fue lo que marcó.
+            foreach ($datos['senales'] as $codigo) {
+                Db::exec(
+                    'INSERT INTO preinscripcion_senales (preinscripcion_id, codigo, etiqueta)
+                     VALUES (:p, :c, :e)',
+                    ['p' => $id, 'c' => $codigo, 'e' => Senales::etiqueta($codigo)]
+                );
+            }
 
             if ($carga !== null) {
                 $hash = Archivos::hashDeCarga($carga);
@@ -402,7 +420,7 @@ final class PreinscripcionController
 
         $filas = Db::all(
             "SELECT id, radicado, nombre_completo, documento, telefono, direccion,
-                    corregimiento, vereda, estado, inspeccion_id, creado_en
+                    zona, corregimiento, vereda, estado, inspeccion_id, creado_en
                FROM preinscripciones{$where}
               ORDER BY id DESC
               LIMIT {$porPagina} OFFSET {$desde}",
@@ -435,6 +453,11 @@ final class PreinscripcionController
             'fotos' => Db::all(
                 'SELECT id, nombre_original, extension, tamano_bytes, mime
                    FROM rufe_evidencias WHERE preinscripcion_id = :i ORDER BY id',
+                ['i' => $id]
+            ),
+            'senales' => Db::all(
+                'SELECT codigo, etiqueta FROM preinscripcion_senales
+                  WHERE preinscripcion_id = :i ORDER BY id',
                 ['i' => $id]
             ),
             'videos' => Videos::deSolicitud($id),

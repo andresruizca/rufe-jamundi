@@ -80,7 +80,16 @@
 	}
 
 	const lugar = $derived(
-		p ? [p.direccion, p.vereda, p.corregimiento].filter(Boolean).join(' · ') : '—'
+		p
+			? [
+					p.direccion,
+					p.vereda,
+					p.corregimiento,
+					p.zona === 'RURAL' ? 'zona rural' : p.zona === 'URBANA' ? 'zona urbana' : null
+				]
+					.filter(Boolean)
+					.join(' · ')
+			: '—'
 	);
 
 	onMount(cargar);
@@ -172,6 +181,28 @@
 					</dd>
 				</div>
 			{/if}
+
+			<!--
+				Lo que el ciudadano marcó NO es una clasificación de daño: es lo que
+				alcanzó a reconocer mirando su casa. Se muestra con la etiqueta que
+				vio en su momento, no con la que hoy diría el catálogo, y se dice
+				expresamente para qué sirve — para saber qué mirar primero en la
+				visita, no para dar por evaluado nada.
+			-->
+			<div>
+				<dt>Daños que reconoció</dt>
+				<dd>
+					{#if detalle.senales.length === 0}
+						<span class="vacio">No marcó ninguno</span>
+					{:else}
+						<ul class="senales">
+							{#each detalle.senales as s (s.codigo)}
+								<li>{s.etiqueta}</li>
+							{/each}
+						</ul>
+					{/if}
+				</dd>
+			</div>
 
 			{#if p.descripcion_dano}
 				<div><dt>Lo que reportó</dt><dd class="relato">{p.descripcion_dano}</dd></div>
@@ -412,6 +443,27 @@
 
 	.relato {
 		white-space: pre-wrap;
+	}
+
+	.senales {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+
+	.senales li {
+		padding: 0.15rem 0.55rem;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 999px;
+		font-size: 0.8rem;
+		background: var(--color-surface-alt);
+	}
+
+	.vacio {
+		color: var(--color-muted);
 	}
 
 	.videos {
