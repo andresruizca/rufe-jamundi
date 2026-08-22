@@ -205,6 +205,10 @@ $router->get('/preinscripcion/fichas/{id}', [$preinscripcion, 'ver'], Auth::LECT
 $router->get('/preinscripcion/fichas/{id}/fotos/{foto}', [$preinscripcion, 'descargarFoto'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}/videos/{video}', [$preinscripcion, 'descargarVideo'], Auth::LECTURA_RUFE);
 $router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEstado'], Auth::ESCRITURA);
+// Borrar la solicitud de un ciudadano es irreversible y destruye sus fotos y su
+// video. Solo Administrador: el Gestor puede decidirla y descartarla, que es lo
+// que necesita para trabajar, pero no hacerla desaparecer.
+$router->delete('/preinscripcion/fichas/{id}', [$preinscripcion, 'eliminar'], $soloAdmin);
 
 // Catálogo de categorías de video, que gestiona el administrador. Qué hay que
 // grabar de una vivienda cambia entre una emergencia y la siguiente; esperar a

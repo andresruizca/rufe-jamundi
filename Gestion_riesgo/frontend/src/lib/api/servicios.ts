@@ -329,6 +329,13 @@ export const preinscripcionApi = {
 	cambiarEstado: (id: number, estado: string, nota: string) =>
 		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota }),
 
+	/** Irreversible: borra la ficha, sus fotos y sus videos. Solo Administrador. */
+	eliminar: (id: number, motivo: string) =>
+		api.delete<{ mensaje: string; archivos_borrados: number }>(
+			`/preinscripcion/fichas/${id}`,
+			{ motivo }
+		),
+
 	/**
 	 * Un video de la solicitud, para verlo en la bandeja.
 	 *

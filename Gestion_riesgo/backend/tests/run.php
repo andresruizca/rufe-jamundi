@@ -2109,6 +2109,48 @@ function rutasConSusRoles(string $raiz): array
     return $salida;
 }
 
+prueba('borrar una solicitud ciudadana es solo del administrador', function () use ($raiz): void {
+    // Es la única operación del sistema que destruye datos de un ciudadano y no
+    // se deshace. El Gestor puede descartarla —lo que necesita para trabajar—
+    // pero no hacerla desaparecer, y el Visualización ni siquiera eso.
+    $roles = rutasConSusRoles($raiz)['DELETE /preinscripcion/fichas/{id}'] ?? null;
+
+    afirmar($roles !== null, 'la ruta de borrado debe existir y declarar sus roles');
+    afirmarIgual([App\Core\Auth::ADMINISTRADOR], $roles);
+});
+
+prueba('las rutas de archivos se leen ANTES de borrar la fila', function () use ($raiz): void {
+    // Las claves foráneas se llevan las filas en cascada pero no tocan el disco.
+    // Si se borrara primero la solicitud, ya no habría forma de saber qué
+    // archivos borrar: la foto de la cédula de una persona se quedaría en el
+    // servidor para siempre, sin ninguna fila que la nombrara y sin nadie que
+    // supiera que está ahí.
+    $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $metodo = substr($fuente, strpos($fuente, 'public function eliminar(Request'));
+    $metodo = substr($metodo, 0, strpos($metodo, 'public function cambiarEstado('));
+
+    $lectura = strpos($metodo, 'ruta_relativa');
+    $borrado = strpos($metodo, 'DELETE FROM preinscripciones');
+
+    afirmar($lectura !== false, 'debe recoger las rutas de los archivos');
+    afirmar($borrado !== false, 'debe borrar la solicitud');
+    afirmar($lectura < $borrado, 'las rutas se leen antes del DELETE, no después');
+});
+
+prueba('una solicitud ya convertida en inspección no se puede borrar', function () use ($raiz): void {
+    // Ninguna ficha de inspección guarda de qué solicitud nació. Borrarla
+    // dejaría una inspección —de la que depende una entrega de materiales— sin
+    // nada que explique por qué se hizo esa visita.
+    $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $metodo = substr($fuente, strpos($fuente, 'public function eliminar(Request'));
+    $metodo = substr($metodo, 0, strpos($metodo, 'public function cambiarEstado('));
+
+    afirmar(
+        str_contains($metodo, "'CONVERTIDA'"),
+        'eliminar() debe negarse con una solicitud ya convertida'
+    );
+});
+
 prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function () use ($raiz): void {
     // La lista va escrita a mano a propósito. Derivarla del código haría que la
     // prueba dijera «sí» a cualquier cosa que el código dijera; escrita así,

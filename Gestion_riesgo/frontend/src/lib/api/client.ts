@@ -113,5 +113,10 @@ export const api = {
 	post: <T>(ruta: string, body?: unknown, autenticada = true) =>
 		request<T>(ruta, { method: 'POST', body, autenticada }),
 	put: <T>(ruta: string, body?: unknown) => request<T>(ruta, { method: 'PUT', body }),
-	delete: <T>(ruta: string) => request<T>(ruta, { method: 'DELETE' })
+	/**
+	 * Admite cuerpo: borrar una solicitud ciudadana exige mandar el motivo, y
+	 * ponerlo en la URL lo dejaría escrito en el registro de accesos del
+	 * servidor, que es justo donde no debe quedar el nombre de nadie.
+	 */
+	delete: <T>(ruta: string, body?: unknown) => request<T>(ruta, { method: 'DELETE', body })
 };

@@ -707,6 +707,103 @@ final class PreinscripcionController
         Archivos::emitir($fila);
     }
 
+    /**
+     * Borra una solicitud, sus archivos y todo su rastro.
+     *
+     * Es la única operación de este sistema que destruye datos de un ciudadano,
+     * y por eso lleva encima todo lo que se pudo poner:
+     *
+     *  • Solo Administrador. El Gestor descarta, que es lo que necesita para
+     *    trabajar; hacer desaparecer una solicitud es otra cosa.
+     *  • Una CONVERTIDA no se borra. Ninguna inspección guarda de qué solicitud
+     *    nació, así que borrarla dejaría una ficha de inspección —de la que
+     *    depende una entrega de materiales— sin forma de explicar por qué se
+     *    hizo esa visita. La inspección sobreviviría; el motivo, no.
+     *  • Se exige un motivo y queda en la auditoría junto al radicado y al
+     *    nombre. Lo que desaparece es el dato personal, no la constancia de que
+     *    existió y de quién decidió quitarlo.
+     *
+     * Los archivos se borran del disco a mano DESPUÉS de que la base de datos
+     * confirme. Las claves foráneas se llevan las filas en cascada pero no
+     * tocan el disco: sin esto, la foto de la cédula de una persona seguiría
+     * ahí para siempre, sin ninguna fila que la nombrara y sin nadie que
+     * supiera que hay que borrarla.
+     */
+    public function eliminar(Request $req): void
+    {
+        $actor = Auth::exigirUsuario($req);
+        $id = (int) $req->param('id');
+
+        $ficha = Db::first(
+            'SELECT id, radicado, nombre_completo, estado, inspeccion_id
+               FROM preinscripciones WHERE id = :i',
+            ['i' => $id]
+        );
+
+        if ($ficha === null) {
+            throw HttpError::noEncontrado('No existe esa pre-inscripción.');
+        }
+
+        if ($ficha['estado'] === 'CONVERTIDA') {
+            throw HttpError::prohibido(
+                'Esta solicitud ya se convirtió en inspección y no se puede borrar. '
+                .'Es lo único que explica por qué se hizo esa visita.'
+            );
+        }
+
+        $motivo = trim($req->texto('motivo'));
+        if (mb_strlen($motivo) < 5) {
+            throw HttpError::validacion([
+                'motivo' => 'Escriba por qué se borra. Queda en la auditoría.',
+            ]);
+        }
+
+        // Las rutas se recogen ANTES: en cuanto se borre la fila, la cascada se
+        // lleva las de los archivos y ya no habría forma de saber qué borrar.
+        $rutas = array_merge(
+            array_column(Db::all(
+                'SELECT ruta_relativa FROM rufe_evidencias WHERE preinscripcion_id = :i',
+                ['i' => $id]
+            ), 'ruta_relativa'),
+            array_column(Db::all(
+                "SELECT ruta_relativa FROM preinscripcion_videos
+                  WHERE preinscripcion_id = :i AND ruta_relativa <> ''",
+                ['i' => $id]
+            ), 'ruta_relativa')
+        );
+
+        Db::exec('DELETE FROM preinscripciones WHERE id = :i', ['i' => $id]);
+
+        // Después del borrado, no antes: si la consulta fallara, unos archivos
+        // ya destruidos dejarían una solicitud viva y sin evidencias.
+        foreach ($rutas as $ruta) {
+            $absoluta = Archivos::base().'/'.$ruta;
+
+            if (is_file($absoluta)) {
+                @unlink($absoluta);
+                @rmdir(dirname($absoluta));
+            }
+        }
+
+        Auditoria::registrar(
+            $req,
+            'preinscripcion.eliminada',
+            $actor,
+            'preinscripciones',
+            (string) $ficha['radicado'],
+            mb_substr(
+                $ficha['nombre_completo'].' · '.count($rutas).' archivo(s) · motivo: '.$motivo,
+                0,
+                500
+            )
+        );
+
+        Response::ok([
+            'mensaje' => 'La solicitud '.$ficha['radicado'].' se eliminó.',
+            'archivos_borrados' => count($rutas),
+        ]);
+    }
+
     public function cambiarEstado(Request $req): void
     {
         $id = (int) $req->param('id');

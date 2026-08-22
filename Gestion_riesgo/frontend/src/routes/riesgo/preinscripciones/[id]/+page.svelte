@@ -12,12 +12,13 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
 	import {
-		ArrowLeft, ArrowRight, Check, LoaderCircle, MapPin, TriangleAlert, Video
+		ArrowLeft, ArrowRight, Check, LoaderCircle, MapPin, Trash2, TriangleAlert, Video
 	} from '@lucide/svelte';
+	import { goto } from '$app/navigation';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi, type PreinscripcionDetalle } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
-	import { ESCRITURA } from '$lib/navigation';
+	import { ESCRITURA, SOLO_ADMIN } from '$lib/navigation';
 	import VisorEvidencias from '$lib/components/VisorEvidencias.svelte';
 	import VistaPreviaVideo from '$lib/preinscripcion/VistaPreviaVideo.svelte';
 	import IconoSenal from '$lib/preinscripcion/IconoSenal.svelte';
@@ -35,6 +36,32 @@
 
 	const id = $derived(Number(page.params.id));
 	const puedeDecidir = $derived(!!sesion.rol && ESCRITURA.includes(sesion.rol));
+
+	// Borrar destruye los datos de un ciudadano y no se deshace. El Gestor puede
+	// descartar una solicitud, que es lo que necesita para trabajar; hacerla
+	// desaparecer es otra cosa.
+	const puedeBorrar = $derived(!!sesion.rol && SOLO_ADMIN.includes(sesion.rol));
+
+	let borrando = $state(false);
+	let confirmandoBorrado = $state(false);
+	let motivoBorrado = $state('');
+
+	async function eliminar() {
+		if (borrando || motivoBorrado.trim().length < 5) return;
+
+		borrando = true;
+		error = null;
+
+		try {
+			await preinscripcionApi.eliminar(id, motivoBorrado.trim());
+			// Se sale de la ficha: quedarse en la página de algo que ya no existe
+			// solo lleva a un 404 al primer clic.
+			await goto('/riesgo/preinscripciones');
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : 'No se pudo eliminar la solicitud.';
+			borrando = false;
+		}
+	}
 
 	const p = $derived(detalle?.preinscripcion ?? null);
 
@@ -404,6 +431,88 @@
 		</div>
 	{/if}
 
+	{#if puedeBorrar}
+		<!--
+			Al final de la página y detrás de dos pasos, a propósito: es lo único
+			de este sistema que destruye datos de un ciudadano y no se deshace.
+		-->
+		<div class="tarjeta peligro">
+			<h2 class="tarjeta__titulo">Eliminar la solicitud</h2>
+
+			{#if yaConvertida}
+				<p class="tarjeta__nota">
+					Esta solicitud ya se convirtió en inspección y por eso no se puede borrar:
+					<strong>es lo único que explica por qué se hizo esa visita</strong>. La ficha de
+					inspección no guarda de dónde salió.
+				</p>
+			{:else if !confirmandoBorrado}
+				<p class="tarjeta__nota">
+					Borra la solicitud y con ella
+					{detalle.fotos.length}
+					{detalle.fotos.length === 1 ? 'foto' : 'fotos'},
+					{detalle.videos.length}
+					{detalle.videos.length === 1 ? 'video' : 'videos'} y todo su historial. No se puede
+					deshacer. Si solo quiere sacarla de la cola, use «Descartada» aquí arriba.
+				</p>
+				<button
+					type="button"
+					class="boton boton--suave boton--peligro"
+					onclick={() => (confirmandoBorrado = true)}
+				>
+					<Trash2 size={15} aria-hidden="true" />
+					Eliminar esta solicitud
+				</button>
+			{:else}
+				<p class="tarjeta__nota">
+					Va a borrar <strong>{p.radicado}</strong> de {p.nombre_completo}, con
+					{detalle.fotos.length + detalle.videos.length} archivo(s). Esto no se puede deshacer.
+				</p>
+
+				<div class="campo">
+					<label class="campo__etiqueta" for="motivo-borrado">¿Por qué se borra? *</label>
+					<input
+						id="motivo-borrado"
+						class="campo__control"
+						bind:value={motivoBorrado}
+						placeholder="Ej.: registro de prueba"
+					/>
+					<span class="campo__ayuda">
+						Queda en la auditoría con el radicado y su usuario. Es lo único que quedará de esta
+						solicitud.
+					</span>
+				</div>
+
+				<div class="acciones">
+					<button
+						type="button"
+						class="boton boton--suave"
+						onclick={() => {
+							confirmandoBorrado = false;
+							motivoBorrado = '';
+						}}
+						disabled={borrando}
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						class="boton boton--peligro"
+						onclick={eliminar}
+						disabled={borrando || motivoBorrado.trim().length < 5}
+					>
+						{#if borrando}
+							<LoaderCircle size={15} class="girando" aria-hidden="true" />
+							Eliminando…
+						{:else}
+							<Trash2 size={15} aria-hidden="true" />
+							Sí, eliminar definitivamente
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="tarjeta">
 		<h2 class="tarjeta__titulo">Historial</h2>
 		{#if detalle.historial.length > 0}
@@ -516,6 +625,32 @@
 		border-radius: 999px;
 		font-size: 0.8rem;
 		background: var(--color-surface-alt);
+	}
+
+	.peligro {
+		border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+	}
+
+	.boton--peligro {
+		border-color: var(--color-danger);
+		color: var(--color-danger);
+	}
+
+	.boton--peligro:not(.boton--suave) {
+		background: var(--color-danger);
+		color: #fff;
+	}
+
+	.boton--peligro:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-danger) 88%, black);
+		color: #fff;
+	}
+
+	.acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-top: 0.9rem;
 	}
 
 	.senal__dibujo {
