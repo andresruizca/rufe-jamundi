@@ -242,12 +242,17 @@ final class PreinscripcionController
 
         $envioId = $this->envioId($req);
 
+        // Se lee aquí y no al final porque los dos atajos de más abajo
+        // —reintento y duplicada— también tienen que adoptar los archivos.
+        $carga = $req->texto('carga');
+        $carga = $carga === '' ? null : $carga;
+
         // Reintento de un envío que ya entró: ocurre cuando la solicitud llegó
         // pero la respuesta se perdió por falta de cobertura. Se devuelve el
         // radicado original en vez de inscribir dos veces al mismo hogar.
         if ($envioId !== null) {
             $previo = Db::first(
-                'SELECT radicado, creado_en FROM preinscripciones WHERE envio_id = :e',
+                'SELECT id, radicado, creado_en FROM preinscripciones WHERE envio_id = :e',
                 ['e' => $envioId]
             );
 
@@ -256,6 +261,11 @@ final class PreinscripcionController
                     'radicado'    => $previo['radicado'],
                     'recibido_en' => date('c', strtotime((string) $previo['creado_en'])),
                     'reintento'   => true,
+                    // Un reintento suele traer la misma carga ya adoptada, y
+                    // entonces esto no encuentra nada y devuelve cero. Pero si
+                    // el teléfono perdió la señal a mitad y volvió a subir las
+                    // fotos con otra carga, aquí es donde entran.
+                    'archivos_agregados' => $this->adjuntarA((int) $previo['id'], $carga),
                 ]);
 
                 return;
@@ -288,7 +298,7 @@ final class PreinscripcionController
         // vez de crear otra. Que la familia se inscriba tres veces por nervios
         // no puede convertirse en tres turnos.
         $duplicada = Db::first(
-            'SELECT radicado, creado_en FROM preinscripciones
+            'SELECT id, radicado, creado_en FROM preinscripciones
               WHERE huella = :h AND estado <> :d
               ORDER BY id DESC LIMIT 1',
             ['h' => $huella, 'd' => 'DESCARTADA']
@@ -299,19 +309,79 @@ final class PreinscripcionController
                 'radicado'    => $duplicada['radicado'],
                 'recibido_en' => date('c', strtotime((string) $duplicada['creado_en'])),
                 'duplicada'   => true,
+                // Lo nuevo se SUMA a la solicitud que ya existía. Antes se
+                // tiraba: quien volvía a inscribirse justamente porque esta vez
+                // sí había podido grabar el video recibía «ya estaba
+                // registrada» y perdía el video, sin enterarse.
+                'archivos_agregados' => $this->adjuntarA((int) $duplicada['id'], $carga),
             ]);
 
             return;
         }
 
-        $carga = $req->texto('carga');
-
-        $radicado = $this->guardar($datos, $huella, $envioId, $req, $carga === '' ? null : $carga);
+        $radicado = $this->guardar($datos, $huella, $envioId, $req, $carga);
 
         Response::json([
             'ok'   => true,
             'data' => ['radicado' => $radicado, 'recibido_en' => date('c')],
         ], 201);
+    }
+
+    /**
+     * Suma a una solicitud que ya existe los archivos de un reenvío.
+     *
+     * Antes esto no existía y los dos atajos de `crear()` —el reintento sin
+     * señal y la solicitud duplicada— devolvían el radicado y se marchaban sin
+     * tocar la carga. Las fotos y los videos recién subidos se quedaban
+     * huérfanos en `temporal/` y la purga se los llevaba dos horas después.
+     *
+     * El caso que lo hace grave: una familia se inscribe, y días más tarde
+     * vuelve a inscribirse porque esta vez sí consiguió grabar el video del
+     * daño. El servidor le contestaba «su vivienda ya estaba registrada» —con
+     * razón— y le tiraba el video, sin decírselo. Justo la evidencia que valía
+     * la pena.
+     *
+     * Devuelve cuántos archivos se sumaron, para poder decírselo en pantalla.
+     */
+    private function adjuntarA(int $preinscripcionId, ?string $carga): int
+    {
+        if ($carga === null) {
+            return 0;
+        }
+
+        $hash = Archivos::hashDeCarga($carga);
+
+        $pdo = Db::conn();
+        $pdo->beginTransaction();
+
+        try {
+            $sumados = Archivos::adoptarPreinscripcion($hash, $preinscripcionId)
+                + Videos::adoptar($hash, $preinscripcionId);
+
+            // Que quede constancia de que la ficha creció después de recibida:
+            // quien la revisó ayer y la vio sin videos tiene que poder entender
+            // por qué hoy tiene dos.
+            if ($sumados > 0) {
+                Db::exec(
+                    'INSERT INTO preinscripcion_historial (preinscripcion_id, estado, nota)
+                     SELECT id, estado, :n FROM preinscripciones WHERE id = :i',
+                    [
+                        'n' => $sumados === 1
+                            ? 'El ciudadano volvió a enviar el formulario y se agregó 1 archivo.'
+                            : "El ciudadano volvió a enviar el formulario y se agregaron {$sumados} archivos.",
+                        'i' => $preinscripcionId,
+                    ]
+                );
+            }
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+
+            throw $e;
+        }
+
+        return $sumados;
     }
 
     /**

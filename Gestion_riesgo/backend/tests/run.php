@@ -2636,6 +2636,26 @@ prueba('la bandeja recoloca los videos que quedaron en temporal', function (): v
     );
 });
 
+prueba('un reenvío no puede tirar los archivos que trae', function (): void {
+    // Los dos atajos de `crear()` —el reintento sin señal y la solicitud
+    // duplicada— devolvían el radicado y se marchaban sin tocar la carga: las
+    // fotos y videos recién subidos se quedaban huérfanos y la purga se los
+    // llevaba dos horas después.
+    //
+    // El caso que lo hace grave: una familia vuelve a inscribirse porque esta
+    // vez SÍ consiguió grabar el video del daño. El servidor le contestaba «su
+    // vivienda ya estaba registrada» —con razón— y le tiraba el video.
+    $fuente = file_get_contents(__DIR__.'/../src/Controllers/PreinscripcionController.php');
+    $crear = substr($fuente, strpos($fuente, 'public function crear('));
+    $crear = substr($crear, 0, strpos($crear, 'private function adjuntarA('));
+
+    afirmarIgual(
+        2,
+        substr_count($crear, '$this->adjuntarA('),
+        'los dos atajos de crear() deben adoptar la carga antes de responder'
+    );
+});
+
 prueba('el radicado ciudadano se distingue de los otros dos', function (): void {
     $r = App\Preinscripcion\Radicado::componer(2026);
 

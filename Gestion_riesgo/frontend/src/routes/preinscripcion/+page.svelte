@@ -47,7 +47,11 @@
 	let enviando = $state(false);
 	let errorEnvio = $state('');
 	let errores = $state<Record<string, string>>({});
-	let resultado = $state<{ radicado: string; duplicada?: boolean } | null>(null);
+	let resultado = $state<{
+		radicado: string;
+		duplicada?: boolean;
+		archivosAgregados?: number;
+	} | null>(null);
 
 	// Las fotos comparten toda la maquinaria del censo —compresión en el
 	// teléfono, cola, reintento— apuntando a las rutas públicas. La original
@@ -224,7 +228,11 @@
 				...(evidencias?.carga ? { carga: evidencias.carga } : {})
 			});
 
-			resultado = { radicado: r.radicado, duplicada: r.duplicada };
+			resultado = {
+				radicado: r.radicado,
+				duplicada: r.duplicada,
+				archivosAgregados: r.archivos_agregados
+			};
 			subirAlInicio();
 		} catch (e) {
 			if (e instanceof ApiError) {
@@ -282,6 +290,16 @@
 				{#if resultado.duplicada}
 					Ya teníamos una solicitud para esta vivienda y esta cédula, así que conserva el mismo
 					número. No hace falta volver a registrarse.
+					{#if resultado.archivosAgregados}
+						<!-- Decirlo importa: quien vuelve a inscribirse suele hacerlo justamente
+						     porque esta vez sí pudo tomar las fotos o grabar el video, y si solo
+						     lee «ya estaba registrada» se queda creyendo que no sirvió de nada. -->
+						<strong>
+							{resultado.archivosAgregados === 1
+								? 'El archivo que acaba de enviar se agregó a su solicitud.'
+								: `Los ${resultado.archivosAgregados} archivos que acaba de enviar se agregaron a su solicitud.`}
+						</strong>
+					{/if}
 				{:else}
 					Anote este número. Es el que debe dar si llama a preguntar por su solicitud.
 				{/if}

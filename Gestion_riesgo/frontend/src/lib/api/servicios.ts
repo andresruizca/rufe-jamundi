@@ -267,7 +267,14 @@ export const preinscripcionApi = {
 		),
 
 	enviar: (cuerpo: Record<string, unknown>) =>
-		api.post<{ radicado: string; recibido_en: string; reintento?: boolean; duplicada?: boolean }>(
+		api.post<{
+			radicado: string;
+			recibido_en: string;
+			reintento?: boolean;
+			duplicada?: boolean;
+			/** Fotos y videos del reenvío que se sumaron a la solicitud que ya existía. */
+			archivos_agregados?: number;
+		}>(
 			'/preinscripcion',
 			cuerpo,
 			false
