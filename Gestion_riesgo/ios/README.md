@@ -101,16 +101,20 @@ pensando que MP4 sobra.
 
 ---
 
-## Distribución
+## Distribución — y cómo evitar los 99 USD
 
-A diferencia de Android, en iOS **no se puede pasar el archivo de teléfono a
-teléfono**. Las opciones son:
+Ver [`docs/distribucion.md`](docs/distribucion.md).
 
-| Vía | Qué exige |
-|---|---|
-| **TestFlight** | Cuenta de Apple Developer (99 USD/año) y revisión |
-| **App Store** | Lo mismo, más revisión completa |
-| **Ad Hoc** | Registrar el UDID de cada iPhone, máximo 100 |
+Lo esencial: **la Alcaldía puede tener el programa gratis.** Apple exime del
+pago a las entidades de gobierno, y una alcaldía municipal lo es. Se pide al
+inscribirse; si ya se pagó, no hay devolución.
 
-Esto elimina la ventaja que justificaba el APK —instalar sin conexión, pasándolo
-por Bluetooth—. En iPhone hace falta internet para instalar de todas formas.
+Lo que no está confirmado: Apple no publica en qué países aplica la exención, y
+no menciona Colombia. Hay que preguntarlo antes de darlo por hecho.
+
+Mientras tanto, la **aplicación web instalable** ya está publicada y no cuesta
+nada — con un aviso sobre el video que hay que probar en un iPhone real.
+
+Y en cualquier caso: en iOS **no se puede pasar el archivo de teléfono a
+teléfono**. Eso elimina la ventaja que justificaba el APK —instalar donde no hay
+señal— porque en iPhone siempre hace falta internet para instalar.
