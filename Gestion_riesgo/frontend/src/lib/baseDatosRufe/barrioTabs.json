@@ -238,5 +238,85 @@
 	{
 		"nombre": "TIMBA",
 		"gid": "123456789"
+	},
+	{
+		"nombre": "Barrios Varios",
+		"gid": "854751121"
+	},
+	{
+		"nombre": "San Isidro",
+		"gid": "328442942"
+	},
+	{
+		"nombre": "Villa Paz",
+		"gid": "1102170387"
+	},
+	{
+		"nombre": "Gaitán",
+		"gid": "350327454"
+	},
+	{
+		"nombre": "La Estación",
+		"gid": "339833028"
+	},
+	{
+		"nombre": "Paso de la Bolsa",
+		"gid": "1151298017"
+	},
+	{
+		"nombre": "Riveras del Rosario",
+		"gid": "174754594"
+	},
+	{
+		"nombre": "Villa del Sol",
+		"gid": "865857070"
+	},
+	{
+		"nombre": "Libertadores",
+		"gid": "580274650"
+	},
+	{
+		"nombre": "San Benito",
+		"gid": "1473262783"
+	},
+	{
+		"nombre": "Parques de Castilla",
+		"gid": "860199501"
+	},
+	{
+		"nombre": "Villa Tatiana",
+		"gid": "1773447847"
+	},
+	{
+		"nombre": "Anturios",
+		"gid": "569074683"
+	},
+	{
+		"nombre": "Belalcázar",
+		"gid": "887969403"
+	},
+	{
+		"nombre": "Amigos 2000",
+		"gid": "1558687333"
+	},
+	{
+		"nombre": "Las Mercedes",
+		"gid": "647034841"
+	},
+	{
+		"nombre": "La Esmeralda",
+		"gid": "1924473762"
+	},
+	{
+		"nombre": "La Lucha",
+		"gid": "2024196393"
+	},
+	{
+		"nombre": "Panamericano",
+		"gid": "1388281718"
+	},
+	{
+		"nombre": "Oporto",
+		"gid": "2033238209"
 	}
 ]
