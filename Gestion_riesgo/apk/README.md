@@ -38,6 +38,8 @@ funcionario. Pero:
 | 4 · Guardado local y «Mis registros» | Hecho |
 | 5 · `ApiCliente.kt` | Hecho — **compila**, en el APK |
 | 6 · `SyncWorker.kt` | Hecho — **compila**, en el APK |
+| — · Formulario de 4 pasos | Hecho — en el APK |
+| — · Catálogo embebido | Hecho |
 | 7-9 · Pruebas, campo, firma | Pendiente |
 
 ### Sobre el servidor

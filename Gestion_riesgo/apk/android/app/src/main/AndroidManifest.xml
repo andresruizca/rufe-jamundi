@@ -38,5 +38,25 @@
 
     <!-- Permissions -->
 
+    <!--
+        La cámara y la galería NO las declara el complemento de Capacitor: hay
+        que pedirlas aquí. Se descubrió leyendo los permisos del APK ya
+        compilado, no el manifiesto — el APK anterior salió sin CAMERA y la
+        cámara habría fallado en el teléfono sin decir por qué.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Galería. Android 13 partió el permiso en dos: el nuevo por tipo de
+         medio, y el viejo solo hasta Android 12. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- El teléfono puede no tener cámara y la aplicación sigue sirviendo: se
+         puede adjuntar desde la galería. `required="false"` evita que Play y
+         los instaladores la descarten en esos aparatos. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
