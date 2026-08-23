@@ -24,21 +24,33 @@ import java.io.File
 object BaseDatos {
 
     /**
-     * El nombre que le pone el plugin de Capacitor.
+     * El nombre del archivo, tal como lo compone el plugin de Capacitor.
      *
-     * `@capacitor-community/sqlite` guarda las bases en `databases/` dentro de
-     * los datos de la aplicación y añade el sufijo `SQLite.db` al nombre que se
-     * le pidió en `createConnection`. Si algún día cambia el nombre en
-     * `src/local/base.ts`, hay que cambiarlo aquí: son dos sitios y no hay forma
-     * de que el compilador lo note.
+     * `@capacitor-community/sqlite` toma el nombre que se le pasó a
+     * `createConnection` —`sgr_ciudadano`, en `src/local/base.ts`— y le pega el
+     * sufijo `SQLite.db`. Está leído de su código, no supuesto:
+     * `CapacitorSQLite.java` hace `dbName + "SQLite.db"`.
+     *
+     * Son dos sitios y el compilador no puede emparejarlos, así que lo empareja
+     * `scripts/comparar-kotlin.mjs`: si alguien cambia el nombre en TypeScript y
+     * se olvida de aquí, el sincronizador no encontraría la base y fallaría en
+     * SILENCIO — nadie sabría que las solicitudes dejaron de salir.
      */
-    private const val ARCHIVO = "sgr_ciudadanoSQLite.db"
+    private const val NOMBRE_EN_TYPESCRIPT = "sgr_ciudadano"
+    private const val ARCHIVO = NOMBRE_EN_TYPESCRIPT + "SQLite.db"
+
+    /**
+     * La ruta la da Android, no se construye a mano.
+     *
+     * `getDatabasePath()` devuelve exactamente lo que usa el plugin —él llama a
+     * lo mismo—, así que no hay dos formas de calcular la carpeta que puedan
+     * separarse.
+     */
+    private fun archivo(contexto: Context): File = contexto.getDatabasePath(ARCHIVO)
 
     fun abrir(contexto: Context): SQLiteDatabase {
-        val ruta = File(File(contexto.filesDir.parentFile, "databases"), ARCHIVO)
-
         val db = SQLiteDatabase.openDatabase(
-            ruta.absolutePath,
+            archivo(contexto).absolutePath,
             null,
             SQLiteDatabase.OPEN_READWRITE
         )
@@ -50,6 +62,5 @@ object BaseDatos {
     }
 
     /** ¿Existe ya? Antes del primer uso del formulario, no. */
-    fun existe(contexto: Context): Boolean =
-        File(File(contexto.filesDir.parentFile, "databases"), ARCHIVO).exists()
+    fun existe(contexto: Context): Boolean = archivo(contexto).exists()
 }

@@ -162,6 +162,36 @@ afirmar(
 	'el formulario se manda DESPUÉS de fotos y videos, o los archivos se pierden'
 );
 
+// ── El nombre de la base ────────────────────────────────────────────────────
+//
+// El TypeScript pasa `sgr_ciudadano` a `createConnection`; el plugin de
+// Capacitor le pega el sufijo `SQLite.db` (está en `CapacitorSQLite.java`:
+// `dbName + "SQLite.db"`), y Kotlin abre ese archivo por su cuenta.
+//
+// Si alguien cambia el nombre en un lado y no en el otro, el sincronizador no
+// encuentra la base y falla EN SILENCIO: nadie se entera de que las solicitudes
+// dejaron de salir del teléfono. Es el desajuste más caro de todos porque no
+// produce ningún error visible.
+
+const baseTs = readFileSync(join(raiz, 'src', 'local', 'base.ts'), 'utf8');
+const baseKtNombre = readFileSync(
+	join(raiz, 'android', 'app', 'src', 'main', 'java', 'co', 'gov', 'jamundi', 'sgr', 'BaseDatos.kt'),
+	'utf8'
+);
+
+const nombreTs = baseTs.match(/const NOMBRE = '([^']+)'/)?.[1] ?? null;
+const nombreKt = baseKtNombre.match(/const val NOMBRE_EN_TYPESCRIPT = "([^"]+)"/)?.[1] ?? null;
+
+afirmar(
+	nombreTs !== null && nombreTs === nombreKt,
+	`la base se llama igual en los dos lados (TS «${nombreTs}» · Kotlin «${nombreKt}»)`
+);
+
+afirmar(
+	/getDatabasePath\(/.test(baseKtNombre),
+	'Kotlin pide la ruta a Android en vez de construirla a mano'
+);
+
 // ── El pragma, otra vez ─────────────────────────────────────────────────────
 
 const baseKt = readFileSync(

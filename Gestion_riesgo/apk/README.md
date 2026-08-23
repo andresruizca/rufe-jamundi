@@ -101,10 +101,17 @@ de entorno de cada quien.
 los cuatro que salen son de `@capacitor/filesystem`.
 
 Que compile no es que funcione. **Nadie ha ejecutado nunca este APK en un
-teléfono.** Sin eso no se sabe si WorkManager despierta, si las consultas de
-`SyncWorker` devuelven lo que se espera o si la ruta de la base que usa
-`BaseDatos.kt` es la que el plugin de Capacitor crea de verdad — esa última es
-la que más dudo, porque el nombre del archivo va escrito a mano en dos sitios.
+teléfono.** Sin eso no se sabe si WorkManager despierta ni si las consultas de
+`SyncWorker` devuelven lo que se espera.
+
+Lo que sí dejó de ser una duda son los dos emparejamientos entre el WebView y
+Kotlin, comprobados leyendo el código de los complementos:
+
+- **La base**: el plugin compone `dbName + "SQLite.db"` y la guarda en
+  `getDatabasePath()`. Kotlin ya no construye esa ruta a mano — se la pide a
+  Android, igual que el plugin — y el nombre lo empareja `test:kotlin`.
+- **Los archivos**: `Directory.Data` es `context.filesDir` en Android, que es de
+  donde los lee `SyncWorker`.
 
 Lo que sí está comprobado es que **los dos lados dicen lo mismo**:
 `npm run test:kotlin` compara las escaleras de reintento, el tamaño del trozo,
