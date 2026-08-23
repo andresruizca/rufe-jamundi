@@ -8,6 +8,10 @@
 	import '$formulario/estilos/theme.css';
 	import '$formulario/estilos/shell.css';
 
+	// Lo que el APK necesita y la web no: zonas seguras del borde a borde de
+	// Android 15, y los detalles que distinguen una aplicación de una página.
+	import '$formulario/estilos/apk.css';
+
 	let { children } = $props();
 </script>
 

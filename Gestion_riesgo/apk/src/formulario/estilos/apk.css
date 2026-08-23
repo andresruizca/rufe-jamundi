@@ -1,0 +1,77 @@
+/*
+ * Lo que el APK necesita y la web no.
+ *
+ * Va en su propio archivo, NO dentro de las hojas copiadas: `theme.css` y
+ * `shell.css` se comparan byte a byte con las de la web para detectar deriva, y
+ * meterles algo aquí rompería esa comprobación por una razón que no es deriva.
+ */
+
+/* ── Zonas seguras ──────────────────────────────────────────────────────────
+ *
+ * Desde Android 15, una aplicación con targetSdk 35 se dibuja de borde a borde
+ * por obligación. Sin esto la cabecera queda bajo la barra de estado y los
+ * botones de «Siguiente» y «Guardar» detrás de la de navegación —donde puede
+ * que ni se dejen tocar—.
+ *
+ * Se prueban dos fuentes en orden: primero la variable que inyecta Capacitor
+ * (`insetsHandling: 'css'`), porque los WebView anteriores a la 140 devuelven
+ * mal el `env()` estándar; y si no está, el `env()` de siempre. El `0px` final
+ * cubre el navegador de escritorio en `npm run dev`.
+ */
+:root {
+	--arriba: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+	--abajo: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+	--izquierda: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+	--derecha: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+}
+
+body {
+	padding-top: var(--arriba);
+	padding-left: var(--izquierda);
+	padding-right: var(--derecha);
+
+	/* Abajo se suma, no se sustituye: el formulario ya tenía su propio margen
+	   inferior para que el último botón no quedara pegado al borde. */
+	padding-bottom: var(--abajo);
+
+	/* El fondo del tema, para que lo que se vea detrás de las barras del
+	   sistema no sea el blanco del WebView. */
+	background: var(--color-bg);
+	color: var(--color-text);
+}
+
+/* ── Detalles de aplicación, no de página web ───────────────────────────── */
+
+/*
+ * Nada de selección de texto ni menú contextual sobre la interfaz. En una
+ * página web es normal; dentro de una aplicación, mantener el dedo sobre un
+ * botón y que salga «Copiar» se siente roto.
+ *
+ * Los campos donde SÍ se escribe quedan fuera, obviamente.
+ */
+body {
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	/* Sin rebote elástico al final de la lista: delata que es un WebView. */
+	overscroll-behavior-y: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable] {
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+/*
+ * Android hace zoom automático al enfocar un campo de menos de 16 px. El
+ * formulario ya usa 1rem, pero se deja fijo para que un cambio de tipografía
+ * del sistema no lo baje por debajo del umbral y la pantalla salte sola.
+ */
+input,
+textarea,
+select {
+	font-size: max(1rem, 16px);
+}
