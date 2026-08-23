@@ -318,5 +318,37 @@
 	{
 		"nombre": "Oporto",
 		"gid": "2033238209"
+	},
+	{
+		"nombre": "ALAMADINA",
+		"gid": "210000001"
+	},
+	{
+		"nombre": "HOJARASCA",
+		"gid": "210000002"
+	},
+	{
+		"nombre": "LA ADRIANITA",
+		"gid": "210000003"
+	},
+	{
+		"nombre": "LA CEIBITA",
+		"gid": "210000004"
+	},
+	{
+		"nombre": "LA PLAYITA",
+		"gid": "210000005"
+	},
+	{
+		"nombre": "SACHAMATE",
+		"gid": "210000006"
+	},
+	{
+		"nombre": "VILLA PAULINA",
+		"gid": "210000007"
+	},
+	{
+		"nombre": "VILLA PYME",
+		"gid": "210000008"
 	}
 ]
