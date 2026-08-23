@@ -46,6 +46,18 @@
     -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+        El micrófono. `GrabadorVideo` pide `audio: true` en getUserMedia, y
+        Capacitor solo concede el permiso al WebView si la aplicación lo tiene
+        declarado: `BridgeWebChromeClient.onPermissionRequest` mapea
+        AUDIO_CAPTURE a RECORD_AUDIO y MODIFY_AUDIO_SETTINGS.
+
+        Sin estas dos líneas la grabación falla — el WebView pide permiso,
+        Capacitor lo deniega y `getUserMedia` rechaza. Y no dice por qué.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <!-- Galería. Android 13 partió el permiso en dos: el nuevo por tipo de
          medio, y el viejo solo hasta Android 12. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />

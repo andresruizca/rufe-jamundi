@@ -1,525 +1,838 @@
 <script lang="ts">
-	// El formulario ciudadano, en el teléfono y sin conexión.
+	// Pre-inscripción ciudadana para la inspección de viviendas afectadas.
 	//
-	// Es el mismo de la web en pasos, textos y validación —las piezas están
-	// copiadas en `src/formulario/`— con una diferencia de fondo: al terminar no
-	// se envía nada. Se guarda en SQLite y `SyncWorker.kt` lo manda cuando haya
-	// señal, con la aplicación cerrada si hace falta.
+	// La abre una persona que perdió parte de su casa, desde su celular, sola y
+	// probablemente alterada. No tiene cuenta ni va a tenerla. Eso manda sobre
+	// todas las decisiones de esta pantalla:
 	//
-	// Eso cambia lo que se le promete a la persona. En la web, «Enviar» envía.
-	// Aquí el botón dice «Guardar» y la pantalla final no da un radicado —todavía
-	// no existe— sino la explicación de qué va a pasar. Prometer un envío que aún
-	// no ocurrió es exactamente cómo alguien desinstala creyendo que ya mandó su
-	// solicitud.
+	//  • Se pide lo mínimo para llegar a la casa y poder llamar. Cada campo de
+	//    más es un motivo para abandonar el formulario a la mitad.
+	//  • Nada de datos sensibles. Género, pertenencia étnica y composición del
+	//    hogar los levanta el funcionario en la visita, explicando el aviso de
+	//    viva voz, como manda la Ley 1581.
+	//  • Por PASOS, como el censo. La versión anterior era una sola página con
+	//    siete secciones, y el argumento escrito entonces era que así se veía de
+	//    un vistazo todo lo que se iba a preguntar. En un celular ese vistazo no
+	//    existe: es un rollo largo donde no se sabe cuánto falta y donde un error
+	//    de validación al final obliga a subir a buscarlo. El censo lleva meses
+	//    en producción con pasos y es el patrón que la gente de aquí reconoce.
+	//
+	// Y lo que esto NO es: una inspección. Es una solicitud de turno. La
+	// evaluación del daño y el combo de materiales siguen siendo del profesional
+	// con tarjeta. Por eso el paso 2 pregunta QUÉ VE la persona y no en qué nivel
+	// del Anexo 1 clasificaría su casa.
 
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import {
-		ArrowLeft, ArrowRight, Camera, Check, Image, LoaderCircle, MapPin, Save, Trash2,
-		TriangleAlert
+		ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, MapPin, Send, TriangleAlert
 	} from '@lucide/svelte';
-
-	import {
-		bloqueoDeAvance, datosVacios, pasosVigentes, validarPaso, type DatosPre
-	} from '$formulario/pasos';
+	import logo from '$formulario/logo-jamundi.svg';
+	import IndicadorProgreso from '$formulario/IndicadorProgreso.svelte';
+	import SubidaEvidencias from '$formulario/SubidaEvidencias.svelte';
+	import { GestorFotos } from '$formulario/evidencias.svelte';
+	import GrabadorVideo from '$formulario/GrabadorVideo.svelte';
 	import SelectorSenales from '$formulario/SelectorSenales.svelte';
 	import AutorizacionDatos from '$formulario/AutorizacionDatos.svelte';
-	import GrabadorVideo from '$formulario/GrabadorVideo.svelte';
-
+	import {
+		bloqueoDeAvance,
+		datosVacios,
+		pasosVigentes,
+		validarPaso
+	} from '$formulario/pasos';
 	import { catalogoVigente, refrescarCatalogo, type Catalogo } from '$local/catalogo';
-	import { abrir, leerAjuste } from '$local/base';
+	import { leerAjuste } from '$local/base';
 	import { empezar, guardar } from '$local/registros';
-	import { tomarFoto, quitarAdjunto } from '../captura/foto';
 
-	let catalogo = $state<Catalogo | null>(null);
+	let catalogos = $state<Catalogo | null>(null);
 	let registroId = $state('');
-	let indice = $state(0);
-	let datos = $state<DatosPre>(datosVacios());
+	let cargando = $state(true);
+	let errorCarga = $state('');
+
+	let enviando = $state(false);
+	let errorEnvio = $state('');
 	let errores = $state<Record<string, string>>({});
-	let aviso = $state('');
-	let guardando = $state(false);
-	let listo = $state(false);
+	/** Aquí no hay radicado: no se ha enviado nada todavía. Solo «guardado». */
+	let resultado = $state<{ guardado: true } | null>(null);
 
-	/** Lo adjuntado hasta ahora, para poder enseñarlo y quitarlo. */
-	let adjuntos = $state<{ id: string; tipo: string; bytes: number }[]>([]);
-	let capturando = $state(false);
+	// Las fotos se comprimen en el teléfono igual que en la web —la original
+	// nunca se guarda— pero aquí terminan en el disco del aparato, no en el
+	// servidor. `SubidaFotos` lo hace y avisa aquí para poder contarlas.
+	let fotos = $state<GestorFotos | null>(null);
+
+	/**
+	 * Qué categorías ya tienen su video.
+	 *
+	 * No bloquea el envío ni siquiera para las obligatorias: quien tiene un
+	 * celular viejo o una conexión mala no puede quedarse sin turno por eso. Lo
+	 * que falta se marca en la bandeja, para que quien revisa lo sepa.
+	 */
+	let videosListos = $state<number[]>([]);
+
+	/**
+	 * Qué videos están subiendo en este momento.
+	 *
+	 * Enviar el formulario con uno a medias lo PIERDE: llega incompleto al
+	 * servidor y allí se descarta, así que la persona vería «Solicitud
+	 * registrada» y su video no existiría en ningún sitio. Es el mismo cuidado
+	 * que ya se tenía con las fotos a medio optimizar.
+	 */
 	let videosSubiendo = $state<number[]>([]);
-	let ubicando = $state(false);
 
-	const hayVideos = $derived((catalogo?.categorias_video ?? []).length > 0);
+	function marcarSubiendo(categoriaId: number, subiendo: boolean) {
+		videosSubiendo = subiendo
+			? [...videosSubiendo.filter((c) => c !== categoriaId), categoriaId]
+			: videosSubiendo.filter((c) => c !== categoriaId);
+	}
+
+	let ubicando = $state(false);
+	let avisoUbicacion = $state<string | null>(null);
+
+	// Identificador estable de este envío: si la solicitud entra pero la
+	// respuesta se pierde por mala señal, reintentar devuelve el mismo radicado
+	// en vez de inscribir dos veces a la misma familia.
+	const envioId = crypto.randomUUID();
+
+	let datos = $state(datosVacios());
+
+	let indice = $state(0);
+
+	const hayVideos = $derived((catalogos?.categorias_video ?? []).length > 0);
 	const pasos = $derived(pasosVigentes(hayVideos));
 	const paso = $derived(pasos[Math.min(indice, pasos.length - 1)]);
+	const esPrimero = $derived(indice === 0);
 	const esUltimo = $derived(indice === pasos.length - 1);
-
-	const cedulas = $derived(adjuntos.filter((a) => a.tipo === 'PRE_CEDULA'));
-	const fotosDano = $derived(adjuntos.filter((a) => a.tipo === 'PRE_DANO'));
 
 	onMount(() => {
 		void (async () => {
-			// El registro se crea ANTES de tomar fotos: los adjuntos necesitan a
-			// qué registro pertenecer.
-			registroId = await empezar();
-			catalogo = await catalogoVigente();
+			try {
+				// El registro se crea ANTES de tomar fotos: los adjuntos necesitan a
+				// qué registro pertenecer.
+				registroId = await empezar();
+				fotos = new GestorFotos(registroId);
 
-			// Al fondo y sin avisar. Si no hay señal —lo normal— el catálogo
-			// embebido sirve igual.
-			const base = await leerAjuste('api_base');
-			if (base) void refrescarCatalogo(base);
+				// El catálogo va embebido en el APK. Aquí NO se pide a la red: esta
+				// aplicación existe para funcionar donde no la hay.
+				catalogos = await catalogoVigente();
+
+				// Y se pone al día al fondo, sin avisar. Si falla, el embebido
+				// sirve igual y no hay nada que contarle a la persona.
+				const base = await leerAjuste('api_base');
+				if (base) void refrescarCatalogo(base);
+			} catch {
+				errorCarga = 'No se pudo abrir el formulario en este teléfono.';
+			} finally {
+				cargando = false;
+			}
 		})();
 	});
-
-	// ── Adjuntos ────────────────────────────────────────────────────────────
-
-	async function capturar(tipo: 'PRE_CEDULA' | 'PRE_DANO', fuente: 'camara' | 'galeria') {
-		if (capturando) return;
-
-		capturando = true;
-		aviso = '';
-
-		try {
-			const r = await tomarFoto(registroId, tipo, fuente);
-
-			if (!r.ok) {
-				// Cancelar la cámara devuelve motivo vacío: no es un error y no
-				// se le enseña nada a nadie.
-				if (r.motivo) aviso = r.motivo;
-
-				return;
-			}
-
-			adjuntos = [...adjuntos, { id: r.adjunto.id, tipo, bytes: r.adjunto.bytes }];
-		} finally {
-			capturando = false;
-		}
-	}
-
-	async function quitar(id: string) {
-		await quitarAdjunto(id);
-		adjuntos = adjuntos.filter((a) => a.id !== id);
-	}
-
-	function peso(bytes: number): string {
-		return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-	}
-
-	// ── Ubicación ───────────────────────────────────────────────────────────
-
-	function tomarUbicacion() {
-		if (!navigator.geolocation) {
-			aviso = 'Este teléfono no permite compartir la ubicación.';
-
-			return;
-		}
-
-		ubicando = true;
-
-		navigator.geolocation.getCurrentPosition(
-			(p) => {
-				datos.latitud = Number(p.coords.latitude.toFixed(7));
-				datos.longitud = Number(p.coords.longitude.toFixed(7));
-				datos.precision_m = Math.round(p.coords.accuracy);
-				ubicando = false;
-			},
-			() => {
-				ubicando = false;
-				aviso = 'No se pudo tomar la ubicación. Puede continuar sin ella.';
-			},
-			{ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-		);
-	}
 
 	// ── Navegación ──────────────────────────────────────────────────────────
 
 	function siguiente() {
 		const fallos = validarPaso(paso.id, datos);
 		errores = fallos;
-		if (Object.keys(fallos).length > 0) return;
-
-		const bloqueo = bloqueoDeAvance({ optimizandoFotos: capturando, videosSubiendo: videosSubiendo.length });
-		if (bloqueo) {
-			aviso = bloqueo;
+		if (Object.keys(fallos).length > 0) {
+			subirAlInicio();
 
 			return;
 		}
 
-		aviso = '';
+		// Avanzar con una foto a medio optimizar o un video a medio subir dejaría
+		// a la persona creyendo que ya los mandó. La regla vive en `pasos.ts`.
+		const bloqueo = bloqueoDeAvance({
+			optimizandoFotos: fotos?.optimizando ?? false,
+			videosSubiendo: videosSubiendo.length
+		});
+
+		if (bloqueo) {
+			errorEnvio = bloqueo;
+
+			return;
+		}
+
+		errorEnvio = '';
 		indice = Math.min(indice + 1, pasos.length - 1);
-		window.scrollTo({ top: 0 });
+		subirAlInicio();
 	}
 
 	function anterior() {
 		errores = {};
-		aviso = '';
+		errorEnvio = '';
 		indice = Math.max(indice - 1, 0);
-		window.scrollTo({ top: 0 });
+		subirAlInicio();
 	}
 
-	// ── Guardar ─────────────────────────────────────────────────────────────
+	function subirAlInicio() {
+		if (browser) window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
 
-	/**
-	 * Guarda en el teléfono. NO envía.
-	 *
-	 * Aquí no hay red de por medio, así que no hay reintentos ni errores de
-	 * servidor: o se escribe en SQLite o no. Lo que puede fallar es el disco
-	 * lleno, y eso hay que decirlo tal cual.
-	 */
-	async function guardarTodo() {
+	// ── Ubicación ───────────────────────────────────────────────────────────
+
+	function usarMiUbicacion() {
+		if (!browser || !navigator.geolocation) {
+			avisoUbicacion = 'Su navegador no permite compartir la ubicación.';
+
+			return;
+		}
+
+		ubicando = true;
+		avisoUbicacion = null;
+
+		navigator.geolocation.getCurrentPosition(
+			(posicion) => {
+				datos.latitud = Number(posicion.coords.latitude.toFixed(7));
+				datos.longitud = Number(posicion.coords.longitude.toFixed(7));
+				datos.precision_m = Math.round(posicion.coords.accuracy);
+				ubicando = false;
+				avisoUbicacion = 'Ubicación agregada. Así podremos encontrar su vivienda.';
+			},
+			() => {
+				ubicando = false;
+				avisoUbicacion =
+					'No se pudo obtener la ubicación. Puede continuar: con la dirección escrita es suficiente.';
+			},
+			{ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+		);
+	}
+
+	function quitarUbicacion() {
+		datos.latitud = null;
+		datos.longitud = null;
+		datos.precision_m = null;
+		avisoUbicacion = 'Ubicación retirada.';
+	}
+
+	// ── Envío ───────────────────────────────────────────────────────────────
+
+	async function enviar() {
+		if (!catalogos || enviando) return;
+
 		const fallos = validarPaso('envio', datos);
 		errores = fallos;
 		if (Object.keys(fallos).length > 0) return;
 
-		const bloqueo = bloqueoDeAvance({ optimizandoFotos: capturando, videosSubiendo: videosSubiendo.length });
+		// La última barrera, y la que de verdad importa: el paso de video queda
+		// atrás y nada impide llegar hasta aquí con una subida todavía en curso.
+		const bloqueo = bloqueoDeAvance({
+			optimizandoFotos: fotos?.optimizando ?? false,
+			videosSubiendo: videosSubiendo.length
+		});
+
 		if (bloqueo) {
-			aviso = bloqueo;
+			errorEnvio = bloqueo;
+			subirAlInicio();
 
 			return;
 		}
 
-		// La zona se valida en el paso 1, pero TypeScript no lo sabe y —más
-		// importante— si alguna vez se pudiera llegar aquí sin ella, guardar una
-		// solicitud con zona vacía sería guardar algo que el servidor va a
-		// rechazar de todas formas. Se devuelve al paso donde está el campo.
+		// La zona se valida en el paso 1, pero si alguna vez se llegara hasta
+		// aquí sin ella, guardar una solicitud que el servidor va a rechazar
+		// después —cuando la persona ya no está delante— sería peor que
+		// devolverla al campo.
 		if (datos.zona !== 'URBANA' && datos.zona !== 'RURAL') {
 			indice = 0;
 			errores = { zona: 'Indique si la vivienda está en zona urbana o rural.' };
-			window.scrollTo({ top: 0 });
+			subirAlInicio();
 
 			return;
 		}
 
-		guardando = true;
-		aviso = '';
+		enviando = true;
+		errorEnvio = '';
 
 		try {
+			// NO se envía: se guarda. `SyncWorker.kt` lo manda cuando haya señal,
+			// con la aplicación cerrada si hace falta. Aquí no hay red de por
+			// medio, así que lo único que puede fallar es el disco.
 			await guardar(registroId, {
 				...datos,
 				zona: datos.zona,
-				aviso_version: catalogo!.aviso_version
+				aviso_version: catalogos.aviso_version
 			});
-			listo = true;
-			window.scrollTo({ top: 0 });
-		} catch (e) {
-			aviso =
+
+			resultado = { guardado: true };
+			subirAlInicio();
+		} catch {
+			errorEnvio =
 				'No se pudo guardar en este teléfono. Puede que no quede espacio. ' +
 				'Libere algo e intente de nuevo: no ha perdido lo que escribió.';
+			subirAlInicio();
 		} finally {
-			guardando = false;
+			enviando = false;
 		}
-	}
-
-	async function otraVivienda() {
-		registroId = await empezar();
-		datos = datosVacios();
-		adjuntos = [];
-		videosSubiendo = [];
-		errores = {};
-		indice = 0;
-		listo = false;
 	}
 </script>
 
-<svelte:head><title>Inspección de Vivienda · Jamundí</title></svelte:head>
+<svelte:head>
+	<title>Pre-inscripción · Inspección de viviendas afectadas · Jamundí</title>
+	<meta
+		name="description"
+		content="Registre su vivienda afectada para que la Alcaldía de Jamundí programe una inspección."
+	/>
+</svelte:head>
 
-<main>
-	{#if !catalogo}
-		<p class="tenue"><LoaderCircle size={16} class="girando" aria-hidden="true" /> Abriendo…</p>
-	{:else if listo}
+<div class="pagina">
+	<header class="marca">
+		<img src={logo} alt="" aria-hidden="true" />
+		<div>
+			<p class="marca__entidad">Alcaldía de Jamundí</p>
+			<h1 class="marca__titulo">Pre-inscripción para inspección de vivienda</h1>
+		</div>
+	</header>
+
+	{#if cargando}
+		<p class="cargando"><LoaderCircle size={18} class="girando" aria-hidden="true" /> Cargando…</p>
+	{:else if errorCarga}
+		<p class="aviso aviso--error" role="alert">{errorCarga}</p>
+	{:else if resultado}
 		<!--
-			No hay radicado que dar: todavía no se ha enviado nada. Inventar un
-			número aquí sería darle a alguien una constancia que no existe.
+			En la web esto muestra el radicado. Aquí NO puede: todavía no se ha
+			enviado nada y el radicado lo da el servidor. Inventar un número sería
+			darle a alguien una constancia que no existe.
+
+			Lo que sí hay que decir es qué va a pasar y, sobre todo, que no
+			desinstale: Android no pregunta nada al desinstalar, así que si esta
+			pantalla no lo advierte, nadie lo hace.
 		-->
-		<div class="fin">
-			<Check size={40} aria-hidden="true" />
-			<h1>Registro guardado</h1>
+		<div class="tarjeta cierre">
+			<CheckCircle2 size={40} aria-hidden="true" />
+			<h2>Registro guardado</h2>
 			<p>
 				Se enviará <strong>solo</strong>, en cuanto este teléfono tenga internet. No hace falta
 				que abra la aplicación ni que haga nada más.
 			</p>
-			<p class="fin__nota">
+			<p>
 				Cuando salga, en <strong>Mis registros</strong> aparecerá su número de radicado. Ese es el
-				que debe dar si llama a preguntar.
+				que debe dar si llama a preguntar por su solicitud.
 			</p>
-			<p class="fin__aviso">
+
+			<p class="aviso aviso--alerta" role="status">
 				<TriangleAlert size={15} aria-hidden="true" />
-				No desinstale la aplicación hasta que aparezca como enviado.
+				<span>No desinstale la aplicación hasta que aparezca como enviado.</span>
 			</p>
 
-			<a class="boton boton--lleno" href="/mis-registros">Ver mis registros</a>
-			<button type="button" class="boton" onclick={otraVivienda}>Registrar otra vivienda</button>
-		</div>
-	{:else}
-		<header>
-			<p class="entidad">Alcaldía de Jamundí</p>
-			<h1>{paso.titulo}</h1>
-			<p class="pasos">Paso {indice + 1} de {pasos.length}</p>
-			<div class="barra"><div style="width: {((indice + 1) / pasos.length) * 100}%"></div></div>
-			<p class="ayuda">{paso.ayuda}</p>
-		</header>
+			<a class="boton boton--grande" href="/mis-registros">Ver mis registros</a>
 
-		{#if aviso}
-			<p class="alerta" role="alert"><TriangleAlert size={15} aria-hidden="true" /> {aviso}</p>
+			<p class="cierre__nota">
+				Un profesional de la Alcaldía revisará su caso y lo contactará al teléfono que registró para
+				programar la visita. <strong>Registrarse no garantiza por sí solo la entrega de
+				materiales</strong>: eso lo decide la inspección técnica de la vivienda.
+			</p>
+		</div>
+	{:else if catalogos}
+		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
+
+		<p class="ayuda-paso">{paso.ayuda}</p>
+
+		{#if errorEnvio}
+			<p class="aviso aviso--error" role="alert">
+				<TriangleAlert size={15} aria-hidden="true" />
+				{errorEnvio}
+			</p>
 		{/if}
 
-		<!-- ── 1 · Sus datos ─────────────────────────────────────────────── -->
+		<!-- ── Paso 1: sus datos ───────────────────────────────────────── -->
 		{#if paso.id === 'datos'}
-			<label class="campo">
-				<span>Nombre y apellidos *</span>
-				<input bind:value={datos.nombre_completo} autocomplete="name" />
-				{#if errores.nombre_completo}<em>{errores.nombre_completo}</em>{/if}
-			</label>
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Quién es</h2>
 
-			<label class="campo">
-				<span>Cédula *</span>
-				<input bind:value={datos.documento} inputmode="numeric" placeholder="Sin puntos" />
-				{#if errores.documento}<em>{errores.documento}</em>{/if}
-			</label>
+				<label class="campo">
+					<span class="campo__etiqueta">Nombre y apellidos *</span>
+					<input class="campo__control" bind:value={datos.nombre_completo} autocomplete="name" />
+					{#if errores.nombre_completo}
+						<span class="campo__error">{errores.nombre_completo}</span>
+					{/if}
+				</label>
 
-			<label class="campo">
-				<span>Teléfono *</span>
-				<input bind:value={datos.telefono} type="tel" inputmode="tel" />
-				<small>A este número lo llamaremos para coordinar la visita.</small>
-				{#if errores.telefono}<em>{errores.telefono}</em>{/if}
-			</label>
+				<label class="campo">
+					<span class="campo__etiqueta">Cédula *</span>
+					<input
+						class="campo__control"
+						inputmode="numeric"
+						bind:value={datos.documento}
+						placeholder="Sin puntos ni espacios"
+					/>
+					{#if errores.documento}<span class="campo__error">{errores.documento}</span>{/if}
+				</label>
 
-			<label class="campo">
-				<span>Correo electrónico</span>
-				<input bind:value={datos.correo} type="email" />
-				<small>Opcional. Déjelo en blanco si no tiene.</small>
-				{#if errores.correo}<em>{errores.correo}</em>{/if}
-			</label>
+				<label class="campo">
+					<span class="campo__etiqueta">Teléfono *</span>
+					<input
+						class="campo__control"
+						type="tel"
+						inputmode="tel"
+						bind:value={datos.telefono}
+						autocomplete="tel"
+					/>
+					<span class="campo__ayuda">A este número lo llamaremos para coordinar la visita.</span>
+					{#if errores.telefono}<span class="campo__error">{errores.telefono}</span>{/if}
+				</label>
 
-			<fieldset class="campo">
-				<legend>¿La vivienda está en zona urbana o rural? *</legend>
-				<div class="opciones">
-					{#each [['URBANA', 'Urbana', 'En la cabecera'], ['RURAL', 'Rural', 'Corregimiento o vereda']] as [valor, titulo, nota] (valor)}
-						<label class="opcion" class:opcion--si={datos.zona === valor}>
+				<label class="campo">
+					<span class="campo__etiqueta">Correo electrónico</span>
+					<input class="campo__control" type="email" bind:value={datos.correo} autocomplete="email" />
+					<span class="campo__ayuda">
+						Opcional. Déjelo en blanco si no tiene o no lo recuerda: no hace falta para su
+						solicitud.
+					</span>
+					{#if errores.correo}<span class="campo__error">{errores.correo}</span>{/if}
+				</label>
+			</section>
+
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Dónde queda la vivienda</h2>
+
+				<!--
+					La zona se PREGUNTA, no se deduce del corregimiento. Antes se
+					deducía y la deducción era falsa: quien vive en el campo y no sabe
+					a qué corregimiento pertenece su vereda entraba como urbano, y la
+					visita salía a buscarlo al pueblo.
+				-->
+				<fieldset class="campo grupo" role="radiogroup" aria-required="true">
+					<legend class="campo__etiqueta">¿La vivienda está en zona urbana o rural? *</legend>
+
+					<div class="opciones opciones--dos">
+						<label class="opcion" class:opcion--activa={datos.zona === 'URBANA'}>
 							<input
 								type="radio"
 								name="zona"
-								checked={datos.zona === valor}
-								onchange={() => (datos.zona = valor as 'URBANA' | 'RURAL')}
+								value="URBANA"
+								checked={datos.zona === 'URBANA'}
+								onchange={() => (datos.zona = 'URBANA')}
 							/>
-							<span>{titulo}<small>{nota}</small></span>
+							<span class="opcion__texto">
+								Urbana
+								<span class="opcion__nota">En la cabecera del municipio</span>
+							</span>
 						</label>
-					{/each}
-				</div>
-				{#if errores.zona}<em>{errores.zona}</em>{/if}
-			</fieldset>
 
-			<label class="campo">
-				<span>Dirección o cómo llegar *</span>
-				<textarea rows="2" maxlength="200" bind:value={datos.direccion}
-					placeholder="La casa azul pasando el puente, al lado de la tienda"></textarea>
-				<small>Si no tiene nomenclatura, sirven las referencias.</small>
-				{#if errores.direccion}<em>{errores.direccion}</em>{/if}
-			</label>
+						<label class="opcion" class:opcion--activa={datos.zona === 'RURAL'}>
+							<input
+								type="radio"
+								name="zona"
+								value="RURAL"
+								checked={datos.zona === 'RURAL'}
+								onchange={() => (datos.zona = 'RURAL')}
+							/>
+							<span class="opcion__texto">
+								Rural
+								<span class="opcion__nota">En un corregimiento o vereda</span>
+							</span>
+						</label>
+					</div>
 
-			{#if datos.zona === 'RURAL'}
+					{#if errores.zona}<span class="campo__error">{errores.zona}</span>{/if}
+				</fieldset>
+
 				<label class="campo">
-					<span>Corregimiento</span>
-					<select bind:value={datos.corregimiento}>
-						<option value="">No lo sé</option>
-						{#each catalogo.corregimientos as c (c)}<option value={c}>{c}</option>{/each}
-					</select>
+					<span class="campo__etiqueta">Dirección o cómo llegar *</span>
+					<textarea
+						class="campo__control"
+						rows="2"
+						maxlength="200"
+						bind:value={datos.direccion}
+						placeholder="Carrera 11 # 8-26 — o bien: la casa azul pasando el puente, al lado de la tienda"
+					></textarea>
+					<span class="campo__ayuda">
+						Escríbala como se la explicaría a alguien que va a buscarla. Si no tiene nomenclatura,
+						sirven las referencias.
+					</span>
+					{#if errores.direccion}<span class="campo__error">{errores.direccion}</span>{/if}
 				</label>
-			{/if}
 
-			<label class="campo">
-				<span>{datos.zona === 'RURAL' ? 'Vereda' : 'Barrio'}</span>
-				<input bind:value={datos.vereda} />
-			</label>
-
-			<div class="campo">
-				<span class="etiqueta">Ubicación (opcional)</span>
-				{#if datos.latitud !== null}
-					<p class="ok"><MapPin size={14} aria-hidden="true" /> Ubicación tomada
-						{#if datos.precision_m}(±{datos.precision_m} m){/if}</p>
-				{:else}
-					<button type="button" class="boton" onclick={tomarUbicacion} disabled={ubicando}>
-						<MapPin size={15} aria-hidden="true" />
-						{ubicando ? 'Obteniendo…' : 'Tomar la ubicación aquí'}
-					</button>
+				{#if datos.zona === 'RURAL'}
+					<label class="campo">
+						<span class="campo__etiqueta">Corregimiento</span>
+						<select class="campo__control" bind:value={datos.corregimiento}>
+							<option value="">No lo sé</option>
+							{#each catalogos.corregimientos as c (c)}
+								<option value={c}>{c}</option>
+							{/each}
+						</select>
+						<span class="campo__ayuda">Si no sabe cuál es, déjelo así y siga.</span>
+						{#if errores.corregimiento}
+							<span class="campo__error">{errores.corregimiento}</span>
+						{/if}
+					</label>
 				{/if}
-			</div>
 
-			<div class="campo">
-				<span class="etiqueta">Foto de su cédula</span>
-				<small>Del lado de los datos, sin reflejos. Se reduce en el teléfono.</small>
-				{#each cedulas as a (a.id)}
-					<p class="adjunto">Cédula · {peso(a.bytes)}
-						<button type="button" onclick={() => quitar(a.id)}><Trash2 size={13} /> Quitar</button>
+				<label class="campo">
+					<span class="campo__etiqueta">{datos.zona === 'RURAL' ? 'Vereda' : 'Barrio'}</span>
+					<input class="campo__control" bind:value={datos.vereda} />
+				</label>
+
+				<div class="ubicacion">
+					<p class="ubicacion__titulo">Ubicación en el mapa (opcional)</p>
+					<p class="ubicacion__ayuda">
+						Si está en la vivienda ahora, tomar la ubicación nos ayuda mucho a encontrarla. Puede
+						continuar sin ella.
 					</p>
-				{/each}
-				{#if cedulas.length === 0}
-					<div class="botones">
-						<button type="button" class="boton" onclick={() => capturar('PRE_CEDULA', 'camara')} disabled={capturando}>
-							<Camera size={15} aria-hidden="true" /> Tomar foto
-						</button>
-						<button type="button" class="boton" onclick={() => capturar('PRE_CEDULA', 'galeria')} disabled={capturando}>
-							<Image size={15} aria-hidden="true" /> Desde la galería
-						</button>
-					</div>
-				{/if}
-			</div>
 
-		<!-- ── 2 · Cómo quedó ────────────────────────────────────────────── -->
+					{#if datos.latitud !== null}
+						<p class="ubicacion__valor">
+							<MapPin size={15} aria-hidden="true" />
+							Ubicación tomada
+							{#if datos.precision_m}(precisión de unos {datos.precision_m} m){/if}
+						</p>
+						<button type="button" class="boton boton--suave" onclick={quitarUbicacion}>
+							Quitar la ubicación
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="boton boton--suave"
+							onclick={usarMiUbicacion}
+							disabled={ubicando}
+						>
+							{#if ubicando}
+								<LoaderCircle size={15} class="girando" aria-hidden="true" />
+								Obteniendo…
+							{:else}
+								<MapPin size={15} aria-hidden="true" />
+								Tomar la ubicación aquí
+							{/if}
+						</button>
+					{/if}
+
+					<p class="ubicacion__estado" role="status" aria-live="polite">{avisoUbicacion ?? ''}</p>
+				</div>
+			</section>
+
+			<!-- La cédula va aquí y no al final: es un dato de identidad, y este
+			     es el momento en que la persona la tiene a mano. -->
+			<section class="tarjeta">
+				{#if fotos}
+					<SubidaEvidencias
+						gestor={fotos}
+						tipo="PRE_CEDULA"
+						titulo="Foto de su cédula"
+						ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que la solicitud es suya. La foto se reduce en su celular antes de guardarse."
+						textoCamara="Tomar foto de la cédula"
+					/>
+				{/if}
+			</section>
+
+		<!-- ── Paso 2: cómo quedó la vivienda ──────────────────────────── -->
 		{:else if paso.id === 'vivienda'}
-			<SelectorSenales senales={catalogo.senales} bind:marcadas={datos.senales} />
-
-			<label class="campo">
-				<span>¿Quiere contarnos algo más?</span>
-				<textarea rows="4" maxlength="1000" bind:value={datos.descripcion_dano}
-					placeholder="Se agrietaron los muros de la sala y se cayó parte del techo."></textarea>
-				<small>Opcional. No hace falta que sea técnico.</small>
-			</label>
-
-			<div class="campo">
-				<span class="etiqueta">Fotos del daño</span>
-				<small>Hasta 4. Ayudan a priorizar la visita.</small>
-				{#each fotosDano as a (a.id)}
-					<p class="adjunto">Foto · {peso(a.bytes)}
-						<button type="button" onclick={() => quitar(a.id)}><Trash2 size={13} /> Quitar</button>
-					</p>
-				{/each}
-				{#if fotosDano.length < 4}
-					<div class="botones">
-						<button type="button" class="boton" onclick={() => capturar('PRE_DANO', 'camara')} disabled={capturando}>
-							<Camera size={15} aria-hidden="true" /> Tomar foto
-						</button>
-						<button type="button" class="boton" onclick={() => capturar('PRE_DANO', 'galeria')} disabled={capturando}>
-							<Image size={15} aria-hidden="true" /> Desde la galería
-						</button>
-					</div>
-				{/if}
-			</div>
-
-		<!-- ── 3 · Videos ────────────────────────────────────────────────── -->
-		{:else if paso.id === 'video'}
-			<p class="ayuda">
-				Grabe cada uno siguiendo la indicación. <strong>Si no puede grabar alguno, continúe
-				igual</strong>: no perderá su turno por eso.
-			</p>
-			{#each catalogo.categorias_video as c (c.id)}
-				<GrabadorVideo
-					categoria={c}
-					{registroId}
-					alSubir={() => (adjuntos = [...adjuntos, { id: crypto.randomUUID(), tipo: 'VIDEO', bytes: 0 }])}
-					alSubiendo={(id, activo) => {
-						videosSubiendo = activo
-							? [...videosSubiendo.filter((v) => v !== id), id]
-							: videosSubiendo.filter((v) => v !== id);
-					}}
+			<section class="tarjeta">
+				<SelectorSenales
+					senales={catalogos.senales}
+					bind:marcadas={datos.senales}
+					error={errores.senales ?? ''}
 				/>
-			{/each}
+			</section>
 
-		<!-- ── 4 · Autorización ──────────────────────────────────────────── -->
-		{:else if paso.id === 'envio'}
-			<div class="resumen">
-				<p><b>{datos.nombre_completo || '—'}</b></p>
-				<p>C.C. {datos.documento} · {datos.telefono}</p>
-				<p>{datos.direccion}</p>
-				<p class="tenue">
-					{adjuntos.length}
-					{adjuntos.length === 1 ? 'archivo adjunto' : 'archivos adjuntos'} ·
-					{datos.senales.length}
-					{datos.senales.length === 1 ? 'daño marcado' : 'daños marcados'}
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">¿Quiere contarnos algo más?</h2>
+
+				<label class="campo">
+					<span class="campo__etiqueta">Con sus palabras</span>
+					<textarea
+						class="campo__control"
+						rows="4"
+						maxlength="1000"
+						bind:value={datos.descripcion_dano}
+						placeholder="Ej.: se agrietaron los muros de la sala y se cayó parte del techo de la cocina."
+					></textarea>
+					<span class="campo__ayuda">
+						Opcional. No hace falta que sea técnico: es para entender mejor su caso.
+					</span>
+					{#if errores.descripcion_dano}
+						<span class="campo__error">{errores.descripcion_dano}</span>
+					{/if}
+				</label>
+			</section>
+
+			<section class="tarjeta">
+				{#if fotos}
+					<SubidaEvidencias
+						gestor={fotos}
+						tipo="PRE_DANO"
+						titulo="Fotos del daño"
+						ayuda="Cómo quedó la vivienda. No son obligatorias, pero ayudan a priorizar la visita. Se reducen en su celular antes de guardarse."
+						textoCamara="Tomar foto del daño"
+					/>
+				{/if}
+			</section>
+
+		<!-- ── Paso 3: los videos ──────────────────────────────────────── -->
+		{:else if paso.id === 'video'}
+			<section class="tarjeta">
+				<p class="tarjeta__nota">
+					Grabe cada uno siguiendo la indicación. Se cortan solos al llegar al máximo y puede
+					repetirlos antes de guardarlos. <strong>Si no puede grabar alguno, continúe igual</strong>:
+					no perderá su turno por eso.
 				</p>
-			</div>
 
-			<AutorizacionDatos bind:aceptado={datos.autoriza_datos} error={errores.autoriza_datos ?? ''} />
+				{#each catalogos.categorias_video as c (c.id)}
+					<GrabadorVideo
+						categoria={c}
+						{registroId}
+						alSubir={(id) => (videosListos = [...videosListos, id])}
+						alSubiendo={marcarSubiendo}
+					/>
+				{/each}
+			</section>
+
+		<!-- ── Paso 4: autorización y envío ────────────────────────────── -->
+		{:else if paso.id === 'envio'}
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Lo que va a enviar</h2>
+
+				<dl class="resumen">
+					<div><dt>Nombre</dt><dd>{datos.nombre_completo || '—'}</dd></div>
+					<div><dt>Cédula</dt><dd>{datos.documento || '—'}</dd></div>
+					<div><dt>Teléfono</dt><dd>{datos.telefono || '—'}</dd></div>
+					<div>
+						<dt>Vivienda</dt>
+						<dd>
+							{datos.direccion || '—'}
+							{#if datos.vereda}· {datos.vereda}{/if}
+							{#if datos.zona === 'RURAL' && datos.corregimiento}· {datos.corregimiento}{/if}
+							{#if datos.zona}({datos.zona === 'RURAL' ? 'zona rural' : 'zona urbana'}){/if}
+						</dd>
+					</div>
+					<div>
+						<dt>Daños marcados</dt>
+						<dd>
+							{#if datos.senales.length === 0}
+								Ninguno
+							{:else}
+								{catalogos.senales
+									.filter((s) => datos.senales.includes(s.codigo))
+									.map((s) => s.etiqueta)
+									.join(', ')}
+							{/if}
+						</dd>
+					</div>
+				</dl>
+
+				<button type="button" class="volver" onclick={() => (indice = 0)}>
+					Corregir mis datos
+				</button>
+			</section>
+
+			<section class="tarjeta">
+				<h2 class="tarjeta__titulo">Autorización de datos</h2>
+				<AutorizacionDatos
+					bind:aceptado={datos.autoriza_datos}
+					error={errores.autoriza_datos ?? ''}
+				/>
+			</section>
 		{/if}
 
-		<nav>
-			{#if indice > 0}
-				<button type="button" class="boton" onclick={anterior} disabled={guardando}>
-					<ArrowLeft size={16} aria-hidden="true" /> Atrás
+		<!-- Trampa antirrobot. Oculta y fuera del orden de tabulación. -->
+		<div class="trampa" aria-hidden="true">
+			<label for="sitio_web">No llene este campo</label>
+			<input
+				id="sitio_web"
+				name="sitio_web"
+				tabindex="-1"
+				autocomplete="off"
+				bind:value={datos.sitio_web}
+			/>
+		</div>
+
+		<nav class="navegacion" aria-label="Navegación del formulario">
+			{#if !esPrimero}
+				<button type="button" class="boton boton--suave" onclick={anterior} disabled={enviando}>
+					<ArrowLeft size={16} aria-hidden="true" />
+					Atrás
 				</button>
 			{/if}
 
 			{#if esUltimo}
-				<!-- «Guardar» y no «Enviar»: todavía no sale nada del teléfono. -->
-				<button type="button" class="boton boton--lleno" onclick={guardarTodo} disabled={guardando}>
-					{#if guardando}
-						<LoaderCircle size={16} class="girando" aria-hidden="true" /> Guardando…
+				<button type="button" class="boton boton--enviar" onclick={enviar} disabled={enviando}>
+					{#if enviando}
+						<LoaderCircle size={16} class="girando" aria-hidden="true" />
+						Enviando…
 					{:else}
-						<Save size={16} aria-hidden="true" /> Guardar mi registro
+						<Send size={16} aria-hidden="true" />
+						Guardar mi registro
 					{/if}
 				</button>
 			{:else}
-				<button type="button" class="boton boton--lleno" onclick={siguiente}>
-					Siguiente <ArrowRight size={16} aria-hidden="true" />
+				<button type="button" class="boton" onclick={siguiente}>
+					Siguiente
+					<ArrowRight size={16} aria-hidden="true" />
 				</button>
 			{/if}
 		</nav>
 	{/if}
-</main>
+</div>
 
 <style>
-	main { padding: 1.2rem 1rem 3rem; color: #16243f; max-width: 34rem; margin: 0 auto; }
-	.entidad { margin: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #647189; }
-	h1 { margin: 0.15rem 0 0.3rem; font-size: 1.2rem; }
-	.pasos { margin: 0; font-size: 0.78rem; color: #647189; }
-	.barra { height: 4px; border-radius: 2px; background: #e1e8f2; margin: 0.5rem 0 0.8rem; overflow: hidden; }
-	.barra div { height: 100%; background: #1577d6; transition: width 0.2s; }
-	.ayuda { margin: 0 0 1.2rem; font-size: 0.86rem; line-height: 1.5; color: #647189; }
-	.tenue { color: #647189; font-size: 0.85rem; }
-
-	.alerta {
-		display: flex; align-items: flex-start; gap: 0.4rem;
-		padding: 0.7rem 0.8rem; border-radius: 9px;
-		background: #fbe7e4; border: 1px solid #d23b2c;
-		font-size: 0.84rem; line-height: 1.45;
+	.pagina {
+		max-width: 40rem;
+		margin: 0 auto;
+		padding: 1.2rem 1rem 3rem;
 	}
 
-	.campo { display: block; margin-bottom: 1rem; border: 0; padding: 0; }
-	.campo > span, .campo legend, .etiqueta { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-	.campo input, .campo textarea, .campo select {
-		width: 100%; padding: 0.65rem 0.7rem; font: inherit; font-size: 1rem;
-		border: 1px solid #c9d5ea; border-radius: 9px; background: #fff; color: inherit;
-	}
-	.campo small { display: block; margin-top: 0.25rem; font-size: 0.76rem; color: #647189; line-height: 1.4; }
-	.campo em { display: block; margin-top: 0.25rem; font-size: 0.78rem; color: #d23b2c; font-style: normal; }
-
-	.opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-	.opcion { display: flex; gap: 0.5rem; padding: 0.7rem; border: 2px solid #e1e8f2; border-radius: 10px; background: #fff; }
-	.opcion--si { border-color: #1577d6; background: #e5f0fc; }
-	.opcion span { font-size: 0.88rem; font-weight: 600; }
-	.opcion small { display: block; font-weight: 400; font-size: 0.72rem; color: #647189; }
-
-	.botones { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-	.boton {
-		display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
-		min-height: 44px; padding: 0.5rem 0.9rem; font: inherit; font-size: 0.88rem;
-		border: 1px solid #c9d5ea; border-radius: 9px; background: #fff; color: inherit;
-		text-decoration: none;
-	}
-	.boton--lleno { background: #1577d6; border-color: #1577d6; color: #fff; }
-
-	.adjunto {
-		display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-		margin: 0.4rem 0 0; padding: 0.5rem 0.7rem; font-size: 0.82rem;
-		border: 1px solid #e1e8f2; border-radius: 9px; background: #f7fafd;
-	}
-	.adjunto button {
-		display: inline-flex; align-items: center; gap: 0.25rem;
-		border: 0; background: none; font: inherit; font-size: 0.78rem; color: #d23b2c;
+	.marca {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		margin-bottom: 1.2rem;
 	}
 
-	.ok { display: flex; align-items: center; gap: 0.35rem; margin: 0; font-size: 0.85rem; color: #1e8c5e; }
-
-	.resumen { padding: 0.9rem; border: 1px solid #e1e8f2; border-radius: 11px; background: #f7fafd; margin-bottom: 1.2rem; }
-	.resumen p { margin: 0 0 0.2rem; font-size: 0.87rem; line-height: 1.4; }
-
-	nav { display: flex; gap: 0.6rem; margin-top: 1.6rem; padding-top: 1.1rem; border-top: 1px solid #e1e8f2; }
-	nav .boton { flex: 1; min-height: 48px; font-size: 0.95rem; }
-
-	.fin { text-align: center; padding: 2rem 0.5rem; color: #1e8c5e; }
-	.fin h1 { color: #16243f; margin: 0.6rem 0 0.5rem; }
-	.fin p { color: #16243f; font-size: 0.9rem; line-height: 1.55; margin: 0 0 0.8rem; }
-	.fin__nota { color: #647189 !important; font-size: 0.84rem !important; }
-	.fin__aviso {
-		display: flex; align-items: flex-start; gap: 0.4rem; text-align: left;
-		padding: 0.7rem 0.8rem; border-radius: 9px; background: #fcefd9; border: 1px solid #e3b455;
-		font-size: 0.83rem !important; margin-bottom: 1.2rem !important;
+	.marca img {
+		width: 44px;
+		height: 44px;
+		flex: none;
 	}
-	.fin .boton { width: 100%; margin-bottom: 0.5rem; }
+
+	.marca__entidad {
+		margin: 0;
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted);
+	}
+
+	.marca__titulo {
+		margin: 0.1rem 0 0;
+		font-size: 1.15rem;
+		line-height: 1.25;
+	}
+
+	.ayuda-paso {
+		margin: 0.6rem 0 1rem;
+		font-size: 0.88rem;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.cargando {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: var(--color-muted);
+	}
+
+	section.tarjeta {
+		margin-bottom: 1rem;
+	}
+
+	.grupo {
+		border: 0;
+		padding: 0;
+		margin: 0 0 0.9rem;
+		min-width: 0;
+	}
+
+	.grupo legend {
+		padding: 0;
+	}
+
+	/* Dos columnas solo cuando hay sitio, como en el censo. */
+	@media (min-width: 560px) {
+		.opciones--dos {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.resumen {
+		display: grid;
+		gap: 0.55rem;
+		margin: 0;
+		font-size: 0.87rem;
+	}
+
+	.resumen div {
+		display: grid;
+		grid-template-columns: 8.5rem 1fr;
+		gap: 0.5rem;
+	}
+
+	.resumen dt {
+		color: var(--color-muted);
+	}
+
+	.resumen dd {
+		margin: 0;
+		line-height: 1.4;
+	}
+
+	.volver {
+		margin-top: 0.9rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-size: 0.83rem;
+		color: var(--color-primary);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+	}
+
+	.navegacion {
+		display: flex;
+		gap: 0.6rem;
+		margin-top: 1.6rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.navegacion .boton {
+		flex: 1;
+		justify-content: center;
+		min-height: 48px;
+		font-size: 0.95rem;
+	}
+
+	.boton--enviar {
+		background: var(--color-success);
+	}
+
+	.boton--enviar:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-success) 82%, black);
+	}
+
+	.cierre {
+		text-align: center;
+		padding: 2rem 1.2rem;
+		color: var(--color-success);
+	}
+
+	.cierre h2 {
+		margin: 0.6rem 0 0.2rem;
+		color: var(--color-text);
+	}
+
+	.cierre p {
+		color: var(--color-text);
+		font-size: 0.9rem;
+		line-height: 1.5;
+	}
+
+
+	/* El aviso de no desinstalar. No está en la web porque allá el envío ya
+	   ocurrió; aquí es lo más importante de la pantalla. */
+	.aviso--alerta {
+		margin: 1rem 0;
+		text-align: left;
+		background: var(--color-warning-bg);
+		border: 1px solid var(--color-warning);
+		color: var(--color-text) !important;
+	}
+
+	.cierre__nota {
+		margin-top: 1rem;
+		padding-top: 0.9rem;
+		border-top: 1px solid var(--color-border);
+		font-size: 0.83rem !important;
+		color: var(--color-muted) !important;
+	}
+
+	/* Fuera de la pantalla, no `display:none`: algunos robots ignoran lo que no
+	   se dibuja, y así el campo sigue existiendo para ellos. */
+	.trampa {
+		position: absolute;
+		left: -9999px;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+	}
 </style>

@@ -68,6 +68,29 @@ const ARCHIVOS = [
 			'destino no.'
 	},
 	{
+		nombre: 'SubidaEvidencias.svelte',
+		origen: join(raizRufe, 'componentes'),
+		motivo:
+			'Solo cambian tres importaciones: apunta al gestor local en vez del de ' +
+			'red. El markup y los estilos son idénticos a propósito — es lo que ' +
+			'hace que el APK se vea EXACTAMENTE igual que la web.'
+	},
+	{
+		nombre: 'IndicadorProgreso.svelte',
+		origen: join(raizRufe, 'componentes'),
+		motivo: null
+	},
+	{
+		nombre: 'estilos/theme.css',
+		origen: join(raizApk, '..', 'frontend', 'src', 'lib'),
+		motivo: null
+	},
+	{
+		nombre: 'estilos/shell.css',
+		origen: join(raizApk, '..', 'frontend', 'src', 'lib'),
+		motivo: null
+	},
+	{
 		nombre: 'imagen.ts',
 		origen: raizRufe,
 		motivo:
@@ -90,7 +113,7 @@ const perdidos = [];
 
 for (const { nombre, motivo, origen } of ARCHIVOS) {
 	const enApk = join(raizApk, 'src', 'formulario', nombre);
-	const enWeb = join(origen ?? raizPre, nombre);
+	const enWeb = join(origen ?? raizPre, nombre.split('/').pop());
 
 	if (!existsSync(enWeb)) {
 		perdidos.push(`${nombre} — ya no existe en la web; revise si el APK debe seguir teniéndolo`);
