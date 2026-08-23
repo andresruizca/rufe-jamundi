@@ -77,7 +77,17 @@ brew install --cask android-commandlinetools   # si no está
 brew install openjdk@21
 
 export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
-npm run apk:debug        # android/app/build/outputs/apk/debug/
+npm run apk:debug
+```
+
+El APK queda en **`apk/salida/sgr-jamundi-AAAAMMDD-debug.apk`**, no dentro de
+`android/app/build/`. Gradle lo escribe siete carpetas adentro con un nombre que
+no dice de qué aplicación es ni de qué día, y encima `build/` está en el
+`.gitignore`, así que quien clone el repositorio no lo encuentra por ningún
+lado. `salida/` es lo que se manda por WhatsApp o se pasa por Bluetooth.
+
+```bash
+adb install -r salida/sgr-jamundi-*-debug.apk   # con el teléfono por USB
 ```
 
 **El JDK tiene que ser el 21.** Ni más ni menos, y costó dos intentos

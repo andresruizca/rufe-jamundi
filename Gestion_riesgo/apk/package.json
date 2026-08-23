@@ -13,7 +13,7 @@
     "test:deriva": "node scripts/comparar-con-web.mjs",
     "cap:sync": "npm run build && cap sync android",
     "cap:abrir": "cap open android",
-    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug && cd .. && node scripts/recoger-apk.mjs",
     "apk:firmado": "npm run cap:sync && cd android && ./gradlew assembleRelease",
     "test:esquema": "node scripts/comprobar-esquema.mjs",
     "test:kotlin": "node scripts/comparar-kotlin.mjs",
