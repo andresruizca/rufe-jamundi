@@ -16,7 +16,8 @@
     "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "apk:firmado": "npm run cap:sync && cd android && ./gradlew assembleRelease",
     "test:esquema": "node scripts/comprobar-esquema.mjs",
-    "test:kotlin": "node scripts/comparar-kotlin.mjs"
+    "test:kotlin": "node scripts/comparar-kotlin.mjs",
+    "iconos": "node scripts/generar-iconos.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
