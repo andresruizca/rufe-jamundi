@@ -12,7 +12,17 @@
 	// Android 15, y los detalles que distinguen una aplicación de una página.
 	import '$formulario/estilos/apk.css';
 
+	import { onMount } from 'svelte';
+	import { escucharParaSincronizar } from '$local/sincronizar';
+
 	let { children } = $props();
+
+	// Se engancha una sola vez, para toda la vida de la aplicación: los avisos de
+	// red y de vuelta al frente son los que evitan el cuarto de hora de espera
+	// con señal delante.
+	onMount(() => {
+		void escucharParaSincronizar();
+	});
 </script>
 
 {@render children()}

@@ -42,10 +42,18 @@
 	} from '$formulario/pasos';
 	import { catalogoVigente, refrescarCatalogo, type Catalogo } from '$local/catalogo';
 	import { leerAjuste } from '$local/base';
-	import { empezar, guardar } from '$local/registros';
+	import { cuantasEsperan, empezar, guardar } from '$local/registros';
 
 	let catalogos = $state<Catalogo | null>(null);
 	let registroId = $state('');
+	/**
+	 * Cuántas solicitudes siguen esperando salir.
+	 *
+	 * Se enseña al abrir porque Android no pregunta nada al desinstalar: si esta
+	 * pantalla no lo dice, alguien borra la aplicación creyendo que ya mandó lo
+	 * suyo y se lleva por delante fotos que no volverá a tomar.
+	 */
+	let pendientes = $state(0);
 	let cargando = $state(true);
 	let errorCarga = $state('');
 
@@ -117,6 +125,8 @@
 
 				// Y se pone al día al fondo, sin avisar. Si falla, el embebido
 				// sirve igual y no hay nada que contarle a la persona.
+				pendientes = await cuantasEsperan();
+
 				const base = await leerAjuste('api_base');
 				if (base) void refrescarCatalogo(base);
 			} catch {
@@ -321,6 +331,18 @@
 			</p>
 		</div>
 	{:else if catalogos}
+		{#if pendientes > 0 && indice === 0}
+			<a class="aviso aviso--pendientes" href="/mis-registros">
+				<TriangleAlert size={15} aria-hidden="true" />
+				<span>
+					{pendientes === 1
+						? 'Tiene 1 registro sin enviar.'
+						: `Tiene ${pendientes} registros sin enviar.`}
+					Saldrán solos cuando haya internet. <strong>Ver mis registros</strong>
+				</span>
+			</a>
+		{/if}
+
 		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
 
 		<p class="ayuda-paso">{paso.ayuda}</p>
@@ -828,6 +850,19 @@
 
 	/* Fuera de la pantalla, no `display:none`: algunos robots ignoran lo que no
 	   se dibuja, y así el campo sigue existiendo para ellos. */
+	/* Enlace, no párrafo: lleva a «Mis registros», que es donde se resuelve la
+	   duda que el aviso provoca. */
+	.aviso--pendientes {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.45rem;
+		margin-bottom: 1rem;
+		background: var(--color-warning-bg);
+		border: 1px solid var(--color-warning);
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
 	.trampa {
 		position: absolute;
 		left: -9999px;

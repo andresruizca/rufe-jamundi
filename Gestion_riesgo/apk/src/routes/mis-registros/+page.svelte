@@ -77,6 +77,11 @@
 <main>
 	<h1>Mis registros</h1>
 
+	<!-- Sin esto, «Mis registros» es un callejón sin salida: Android tiene botón
+	     de atrás, pero llegando desde la pantalla de cierre no lleva al
+	     formulario sino a la solicitud que se acaba de guardar. -->
+	<a class="volver" href="/">← Registrar otra vivienda</a>
+
 	{#if esperando > 0}
 		<!--
 			Android no pregunta nada al desinstalar. Si esto no lo dice, alguien
@@ -168,6 +173,14 @@
 	h1 {
 		margin: 0 0 1rem;
 		font-size: 1.25rem;
+	}
+
+	.volver {
+		display: inline-block;
+		margin-bottom: 1rem;
+		font-size: 0.86rem;
+		color: #1577d6;
+		text-decoration: none;
 	}
 
 	.tenue {
