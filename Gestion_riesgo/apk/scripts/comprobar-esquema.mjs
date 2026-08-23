@@ -135,31 +135,36 @@ try {
 
 	const fuente = readFileSync(join(aqui, '..', 'src', 'local', 'registros.ts'), 'utf8');
 
-	const insercion = fuente
-		.slice(fuente.indexOf('INSERT INTO registros'), fuente.indexOf("VALUES (?,?"))
-		.concat(fuente.slice(fuente.indexOf('VALUES (?,?'), fuente.indexOf("`,\n\t\t\tvalues")))
-		.replace(/\s+/g, ' ')
-		.trim();
-
-	const marcadores = (insercion.match(/\?/g) ?? []).length;
-
-	// 18 valores en el arreglo de registros.ts. Si cambian las columnas, cambia
-	// este número y hay que mirarlo, que es justo lo que se busca.
-	afirmar(marcadores === 18, `el INSERT lleva ${marcadores} marcadores (se esperaban 18)`);
-
-	let insertoBien = true;
-	try {
-		sql(`PRAGMA foreign_keys = ON; ${insercion.replace(/\?/g, "'x'")};`);
-	} catch (e) {
-		insertoBien = false;
-		console.log(`      ${String(e).split('\n')[0]}`);
+	// Se extraen las dos sentencias que escriben en `registros` y se EJECUTAN
+	// con literales en lugar de los marcadores. Si las columnas y los `?` no
+	// cuadran, SQLite lo dice; leyéndolas no se ve.
+	function sentencia(desde, hasta) {
+		return fuente
+			.slice(fuente.indexOf(desde), fuente.indexOf(hasta, fuente.indexOf(desde)))
+			.replace(/\s+/g, ' ')
+			.replace(/\?/g, "'x'")
+			.trim()
+			.replace(/,$/, '');
 	}
 
-	afirmar(insertoBien, 'el INSERT de registros.ts cuadra columnas y marcadores');
+	const insertaBorrador = sentencia('INSERT INTO registros', '`,');
+	const actualiza = sentencia('UPDATE registros SET', '`,');
+
+	let escrituraBien = true;
+	let fallo = '';
+	try {
+		sql(`PRAGMA foreign_keys = ON; DELETE FROM registros; ${insertaBorrador};`);
+		sql(`PRAGMA foreign_keys = ON; ${actualiza};`);
+	} catch (e) {
+		escrituraBien = false;
+		fallo = String(e).split('\n').find((l) => l.toLowerCase().includes('error')) ?? '';
+	}
+
+	afirmar(escrituraBien, `el INSERT y el UPDATE de registros.ts corren de verdad ${fallo}`);
 
 	afirmar(
-		Number(sql("SELECT COUNT(*) FROM registros WHERE estado='PENDIENTE'")) >= 1,
-		'un registro recién guardado nace PENDIENTE, listo para que Kotlin lo tome'
+		Number(sql("SELECT COUNT(*) FROM registros")) >= 1,
+		'el borrador queda escrito, que es lo que las fotos necesitan para colgarse'
 	);
 
 	// El SELECT de listar(), con su subconsulta de adjuntos.
@@ -178,6 +183,66 @@ try {
 		sql("SELECT COUNT(*) FROM registros WHERE estado IN ('PENDIENTE','SINCRONIZANDO','ERROR')") !==
 			'',
 		'la cuenta de «solicitudes sin enviar» corre — es el aviso de no desinstalar'
+	);
+	// ── El orden REAL de la aplicación ──────────────────────────────────────
+	//
+	// Esta es la comprobación que faltaba, y su ausencia costó que ninguna foto
+	// ni ningún video se guardara en el teléfono.
+	//
+	// Las pruebas de arriba insertan primero el registro y luego el adjunto, que
+	// es el orden cómodo. La aplicación hace lo contrario: abre el formulario,
+	// toma fotos —y ahí ya escribe adjuntos— y solo al final guarda los datos.
+	// Con `empezar()` devolviendo un UUID sin fila detrás, cada adjunto moría con
+	// «FOREIGN KEY constraint failed (code 787)».
+	//
+	// Aquí se reproduce ese orden exacto: adjunto ANTES de tener los datos.
+
+	sql('DELETE FROM registros');
+
+	const borrador = fuente
+		.slice(fuente.indexOf('INSERT INTO registros\n\t\t\t(id, envio_id'), fuente.indexOf("VALUES (?, ?, '', '',"))
+		.concat("VALUES ('b1','e-b1','','','','','','', datetime('now'), 'BORRADOR', datetime('now'), datetime('now'))")
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	let ordenBien = true;
+	let motivo = '';
+	try {
+		// 1. Se abre el borrador, como hace `empezar()`.
+		sql(`PRAGMA foreign_keys = ON; ${borrador};`);
+
+		// 2. Se adjunta una foto ANTES de que existan los datos del formulario.
+		sql(`PRAGMA foreign_keys = ON;
+			INSERT INTO adjuntos (id, registro_id, tipo, ruta, mime, bytes, creado_en, actualizado_en)
+			VALUES ('a-b1','b1','PRE_CEDULA','/x.webp','image/webp',9000, datetime('now'), datetime('now'));`);
+
+		// 3. Y un video, que es donde se vio el fallo en el teléfono.
+		sql(`PRAGMA foreign_keys = ON;
+			INSERT INTO adjuntos (id, registro_id, tipo, ruta, mime, bytes, segundos, trozos_totales, creado_en, actualizado_en)
+			VALUES ('v-b1','b1','VIDEO','/v.webm','video/webm',900000,12,1, datetime('now'), datetime('now'));`);
+	} catch (e) {
+		ordenBien = false;
+		motivo = String(e).split('\n').find((l) => l.includes('Error')) ?? '';
+	}
+
+	afirmar(ordenBien, `se puede adjuntar ANTES de guardar el formulario ${motivo}`);
+
+	afirmar(
+		Number(sql("SELECT COUNT(*) FROM adjuntos WHERE registro_id='b1'")) === 2,
+		'la foto y el video quedan colgando del borrador'
+	);
+
+	// 4. Y al guardar, el borrador pasa a PENDIENTE sin perder sus adjuntos.
+	sql("PRAGMA foreign_keys = ON; UPDATE registros SET estado='PENDIENTE' WHERE id='b1'");
+
+	afirmar(
+		Number(sql("SELECT COUNT(*) FROM adjuntos WHERE registro_id='b1'")) === 2,
+		'al guardar, los adjuntos siguen ahí — se actualiza la fila, no se recrea'
+	);
+
+	afirmar(
+		sql("SELECT id FROM registros WHERE estado='PENDIENTE'") === 'b1',
+		'y la solicitud queda en la cola que lee Kotlin'
 	);
 } finally {
 	rmSync(temporal, { recursive: true, force: true });

@@ -70,5 +70,24 @@
          los instaladores la descarten en esos aparatos. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!--
+        La ubicación del formulario, la que se toma frente a la vivienda.
+
+        `navigator.geolocation` en el WebView dispara
+        `onGeolocationPermissionsShowPrompt`, y Capacitor solo pide el permiso al
+        sistema si la aplicación lo declara. Sin estas dos líneas, el botón
+        «Tomar la ubicación aquí» no preguntaba nada y fallaba en silencio.
+
+        Las dos: FINE es la del GPS y COARSE la de antenas. Desde Android 12 la
+        persona puede conceder solo la aproximada, y para encontrar una casa en
+        una vereda eso ya sirve — es mejor que nada.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- El GPS puede no existir. La solicitud se envía igual con la dirección
+         escrita, así que no se exige. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

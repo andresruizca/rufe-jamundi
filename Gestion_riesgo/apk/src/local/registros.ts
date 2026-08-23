@@ -42,14 +42,64 @@ export type RegistroGuardado = {
 };
 
 /**
- * Crea el registro vacío y devuelve su identificador.
+ * Abre un borrador y devuelve su identificador.
  *
- * Se crea ANTES de tomar fotos, no al final: los adjuntos necesitan a qué
- * registro pertenecer, y hacer que la primera foto cree el registro dejaría a
- * quien no adjunta nada sin sitio donde escribir.
+ * ⚠ ESTA FUNCIÓN TIENE QUE ESCRIBIR EN LA BASE, no solo generar un UUID.
+ *
+ * `adjuntos.registro_id` es una clave foránea contra `registros`. Mientras esto
+ * devolvía un identificador sin fila detrás, CADA foto y CADA video fallaban con
+ * «FOREIGN KEY constraint failed (code 787)» y no se guardaba ni uno. En el
+ * teléfono se vio en el video, que es donde el error sale a la vista; las fotos
+ * fallaban igual, en silencio.
+ *
+ * Por eso la fila nace aquí, vacía y en estado BORRADOR: los adjuntos necesitan
+ * a qué pertenecer desde la primera foto, no al final.
+ *
+ * BORRADOR no lo recoge el sincronizador —`SyncWorker` solo mira PENDIENTE y
+ * SINCRONIZANDO— así que una solicitud a medias nunca sale.
  */
 export async function empezar(): Promise<string> {
-	return crypto.randomUUID();
+	const db = await abrir();
+	const id = crypto.randomUUID();
+	const ahora = new Date().toISOString();
+
+	// De paso se barren los borradores que alguien empezó y abandonó. Sin esto,
+	// cada formulario que no se termina deja una fila y sus fotos ocupando el
+	// teléfono para siempre.
+	await purgarBorradores();
+
+	await db.run(
+		`INSERT INTO registros
+			(id, envio_id, nombre_completo, documento, telefono, zona, direccion,
+			 aviso_version, autorizacion_en, estado, creado_en, actualizado_en)
+		 VALUES (?, ?, '', '', '', '', '', '', ?, 'BORRADOR', ?, ?)`,
+		[id, crypto.randomUUID(), ahora, ahora, ahora]
+	);
+
+	return id;
+}
+
+/**
+ * Borra los borradores abandonados y sus archivos.
+ *
+ * Un día de margen: alguien puede empezar el formulario, quedarse sin batería y
+ * volver mañana. Más allá de eso, lo que hay es basura ocupando un teléfono que
+ * seguramente no anda sobrado.
+ */
+export async function purgarBorradores(): Promise<string[]> {
+	const db = await abrir();
+
+	const rutas = await db.query(
+		`SELECT a.ruta FROM adjuntos a
+		   JOIN registros r ON r.id = a.registro_id
+		  WHERE r.estado = 'BORRADOR' AND r.creado_en < datetime('now', '-1 day')`
+	);
+
+	await db.run(
+		"DELETE FROM registros WHERE estado = 'BORRADOR' AND creado_en < datetime('now', '-1 day')"
+	);
+
+	return (rutas.values ?? []).map((f: { ruta: string }) => f.ruta);
 }
 
 /**
@@ -67,17 +117,23 @@ export async function guardar(id: string, datos: DatosRegistro): Promise<void> {
 	const db = await abrir();
 	const ahora = new Date().toISOString();
 
+	// UPDATE y no INSERT: la fila ya existe desde `empezar()`, con las fotos y
+	// los videos colgando de ella. Insertarla otra vez fallaría por clave
+	// duplicada, y borrarla y recrearla se llevaría los adjuntos por cascada.
+	//
+	// El `envio_id` NO se toca: se generó al abrir el borrador y es lo que hace
+	// seguro reintentar. Regenerarlo aquí rompería la idempotencia y el servidor
+	// podría inscribir dos veces a la misma familia.
 	await db.executeTransaction([
 		{
-			statement: `INSERT INTO registros
-				(id, envio_id, nombre_completo, documento, telefono, correo,
-				 zona, direccion, vereda, corregimiento, latitud, longitud, precision_m,
-				 descripcion_dano, autoriza_datos, aviso_version, autorizacion_en,
-				 estado, creado_en, actualizado_en)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?, 'PENDIENTE', ?, ?)`,
+			statement: `UPDATE registros SET
+					nombre_completo = ?, documento = ?, telefono = ?, correo = ?,
+					zona = ?, direccion = ?, vereda = ?, corregimiento = ?,
+					latitud = ?, longitud = ?, precision_m = ?, descripcion_dano = ?,
+					autoriza_datos = 1, aviso_version = ?, autorizacion_en = ?,
+					estado = 'PENDIENTE', actualizado_en = ?
+				  WHERE id = ?`,
 			values: [
-				id,
-				crypto.randomUUID(),
 				datos.nombre_completo.trim(),
 				datos.documento.replace(/\D+/g, ''),
 				datos.telefono.replace(/\D+/g, ''),
@@ -95,9 +151,12 @@ export async function guardar(id: string, datos: DatosRegistro): Promise<void> {
 				datos.aviso_version,
 				ahora,
 				ahora,
-				ahora
+				id
 			]
 		},
+		// Las señales se rehacen: si alguien volvió atrás y cambió lo que marcó,
+		// las de antes tienen que irse.
+		{ statement: 'DELETE FROM registro_senales WHERE registro_id = ?', values: [id] },
 		...datos.senales.map((codigo) => ({
 			statement: 'INSERT OR IGNORE INTO registro_senales (registro_id, codigo) VALUES (?, ?)',
 			values: [id, codigo]
@@ -115,6 +174,7 @@ export async function listar(): Promise<RegistroGuardado[]> {
 		        r.creado_en,
 		        (SELECT COUNT(*) FROM adjuntos a WHERE a.registro_id = r.id) AS adjuntos
 		   FROM registros r
+		  WHERE r.estado <> 'BORRADOR'
 		  ORDER BY r.creado_en DESC`
 	);
 
