@@ -1,0 +1,35 @@
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+# 14.3 y no 14.0, que es lo que pone Capacitor por omisión.
+#
+# `getUserMedia` dentro de un WKWebView NO EXISTE antes de iOS 14.3 — Apple lo
+# habilitó en esa versión y no hay forma de sortearlo. Con el mínimo en 14.0, un
+# iPhone en 14.0, 14.1 o 14.2 instalaría la aplicación y el grabador de video
+# fallaría sin ninguna explicación.
+#
+# Es preferible que no se instale a que se instale a medias.
+platform :ios, '14.3'
+use_frameworks!
+
+# workaround to avoid Xcode caching of Pods that requires
+# Product -> Clean Build Folder after new Cordova plugins installed
+# Requires CocoaPods 1.6 or newer
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCommunitySqlite', :path => '../../node_modules/@capacitor-community/sqlite'
+  pod 'CapacitorApp', :path => '../../node_modules/@capacitor/app'
+  pod 'CapacitorFilesystem', :path => '../../node_modules/@capacitor/filesystem'
+  pod 'CapacitorNetwork', :path => '../../node_modules/@capacitor/network'
+end
+
+target 'App' do
+  capacitor_pods
+  # Add your Pods here
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+end

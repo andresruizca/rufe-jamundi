@@ -1,0 +1,17 @@
+node_modules/
+
+# Lo genera `pod install`: decenas de megabytes que se reconstruyen solos.
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+
+# Los assets web salen de compilar ../apk. No se versionan dos veces.
+ios/App/App/public/
+
+# Compilaciones y firmas
+build/
+*.ipa
+*.xcarchive
+*.mobileprovision
+*.p12
+*.cer

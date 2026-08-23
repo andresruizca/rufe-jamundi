@@ -1,0 +1,24 @@
+{
+  "name": "sgr-jamundi-ios",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Proyecto iOS de la pre-inscripción ciudadana. Reutiliza el build web de ../apk sin copiarlo.",
+  "scripts": {
+    "preparar": "cd ../apk && npm run build && cd ../ios && npx cap sync ios",
+    "abrir": "npx cap open ios",
+    "ipa:debug": "cd ios/App && xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphoneos build"
+  },
+  "dependencies": {
+    "@capacitor-community/sqlite": "^7.0.3",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/filesystem": "^7.1.8",
+    "@capacitor/ios": "^7.4.4",
+    "@capacitor/network": "^7.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
+    "typescript": "^6.0.3"
+  }
+}

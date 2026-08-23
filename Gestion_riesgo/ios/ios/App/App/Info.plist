@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+        <string>Inspección de Vivienda</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<!--
+		⚠ ESTOS CUATRO TEXTOS NO SON UN TRÁMITE.
+
+		En Android, usar una API sin declarar su permiso falla. En iOS, usarla sin
+		su texto de justificación MATA LA APLICACIÓN EN EL ACTO: sin diálogo, sin
+		mensaje, sin nada que el ciudadano pueda entender.
+
+		`cap sync` no los escribe. Van a mano y se quedan.
+
+		Y el texto importa por algo más que la revisión de Apple: quien abre esto
+		acaba de perder parte de su casa y le está entregando la foto de su cédula
+		a una aplicación que le pasaron por Bluetooth. Que el teléfono le explique
+		para qué es, con palabras suyas, es lo mínimo.
+
+		Ver docs/permisos.md.
+	-->
+	<key>NSCameraUsageDescription</key>
+	<string>Para tomar la foto de su cédula y las fotos del daño de su vivienda, que la Alcaldía necesita para programar la visita técnica.</string>
+
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Los videos de la vivienda se graban con sonido, para que quien revise pueda oír lo que usted explica mientras muestra el daño.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Para adjuntar fotos que ya tomó antes, cuando el daño acababa de ocurrir y se veía mejor.</string>
+
+	<!--
+		`WhenInUse` y NO `Always`. La aplicación solo necesita la ubicación
+		mientras la persona pulsa el botón, con la pantalla delante. Pedir la de
+		siempre sería pedir seguir a alguien por la ciudad para atender una
+		emergencia en su casa.
+	-->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Para guardar el punto donde queda su vivienda y que la Alcaldía pueda encontrarla. Es opcional: con la dirección escrita es suficiente.</string>
+
+</dict>
+</plist>
