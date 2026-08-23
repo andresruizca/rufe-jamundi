@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Inspección de Vivienda · Jamundí</string>
+    <string name="title_activity_main">Inspección de Vivienda · Jamundí</string>
+    <string name="package_name">co.gov.jamundi.sgr</string>
+    <string name="custom_url_scheme">co.gov.jamundi.sgr</string>
+</resources>

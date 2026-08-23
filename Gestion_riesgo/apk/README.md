@@ -36,8 +36,8 @@ funcionario. Pero:
 | 2 · Copia del formulario + detector de deriva | Hecho |
 | 3 · Captura de foto y video | Hecho |
 | 4 · Guardado local y «Mis registros» | Hecho |
-| 5 · `ApiCliente.kt` | Escrito — **sin compilar** |
-| 6 · `SyncWorker.kt` | Escrito — **sin compilar** |
+| 5 · `ApiCliente.kt` | Hecho — **compila**, en el APK |
+| 6 · `SyncWorker.kt` | Hecho — **compila**, en el APK |
 | 7-9 · Pruebas, campo, firma | Pendiente |
 
 ### Sobre el servidor
@@ -67,24 +67,42 @@ npm run check        # tipos
 npm test             # deriva + esquema + unitarias
 ```
 
-Para el APK hace falta Android Studio y un JDK 17:
+Para el APK **no hace falta Android Studio**: basta el SDK por línea de órdenes
+y el envoltorio de Gradle que ya trae `android/`.
 
 ```bash
-npx cap add android  # una sola vez: genera android/
-npm run apk:debug    # android/app/build/outputs/apk/debug/
+brew install --cask android-commandlinetools   # si no está
+brew install openjdk@21
+
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+npm run apk:debug        # android/app/build/outputs/apk/debug/
 ```
+
+**El JDK tiene que ser el 21.** Ni más ni menos, y costó dos intentos
+averiguarlo:
+
+- Con el **Java 25** que trae este equipo por omisión, Gradle 8.11 falla con
+  «Unsupported class file major version 69» — un mensaje que no menciona por
+  ningún lado que el problema sea la versión de Java.
+- Con el **17**, falla distinto: `@capacitor/filesystem` declara
+  `jvmToolchain(21)`, así que Capacitor 7 no compila por debajo de 21.
+
+Queda fijado en `android/gradle.properties` para que no dependa de la variable
+de entorno de cada quien.
 
 ---
 
-## El Kotlin está sin compilar
+## El Kotlin compila, pero nadie lo ha ejecutado
 
-Hay que decirlo claro: **el Kotlin de `android/` no se ha compilado ni ejecutado
-nunca.** En el equipo donde se escribió no hay `kotlinc`, ni Gradle, ni SDK de
-Android. Se escribió a mano contra `src/local/sincronizacion.ts`, que sí tiene
-sus pruebas.
+`./gradlew assembleDebug` produce un APK de 28 MB con las seis clases dentro
+—comprobado buscándolas en los `.dex`— y **sin un solo aviso sobre este código**;
+los cuatro que salen son de `@capacitor/filesystem`.
 
-Lo primero que hay que hacer al abrirlo en Android Studio es compilarlo y
-corregir lo que salga. Habrá algo.
+Que compile no es que funcione. **Nadie ha ejecutado nunca este APK en un
+teléfono.** Sin eso no se sabe si WorkManager despierta, si las consultas de
+`SyncWorker` devuelven lo que se espera o si la ruta de la base que usa
+`BaseDatos.kt` es la que el plugin de Capacitor crea de verdad — esa última es
+la que más dudo, porque el nombre del archivo va escrito a mano en dos sitios.
 
 Lo que sí está comprobado es que **los dos lados dicen lo mismo**:
 `npm run test:kotlin` compara las escaleras de reintento, el tamaño del trozo,
