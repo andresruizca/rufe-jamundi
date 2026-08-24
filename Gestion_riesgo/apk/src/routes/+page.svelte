@@ -34,6 +34,7 @@
 	import GrabadorVideo from '$formulario/GrabadorVideo.svelte';
 	import SelectorSenales from '$formulario/SelectorSenales.svelte';
 	import AutorizacionDatos from '$formulario/AutorizacionDatos.svelte';
+	import PanelEnvio from '$formulario/PanelEnvio.svelte';
 	import {
 		bloqueoDeAvance,
 		datosVacios,
@@ -454,11 +455,14 @@
 						rows="2"
 						maxlength="200"
 						bind:value={datos.direccion}
-						placeholder="Carrera 11 # 8-26 — o bien: la casa azul pasando el puente, al lado de la tienda"
+						placeholder={datos.zona === 'RURAL'
+							? 'La casa de tapia pasando la escuela, después del puente'
+							: 'Calle 7 # 14-52, casa de dos pisos'}
 					></textarea>
 					<span class="campo__ayuda">
-						Escríbala como se la explicaría a alguien que va a buscarla. Si no tiene nomenclatura,
-						sirven las referencias.
+						{datos.zona === 'RURAL'
+							? 'Como se la explicaría a alguien que va a buscarla. En el campo casi nunca hay nomenclatura: sirven las referencias.'
+							: 'Escríbala como se la explicaría a alguien que va a buscarla.'}
 					</span>
 					{#if errores.direccion}<span class="campo__error">{errores.direccion}</span>{/if}
 				</label>
@@ -479,9 +483,18 @@
 					</label>
 				{/if}
 
+				<!--
+					El mismo campo con dos nombres, según la zona. No son dos campos
+					distintos: en el formato oficial es una sola casilla, y quien vive
+					en el pueblo no tiene vereda ni quien vive en el campo tiene barrio.
+				-->
 				<label class="campo">
 					<span class="campo__etiqueta">{datos.zona === 'RURAL' ? 'Vereda' : 'Barrio'}</span>
-					<input class="campo__control" bind:value={datos.vereda} />
+					<input
+						class="campo__control"
+						bind:value={datos.vereda}
+						placeholder={datos.zona === 'RURAL' ? 'El Guabal' : 'Belalcázar'}
+					/>
 				</label>
 
 				<div class="ubicacion">
@@ -642,6 +655,16 @@
 					error={errores.autoriza_datos ?? ''}
 				/>
 			</section>
+
+			<!--
+				El estado real del envío, en vivo. Va en este paso porque es donde la
+				persona decide si puede irse tranquila, y hasta ahora la pantalla
+				decía «se enviará en cuanto haya internet» y ahí se acababa: quien lo
+				leía tres horas después no sabía si el teléfono lo había intentado
+				siquiera, y quien atiende el teléfono en la Alcaldía tampoco podía
+				responderle.
+			-->
+			<PanelEnvio />
 		{/if}
 
 		<!-- Trampa antirrobot. Oculta y fuera del orden de tabulación. -->

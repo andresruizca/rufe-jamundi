@@ -65,7 +65,7 @@ try {
 		.filter((t) => t && !t.startsWith('sqlite_'));
 
 	afirmar(
-		['adjuntos', 'ajustes', 'registro_senales', 'registros'].every((t) => tablas.includes(t)),
+		['adjuntos', 'ajustes', 'bitacora', 'registro_senales', 'registros'].every((t) => tablas.includes(t)),
 		`el esquema se aplica limpio (${tablas.length} tablas)`
 	);
 
@@ -243,6 +243,36 @@ try {
 	afirmar(
 		sql("SELECT id FROM registros WHERE estado='PENDIENTE'") === 'b1',
 		'y la solicitud queda en la cola que lee Kotlin'
+	);
+
+	// ── La bitácora ─────────────────────────────────────────────────────────
+	//
+	// La escribe Kotlin en cada intento. Sin ella, «se enviará en cuanto haya
+	// internet» es cierto pero no dice nada: quien lo lee tres horas después no
+	// sabe si el teléfono lo ha intentado siquiera.
+
+	sql(`PRAGMA foreign_keys = ON;
+		INSERT INTO bitacora (id, registro_id, cuando, resultado, detalle)
+		VALUES ('l1','b1', datetime('now'), 'SIN_CONEXION', null),
+		       ('l2','b1', datetime('now','+1 minute'), 'ENVIADO', 'PRE-2026-ABCD1234');`);
+
+	afirmar(
+		Number(sql("SELECT COUNT(*) FROM bitacora WHERE registro_id='b1'")) === 2,
+		'la bitácora guarda una fila por INTENTO, no una por registro'
+	);
+
+	afirmar(
+		sql("SELECT detalle FROM bitacora WHERE registro_id='b1' ORDER BY cuando DESC LIMIT 1") ===
+			'PRE-2026-ABCD1234',
+		'y el radicado del envío queda ahí, que es lo único que la familia se lleva'
+	);
+
+	// Y se va con su registro: son datos de una solicitud, no de la aplicación.
+	sql("PRAGMA foreign_keys = ON; DELETE FROM registros WHERE id='b1'");
+
+	afirmar(
+		Number(sql('SELECT COUNT(*) FROM bitacora')) === 0,
+		'la bitácora se va en cascada al borrar el registro'
 	);
 } finally {
 	rmSync(temporal, { recursive: true, force: true });

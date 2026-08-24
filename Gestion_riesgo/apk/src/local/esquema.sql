@@ -151,3 +151,29 @@ INSERT OR IGNORE INTO ajustes (clave, valor) VALUES
   ('api_base', 'https://grj.oticjamundi.com/api'),
   ('catalogo_en', NULL),
   ('ultimo_sync_ok', NULL);
+
+-- ── Bitácora de envío ───────────────────────────────────────────────────────
+--
+-- Una fila por INTENTO, no por registro.
+--
+-- `registros` guarda solo el último: `intentos`, `ultimo_intento_en`,
+-- `error_ultimo`. Eso basta para decidir cuándo reintentar, pero no para
+-- responder la pregunta que de verdad hace la gente —«¿cuándo se mandó lo mío?»—
+-- ni la que hace quien atiende el teléfono: «¿se ha intentado siquiera?».
+--
+-- Con esto la persona puede ver «7:42 p.m. · sin señal · 8:15 p.m. · enviado» y
+-- entender qué pasó, en vez de mirar un aviso que lleva horas igual.
+--
+-- La escribe `SyncWorker.kt` en cada intento. Se va por cascada con su registro.
+CREATE TABLE IF NOT EXISTS bitacora (
+  id            TEXT PRIMARY KEY,
+  registro_id   TEXT NOT NULL,
+  cuando        TEXT NOT NULL,
+  -- INTENTO, SIN_CONEXION, ERROR, ENVIADO
+  resultado     TEXT NOT NULL,
+  -- Lo que se le puede enseñar a la persona. Nada de rastros técnicos.
+  detalle       TEXT,
+  FOREIGN KEY (registro_id) REFERENCES registros(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_registro ON bitacora(registro_id, cuando);

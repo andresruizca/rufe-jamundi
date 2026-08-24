@@ -113,6 +113,7 @@ class SyncWorker(
         val intentos = intentosDe(db, id)
 
         marcar(db, id, "SINCRONIZANDO", null)
+        anotar(db, id, "INTENTO", null)
 
         // La carga se reutiliza entre intentos. Si la señal se cortó tras subir
         // tres fotos, el siguiente intento aprovecha esas tres en vez de volver
@@ -227,6 +228,8 @@ class SyncWorker(
                 WHERE id = ?""",
             arrayOf(radicado, id)
         )
+
+        anotar(db, id, "ENVIADO", radicado)
     }
 
     private fun aplicar(
@@ -252,6 +255,8 @@ class SyncWorker(
                     WHERE id = ?""",
                 arrayOf(estado, decision.motivo, id)
             )
+
+            anotar(db, id, "ERROR", decision.motivo)
             true
         }
 
@@ -265,6 +270,11 @@ class SyncWorker(
                     WHERE id = ?""",
                 arrayOf(decision.motivo, "+${decision.esperaSegundos} seconds", id)
             )
+
+            // «Sin conexión» se distingue del resto: es lo más común y no es un
+            // error que nadie tenga que resolver. En pantalla se dice distinto.
+            val clase = if (decision.motivo.contains("conexión")) "SIN_CONEXION" else "ERROR"
+            anotar(db, id, clase, decision.motivo)
             false
         }
     }
@@ -415,6 +425,36 @@ class SyncWorker(
         j.put("sitio_web", "")
 
         j
+    }
+
+    /**
+     * Deja constancia de un intento.
+     *
+     * Una fila por intento, no por registro. `registros` solo guarda el último,
+     * y eso basta para decidir cuándo reintentar pero no para responder la
+     * pregunta que de verdad hace la gente —«¿cuándo se mandó lo mío?»— ni la
+     * que hace quien atiende el teléfono: «¿se ha intentado siquiera?».
+     *
+     * `@Suppress` no hace falta: si esto fallara, no puede tumbar la
+     * sincronización. Una bitácora que no se escribe es un inconveniente; una
+     * solicitud que no sale es el problema que esta aplicación existe para
+     * evitar.
+     */
+    private fun anotar(
+        db: android.database.sqlite.SQLiteDatabase,
+        id: String,
+        resultado: String,
+        detalle: String?
+    ) {
+        try {
+            db.execSQL(
+                """INSERT INTO bitacora (id, registro_id, cuando, resultado, detalle)
+                   VALUES (?, ?, datetime('now'), ?, ?)""",
+                arrayOf(java.util.UUID.randomUUID().toString(), id, resultado, detalle)
+            )
+        } catch (e: Exception) {
+            // Ver arriba: nunca hacia arriba.
+        }
     }
 
     // ── Escrituras cortas ───────────────────────────────────────────────────
