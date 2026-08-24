@@ -68,12 +68,12 @@ h3 {
 	max-width: 86vw;
 	display: flex;
 	flex-direction: column;
-	background: var(--gradient-brand, var(--color-primary-deep));
-	color: #fff;
+	background: var(--menu-bg);
+	color: var(--menu-texto);
 	overflow-y: auto;
 	transform: translateX(-100%);
 	transition: transform 0.22s ease;
-	box-shadow: 0 0 40px rgb(4 18 40 / 45%);
+	box-shadow: 0 0 40px rgb(4 12 26 / 55%);
 }
 
 .menu--abierto {
@@ -83,18 +83,22 @@ h3 {
 .menu__marca {
 	display: flex;
 	align-items: center;
-	gap: 0.65rem;
-	padding: 1rem 0.9rem;
-	border-bottom: 1px solid rgb(255 255 255 / 18%);
+	gap: 0.7rem;
+	padding: 1.05rem 0.95rem;
+	border-bottom: 1px solid var(--menu-borde);
 }
 
+/* El escudo conserva su plaqueta clara. No es adorno: es un blasón a todo
+   color —rojo, oro, azul— y sobre un fondo casi negro se vuelve una mancha
+   ilegible. Lo que se quitó es el tamaño y el brillo que lo hacían parecer
+   pegado encima. */
 .menu__logo {
-	width: 40px;
-	height: 40px;
+	width: 34px;
+	height: 34px;
 	flex: 0 0 auto;
-	border-radius: 9px;
-	background: rgb(255 255 255 / 92%);
-	padding: 4px;
+	border-radius: 8px;
+	background: rgb(255 255 255 / 90%);
+	padding: 3px;
 }
 
 .menu__marca-texto {
@@ -103,15 +107,16 @@ h3 {
 }
 
 .menu__titulo {
-	font-size: 0.94rem;
-	font-weight: 700;
+	font-size: 0.97rem;
+	font-weight: 650;
 	line-height: 1.2;
+	letter-spacing: -0.01em;
 }
 
 .menu__subtitulo {
-	font-size: 0.74rem;
-	opacity: 0.82;
-	margin-top: 2px;
+	font-size: 0.75rem;
+	color: var(--menu-texto-suave);
+	margin-top: 3px;
 }
 
 .menu__cerrar {
@@ -122,32 +127,35 @@ h3 {
 	height: 30px;
 	border-radius: 8px;
 	border: 0;
-	background: rgb(255 255 255 / 14%);
-	color: #fff;
+	background: transparent;
+	color: var(--menu-texto-suave);
 	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
 }
 
 .menu__cerrar:hover {
-	background: rgb(255 255 255 / 26%);
+	background: var(--menu-hover);
+	color: var(--menu-texto);
 }
 
 .menu__nav {
 	flex: 1;
-	padding: 0.8rem 0.6rem;
+	padding: 0.7rem 0.55rem;
 	display: flex;
 	flex-direction: column;
-	gap: 0.2rem;
+	gap: 0.12rem;
 }
 
 .menu__enlace,
 .menu__grupo {
+	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 0.7rem;
+	gap: 0.72rem;
 	width: 100%;
-	padding: 0.62rem 0.7rem;
-	border-radius: 9px;
-	color: rgb(255 255 255 / 90%);
+	padding: 0.6rem 0.7rem;
+	border-radius: 10px;
+	color: var(--menu-texto-suave);
 	text-decoration: none;
 	font: inherit;
 	font-size: 0.9rem;
@@ -156,22 +164,36 @@ h3 {
 	border: 0;
 	text-align: left;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background 0.15s ease, color 0.15s ease;
 }
 
 .menu__enlace:hover,
 .menu__grupo:hover {
-	background: rgb(255 255 255 / 13%);
-	color: #fff;
+	background: var(--menu-hover);
+	color: var(--menu-texto);
 }
 
-/* El elemento activo se distingue por fondo sólido y por una barra lateral, no
-   solo por color: quien no distingue bien los colores igual lo identifica. */
+/* El elemento activo se distingue por fondo y por una barra amarilla, no solo
+   por color: quien no distingue bien los colores igual lo identifica.
+   La barra va como pseudoelemento y no como `inset box-shadow` para poder
+   redondearla y dejarla más corta que la fila — pegada al borde superior e
+   inferior parecía un fallo de dibujo. */
 .menu__enlace[aria-current='page'] {
-	background: rgb(255 255 255 / 22%);
-	color: #fff;
+	background: var(--menu-activo);
+	color: var(--menu-texto);
 	font-weight: 600;
-	box-shadow: inset 3px 0 0 var(--color-highlight);
+}
+
+.menu__enlace[aria-current='page']::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 3px;
+	height: 55%;
+	border-radius: 0 3px 3px 0;
+	background: var(--color-highlight);
 }
 
 .menu__grupo-texto {
@@ -181,7 +203,7 @@ h3 {
 .menu__chevron {
 	display: grid;
 	place-items: center;
-	opacity: 0.75;
+	opacity: 0.6;
 	transition: transform 0.18s ease;
 }
 
@@ -192,38 +214,39 @@ h3 {
 .menu__hijos {
 	display: flex;
 	flex-direction: column;
-	gap: 0.15rem;
-	margin: 0.1rem 0 0.25rem 1.15rem;
-	padding-left: 0.5rem;
-	border-left: 1px solid rgb(255 255 255 / 22%);
+	gap: 0.1rem;
+	margin: 0.15rem 0 0.3rem 1.2rem;
+	padding-left: 0.45rem;
+	border-left: 1px solid var(--menu-borde-fuerte);
 }
 
 .menu__enlace--hijo {
 	font-size: 0.865rem;
-	padding: 0.52rem 0.6rem;
+	padding: 0.5rem 0.6rem;
 }
 
 .menu__pie {
-	padding: 0.8rem;
-	border-top: 1px solid rgb(255 255 255 / 18%);
+	padding: 0.85rem;
+	border-top: 1px solid var(--menu-borde);
 }
 
 .menu__usuario {
 	display: flex;
 	align-items: center;
-	gap: 0.6rem;
-	margin-bottom: 0.65rem;
+	gap: 0.65rem;
+	margin-bottom: 0.7rem;
 }
 
 .menu__avatar {
-	width: 36px;
-	height: 36px;
+	width: 38px;
+	height: 38px;
 	border-radius: 50%;
-	background: rgb(255 255 255 / 22%);
+	background: var(--menu-avatar);
+	color: var(--menu-texto);
 	display: grid;
 	place-items: center;
-	font-weight: 700;
-	font-size: 0.8rem;
+	font-weight: 600;
+	font-size: 0.82rem;
 	flex: 0 0 auto;
 }
 
@@ -233,7 +256,7 @@ h3 {
 
 .menu__usuario-nombre {
 	font-weight: 600;
-	font-size: 0.86rem;
+	font-size: 0.88rem;
 	line-height: 1.25;
 	overflow-wrap: anywhere;
 }
@@ -241,9 +264,9 @@ h3 {
 .menu__usuario-rol {
 	display: flex;
 	align-items: center;
-	gap: 0.32rem;
-	opacity: 0.85;
-	font-size: 0.74rem;
+	gap: 0.35rem;
+	color: var(--menu-texto-suave);
+	font-size: 0.76rem;
 }
 
 .menu__punto {
@@ -259,20 +282,21 @@ h3 {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.45rem;
-	padding: 0.55rem;
-	border-radius: 9px;
-	border: 1px solid rgb(255 255 255 / 32%);
+	gap: 0.5rem;
+	padding: 0.62rem;
+	border-radius: 10px;
+	border: 1px solid var(--menu-borde-fuerte);
 	background: transparent;
-	color: #fff;
+	color: var(--menu-texto);
 	font: inherit;
-	font-size: 0.82rem;
-	font-weight: 600;
+	font-size: 0.85rem;
+	font-weight: 500;
 	cursor: pointer;
+	transition: background 0.15s ease;
 }
 
 .menu__salir:hover {
-	background: rgb(255 255 255 / 15%);
+	background: var(--menu-hover);
 }
 
 .velo {
