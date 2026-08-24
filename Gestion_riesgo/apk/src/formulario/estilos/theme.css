@@ -26,6 +26,25 @@
 	/* Degradado de marca (campaña 2026: azul vivo → azul profundo) */
 	--gradient-brand: linear-gradient(135deg, #2e9bef 0%, #1577d6 55%, #0e5aae 100%);
 
+	/* Menú lateral.
+	 *
+	 * Vive siempre en oscuro, en los dos temas, y por eso tiene tokens propios en
+	 * vez de reutilizar los de superficie: no se adapta al modo claro.
+	 *
+	 * No usa `--gradient-brand`. El azul vivo de campaña funciona en una portada,
+	 * donde se mira una vez; en una columna que acompaña toda la jornada compite
+	 * con el contenido y cansa. Se queda el mismo azul de la marca, pero rebajado
+	 * casi a negro, para que lo único que destaque sea dónde está uno.
+	 */
+	--menu-bg: linear-gradient(180deg, #13203a 0%, #0b1526 100%);
+	--menu-texto: #e6ecf5;
+	--menu-texto-suave: #93a3b8;
+	--menu-borde: rgb(255 255 255 / 8%);
+	--menu-borde-fuerte: rgb(255 255 255 / 14%);
+	--menu-hover: rgb(255 255 255 / 6%);
+	--menu-activo: rgb(255 255 255 / 10%);
+	--menu-avatar: #2b3a4f;
+
 	/* Superficies y fondos */
 	--color-bg: #f1f5fc;
 	--color-surface: #ffffff;
