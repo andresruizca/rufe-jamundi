@@ -1,6 +1,9 @@
 // Mandarle el enlace de preinscripción a una persona concreta.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { aNumeroDeWhatsapp, mensajePara, enlaceDePreinscripcion } from './compartir';
 
 describe('el número, como lo quiere WhatsApp', () => {
@@ -57,6 +60,39 @@ describe('el mensaje', () => {
 
 	it('avisa del radicado: es la constancia de la persona', () => {
 		expect(mensajePara('Ana', enlace)).toContain('radicado');
+	});
+});
+
+describe('el mensaje general de la bandeja', () => {
+	// El que se copia desde la bandeja no va dirigido a nadie: puede acabar en un
+	// grupo del barrio o en una cartelera. Lo que sí tiene que decir es de dónde
+	// viene y qué hay que tener a mano, que es lo que evita que se abandone a
+	// mitad del formulario.
+	const fuente = readFileSync(
+		fileURLToPath(new URL('./components/CompartirFormulario.svelte', import.meta.url)),
+		'utf8'
+	);
+
+	it('dice de parte de quién viene', () => {
+		expect(fuente).toContain('Alcaldía de Jamundí · Gestión del Riesgo');
+	});
+
+	it('avisa de tener la cédula a mano, y del radicado al terminar', () => {
+		expect(fuente).toContain('Tenga a mano su cédula');
+		expect(fuente).toContain('radicado');
+	});
+
+	it('lleva el enlace, y sale del dominio donde se esté', () => {
+		// Escrito a mano, una copia del sistema en otro dominio mandaría a la
+		// gente al dominio de al lado.
+		expect(fuente).toContain('enlaceDePreinscripcion(page.url.origin)');
+		expect(fuente).toContain('${enlace}');
+	});
+
+	it('WhatsApp se abre SIN número: aquí no se sabe a quién', () => {
+		// Con número es el call center, que sí sabe a quién llama. Aquí el enlace
+		// es general y `wa.me` sin número abre la lista de contactos.
+		expect(fuente).toContain('https://wa.me/?text=');
 	});
 });
 

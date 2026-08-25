@@ -10,6 +10,7 @@
 		IdCard, Image, Inbox, LoaderCircle, MapPin, Trash2, TriangleAlert, Video, X
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
+	import CompartirFormulario from '$lib/components/CompartirFormulario.svelte';
 	import { preinscripcionApi } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { SOLO_ADMIN } from '$lib/navigation';
@@ -284,10 +285,23 @@
 </script>
 
 <div class="tarjeta">
-	<p class="tarjeta__nota">
-		Solicitudes que los ciudadanos enviaron desde el formulario público. Revíselas y conviértalas en
-		inspección cuando corresponda.
-	</p>
+	<!--
+		El enlace del formulario público, a mano.
+
+		Esta bandeja es donde vive el equipo que atiende las solicitudes, así que
+		es donde suena el teléfono: «¿por dónde me inscribo?». La respuesta era
+		dictar una dirección web de memoria, y una dirección dictada se escribe
+		mal. Va arriba, junto a la explicación de qué es esta pantalla, porque es
+		el mismo asunto: de dónde salen estas solicitudes.
+	-->
+	<div class="encabezado">
+		<p class="tarjeta__nota encabezado__texto">
+			Solicitudes que los ciudadanos enviaron desde el formulario público. Revíselas y
+			conviértalas en inspección cuando corresponda.
+		</p>
+
+		<CompartirFormulario />
+	</div>
 
 	<div class="filtros" role="group" aria-label="Filtrar por estado">
 		{#each ESTADOS as e (e.valor)}
@@ -728,6 +742,23 @@
 {/if}
 
 <style>
+	/* La explicación y el botón de compartir, en la misma línea cuando cabe.
+	   El botón no se estira: es una acción puntual, no el asunto de la pantalla. */
+	.encabezado {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.9rem;
+		flex-wrap: wrap;
+	}
+
+	.encabezado__texto {
+		flex: 1 1 22rem;
+		min-width: 0;
+		margin: 0;
+	}
+
+
 	/* ── Selección para el borrado en lote ───────────────────────────────── */
 	.col-marca {
 		width: 2.4rem;
