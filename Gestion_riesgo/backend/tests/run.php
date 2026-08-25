@@ -2083,6 +2083,8 @@ function rutasConSusRoles(string $raiz): array
         'Auth::ESCRITURA'     => Auth::ESCRITURA,
         'Auth::LECTURA_RUFE'  => Auth::LECTURA_RUFE,
         'Auth::INSPECCION'    => Auth::INSPECCION,
+        'Auth::CALL_CENTER'   => Auth::CALL_CENTER,
+        'Auth::LECTURA_INSPECCION' => Auth::LECTURA_INSPECCION,
         '$soloAdmin'          => [Auth::ADMINISTRADOR],
         '$capturaArchivos'    => array_values(array_unique(array_merge(Auth::ESCRITURA, Auth::INSPECCION))),
     ];
@@ -2199,6 +2201,75 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
     afirmarIgual($esperadas, $alcanza);
 });
 
+grupo('Hasta dónde llega el operador de call center');
+
+prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function () use ($raiz): void {
+    // Escrita a mano, como la del inspector y por lo mismo: derivarla del
+    // código haría que la prueba dijera «sí» a cualquier cosa que el código
+    // dijera. Añadir una ruta sin decidir su acceso rompe aquí.
+    //
+    // Lo que está en juego: el operador suele ser personal contratado para la
+    // campaña. Su trabajo es marcar un número y anotar qué pasó; el censo, con
+    // las cédulas de todo el hogar y las fotos de las viviendas, no.
+    $esperadas = [
+        // Su sesión.
+        'GET /auth/me',
+        'POST /auth/logout',
+        'POST /auth/password',
+        // Información del sistema.
+        'GET /acerca/sistema',
+        'GET /acerca/actualizaciones',
+        // Su lista de llamadas.
+        'GET /callcenter/resumen',
+        'GET /callcenter/hogares',
+        'GET /callcenter/hogares/{id}/gestiones',
+        'POST /callcenter/hogares/{id}/gestiones',
+    ];
+
+    $alcanza = [];
+
+    foreach (rutasConSusRoles($raiz) as $ruta => $roles) {
+        if (in_array(Auth::OPERADOR, $roles, true)) {
+            $alcanza[] = $ruta;
+        }
+    }
+
+    sort($esperadas);
+    sort($alcanza);
+
+    afirmarIgual($esperadas, $alcanza);
+});
+
+prueba('el operador no lee el censo, ni el mapa, ni las inspecciones', function () use ($raiz): void {
+    foreach (rutasConSusRoles($raiz) as $ruta => $roles) {
+        $delCenso = str_contains($ruta, '/rufe/')
+            || str_contains($ruta, '/mapa/')
+            || str_contains($ruta, '/inspeccion/')
+            || str_contains($ruta, '/preinscripcion/fichas')
+            || str_contains($ruta, '/usuarios');
+
+        if (! $delCenso) {
+            continue;
+        }
+
+        afirmar(
+            ! in_array(Auth::OPERADOR, $roles, true),
+            "el operador alcanza «{$ruta}», que no es de su trabajo"
+        );
+    }
+});
+
+prueba('el operador no está en las listas que abren el censo', function (): void {
+    // La ruta puede estar bien y aun así colarse el rol si se le añade a una
+    // de estas listas «para que funcione algo».
+    afirmar(! in_array(Auth::OPERADOR, Auth::LECTURA_RUFE, true), 'no puede leer el censo');
+    afirmar(! in_array(Auth::OPERADOR, Auth::ESCRITURA, true), 'no puede escribir datos');
+    afirmar(! in_array(Auth::OPERADOR, Auth::INSPECCION, true), 'no entra a las inspecciones');
+    afirmar(in_array(Auth::OPERADOR, Auth::TODOS, true), 'sí es un usuario autenticado');
+});
+
+grupo('Rutas');
+
 prueba('el inspector no puede aprobar una inspección', function () use ($raiz): void {
     // Sacamos la aprobación del formulario justo para que quien inspecciona no
     // se validara a sí mismo. Dejarle esta ruta lo desharía por otra puerta.
@@ -2238,9 +2309,20 @@ prueba('los mismos roles en PHP, en la migración y en el navegador', function (
     // Tres listas que tienen que decir lo mismo. Si se separan, aparece en el
     // menú un rol que la base rechaza al guardarlo, o al revés: un rol guardable
     // que el navegador no sabe dibujar y trata como si no tuviera permisos.
-    $sql = (string) file_get_contents($raiz.'/database/sistema_02_rol_inspector.sql');
-    preg_match("/MODIFY\s+COLUMN\s+rol\s+ENUM\s*\(([^)]*)\)/i", $sql, $m);
-    preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1] ?? '', $enEnum);
+    // La migración se busca, no se nombra. Escrita a mano, esta prueba se
+    // quedaba mirando `sistema_02_rol_inspector.sql` mientras el ENUM vigente
+    // pasaba a la migración siguiente: seguía en verde comparando contra una
+    // lista vieja. Se toma la ÚLTIMA de `Migrador::ARCHIVOS` que redefine `rol`,
+    // que es la que manda en la base.
+    $enEnum = [];
+    foreach (Migrador::ARCHIVOS as $archivo) {
+        $sql = (string) @file_get_contents($raiz.'/database/'.$archivo);
+        if (preg_match("/MODIFY\s+COLUMN\s+rol\s+ENUM\s*\(([^)]*)\)/i", $sql, $m) === 1) {
+            preg_match_all("/'{2}([A-Z_]+)'{2}/", $m[1], $enEnum);
+        }
+    }
+
+    afirmar($enEnum !== [], 'ninguna migración redefine el ENUM de `rol`');
 
     $ts = (string) file_get_contents($raiz.'/../frontend/src/lib/navigation.ts');
     preg_match('/export const ROLES = \{(.*?)\} as const;/s', $ts, $m2);

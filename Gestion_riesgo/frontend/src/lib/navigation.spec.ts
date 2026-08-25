@@ -106,19 +106,48 @@ describe('menú por rol', () => {
 		expect(grupos('ADMINISTRADOR')).toEqual(['Registro', 'Reportes', 'Administración']);
 	});
 
-	it('Registro son los dos formatos, y nada más', () => {
+	it('Registro son los dos formatos y la campaña de llamadas', () => {
 		// «Pendientes» salió del menú: la cola de envío vive ahora DENTRO de cada
 		// formato, junto a sus borradores a medias. Colgada del menú no se
-		// relacionaba con nada, y obligaba a acordarse de que existía otro sitio
-		// donde comprobar si el trabajo del día había salido.
+		// relacionaba con nada.
 		const registro = menuParaRol('GESTOR').find(
 			(s) => s.type === 'group' && s.group.id === 'grupo-registro'
 		);
 
 		expect(registro?.type === 'group' && registro.items.map((i) => i.href)).toEqual([
 			'/riesgo/reportar',
-			'/riesgo/inspeccionar'
+			'/riesgo/inspeccionar',
+			'/riesgo/callcenter'
 		]);
+	});
+
+	it('el operador de call center ve su lista y nada más', () => {
+		// Es la razón de ser del rol. Suele ser personal contratado para la
+		// campaña: su trabajo es marcar un número, no el censo con las cédulas de
+		// todo el hogar y las fotos de las viviendas.
+		expect(etiquetas('OPERADOR')).toEqual(['Call center', 'Acerca de']);
+	});
+
+	it('el operador no alcanza ninguna pantalla del censo', () => {
+		for (const ruta of [
+			'/dashboard',
+			'/riesgo/reportar',
+			'/riesgo/reportes',
+			'/riesgo/mapas',
+			'/riesgo/inspeccionar',
+			'/riesgo/inspecciones',
+			'/riesgo/preinscripciones',
+			'/admin/usuarios'
+		]) {
+			expect(puedeAcceder(ruta, 'OPERADOR'), ruta).toBe(false);
+		}
+	});
+
+	it('la suya sí', () => {
+		expect(puedeAcceder('/riesgo/callcenter', 'OPERADOR')).toBe(true);
+		expect(puedeAcceder('/riesgo/callcenter', 'GESTOR')).toBe(true);
+		expect(puedeAcceder('/riesgo/callcenter', 'INSPECTOR')).toBe(false);
+		expect(puedeAcceder('/riesgo/callcenter', 'VISUALIZACION')).toBe(false);
 	});
 
 	// Un grupo nuevo con los roles equivocados no rompe nada visible: simplemente

@@ -27,8 +27,25 @@ final class Auth
      */
     public const INSPECTOR = 'INSPECTOR';
 
+    /**
+     * Quien llama a los hogares del censo para llevarlos hasta la
+     * preinscripción.
+     *
+     * Es el mismo caso del inspector, y por la misma razón: suele ser personal
+     * contratado para la campaña, y para que pudiera trabajar habría que darle
+     * «Gestor» —que le abre el censo entero, el mapa y las inspecciones—.
+     * Necesita un nombre y un teléfono, no un censo.
+     */
+    public const OPERADOR = 'OPERADOR';
+
     /** Todos los roles válidos, en orden de mayor a menor privilegio. */
-    public const ROLES = [self::ADMINISTRADOR, self::GESTOR, self::INSPECTOR, self::VISUALIZACION];
+    public const ROLES = [
+        self::ADMINISTRADOR,
+        self::GESTOR,
+        self::INSPECTOR,
+        self::OPERADOR,
+        self::VISUALIZACION,
+    ];
 
     /** Roles que pueden escribir datos del censo y decidir sobre las fichas. */
     public const ESCRITURA = [self::ADMINISTRADOR, self::GESTOR];
@@ -41,7 +58,13 @@ final class Auth
      * esta lista para proteger lectura de datos del censo — para eso está
      * `LECTURA_RUFE`.
      */
-    public const TODOS = [self::ADMINISTRADOR, self::GESTOR, self::INSPECTOR, self::VISUALIZACION];
+    public const TODOS = [
+        self::ADMINISTRADOR,
+        self::GESTOR,
+        self::INSPECTOR,
+        self::OPERADOR,
+        self::VISUALIZACION,
+    ];
 
     /**
      * Quién puede leer el censo, sus evidencias y el mapa.
@@ -54,6 +77,34 @@ final class Auth
 
     /** Quién levanta y consulta inspecciones de vivienda. */
     public const INSPECCION = [self::ADMINISTRADOR, self::GESTOR, self::INSPECTOR];
+
+    /**
+     * Quién puede CONSULTAR una inspección ya levantada.
+     *
+     * Es `TODOS` menos el operador de call center, y existe por lo mismo que
+     * `LECTURA_RUFE`: al entrar un rol nuevo, `TODOS` dejó de significar «todo
+     * el que tiene sesión puede ver esto» y pasó a colar en las inspecciones a
+     * alguien cuyo trabajo es marcar un número de teléfono. Una ficha de
+     * inspección lleva el nombre, la cédula y la dirección de una familia.
+     *
+     * La prueba «el operador no lee el censo, ni el mapa, ni las inspecciones»
+     * es la que descubrió la fuga, y la que la volverá a descubrir.
+     */
+    public const LECTURA_INSPECCION = [
+        self::ADMINISTRADOR,
+        self::GESTOR,
+        self::INSPECTOR,
+        self::VISUALIZACION,
+    ];
+
+    /**
+     * Quién trabaja la campaña de llamadas sobre la base del RUFE.
+     *
+     * El operador NO está en `LECTURA_RUFE`: lo que ve es una lista de nombres
+     * y teléfonos para llamar, no las fichas del censo con sus evidencias, sus
+     * observaciones y las cédulas del resto del hogar.
+     */
+    public const CALL_CENTER = [self::ADMINISTRADOR, self::GESTOR, self::OPERADOR];
 
     /**
      * Capacidades por rol. El frontend las usa para mostrar u ocultar
@@ -85,6 +136,11 @@ final class Auth
             'inspeccion.levantar',
             'acerca.ver',
         ],
+        self::OPERADOR => [
+            // Solo su lista de llamadas. Ni el tablero, ni el censo, ni el mapa.
+            'callcenter.gestionar',
+            'acerca.ver',
+        ],
         self::VISUALIZACION => [
             'dashboard.ver',
             'datos.leer',
@@ -106,6 +162,12 @@ final class Auth
             'etiqueta'    => 'Insp. de vivienda',
             'descripcion' => 'Profesional que evalúa las viviendas afectadas: solo el formato de '
                 .'inspección y sus fichas. No accede al censo, al mapa ni a la aprobación.',
+        ],
+        self::OPERADOR => [
+            'etiqueta'    => 'Operador de call center',
+            'descripcion' => 'Llama a los hogares del RUFE para acompañarlos a diligenciar la '
+                .'preinscripción y registra el resultado. Ve nombre, teléfono y barrio; no accede '
+                .'al censo, al mapa ni a las inspecciones.',
         ],
         self::VISUALIZACION => [
             'etiqueta'    => 'Visualización',

@@ -29,6 +29,7 @@ import {
 	FilePlus2,
 	FileText,
 	HardHat,
+	PhoneCall,
 	ClipboardCheck,
 	Inbox,
 	Video
@@ -88,6 +89,8 @@ export const ROLES = {
 	GESTOR: 'GESTOR',
 	/** El profesional que evalúa las viviendas. Solo alcanza su formato. */
 	INSPECTOR: 'INSPECTOR',
+	/** Quien llama a los hogares del RUFE. Solo alcanza su lista de llamadas. */
+	OPERADOR: 'OPERADOR',
 	VISUALIZACION: 'VISUALIZACION'
 } as const;
 
@@ -101,13 +104,40 @@ export type Rol = (typeof ROLES)[keyof typeof ROLES];
  * `LECTURA_RUFE`. Es la misma distinción que hace `Auth` en el servidor, que es
  * quien manda.
  */
-export const TODOS: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.INSPECTOR, ROLES.VISUALIZACION];
+export const TODOS: Rol[] = [
+	ROLES.ADMINISTRADOR,
+	ROLES.GESTOR,
+	ROLES.INSPECTOR,
+	ROLES.OPERADOR,
+	ROLES.VISUALIZACION
+];
 /** Quienes pueden escribir datos del censo y decidir sobre las fichas. */
 export const ESCRITURA: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR];
 /** Quienes pueden consultar el censo y el mapa. */
 export const LECTURA_RUFE: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.VISUALIZACION];
 /** Quienes levantan y consultan inspecciones de vivienda. */
 export const INSPECCION: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.INSPECTOR];
+/**
+ * Quienes pueden CONSULTAR una inspección ya levantada.
+ *
+ * Es `TODOS` menos el operador de call center, y existe por lo mismo que
+ * `LECTURA_RUFE`: al entrar un rol nuevo, `TODOS` dejó de significar «todo el
+ * que tiene sesión puede ver esto» y pasó a colar en las inspecciones a alguien
+ * cuyo trabajo es marcar un número. Espeja `Auth::LECTURA_INSPECCION`.
+ */
+export const LECTURA_INSPECCION: Rol[] = [
+	ROLES.ADMINISTRADOR,
+	ROLES.GESTOR,
+	ROLES.INSPECTOR,
+	ROLES.VISUALIZACION
+];
+/**
+ * Quienes trabajan la campaña de llamadas sobre la base del RUFE.
+ *
+ * El operador NO está en `LECTURA_RUFE`: lo que ve es una lista de nombres y
+ * teléfonos para llamar, no las fichas del censo.
+ */
+export const CALL_CENTER: Rol[] = [ROLES.ADMINISTRADOR, ROLES.GESTOR, ROLES.OPERADOR];
 /** Solo administración. */
 export const SOLO_ADMIN: Rol[] = [ROLES.ADMINISTRADOR];
 
@@ -115,6 +145,7 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
 	ADMINISTRADOR: 'Administrador',
 	GESTOR: 'Gestor',
 	INSPECTOR: 'Insp. de vivienda',
+	OPERADOR: 'Operador de call center',
 	VISUALIZACION: 'Visualización'
 };
 
@@ -156,9 +187,9 @@ export const NAV_ITEMS: NavItem[] = [
 		type: 'group',
 		label: 'Registro',
 		icon: ClipboardPlus,
-		// El grupo se muestra a quien pueda ver alguno de sus hijos; el inspector
-		// solo verá la inspección y Pendientes.
-		roles: INSPECCION
+		// El grupo se muestra a quien pueda ver alguno de sus hijos: el inspector
+		// solo verá su formato, y el operador de call center solo su lista.
+		roles: [...new Set([...INSPECCION, ...CALL_CENTER])]
 	},
 	{
 		id: 'captura-rufe',
@@ -185,6 +216,19 @@ export const NAV_ITEMS: NavItem[] = [
 		roles: INSPECCION,
 		match: ['/riesgo/inspeccionar']
 	},
+	{
+		id: 'callcenter',
+		type: 'item',
+		parentId: 'grupo-registro',
+		label: 'Call center',
+		title: 'Call center — acompañamiento a la preinscripción',
+		href: '/riesgo/callcenter',
+		icon: PhoneCall,
+		// Es lo ÚNICO que ve el operador. Por eso el grupo «Registro» tiene que
+		// admitirlo también, o su única pantalla quedaría sin dónde colgarse.
+		roles: CALL_CENTER,
+		match: ['/riesgo/callcenter']
+	},
 	// «Reportes» es el espejo de «Registro»: los mismos dos formatos, con los
 	// mismos nombres, pero para consultar lo ya registrado en vez de levantarlo.
 	// Que la pareja se repita a un lado y al otro es la intención, no un descuido:
@@ -197,7 +241,7 @@ export const NAV_ITEMS: NavItem[] = [
 		type: 'group',
 		label: 'Reportes',
 		icon: ClipboardList,
-		roles: TODOS
+		roles: LECTURA_INSPECCION
 	},
 	{
 		id: 'reportes-rufe',
@@ -231,9 +275,11 @@ export const NAV_ITEMS: NavItem[] = [
 		title: 'Inspecciones de vivienda registradas',
 		href: '/riesgo/inspecciones',
 		icon: ClipboardCheck,
-		// Todos, incluido Visualización: es el rol que supervisa, y estas fichas
-		// sustentan una entrega de recursos públicos.
-		roles: TODOS,
+		// Incluido Visualización: es el rol que supervisa, y estas fichas
+		// sustentan una entrega de recursos públicos. NO el operador de call
+		// center: una inspección lleva el nombre, la cédula y la dirección de una
+		// familia, y su trabajo es marcar un teléfono.
+		roles: LECTURA_INSPECCION,
 		match: ['/riesgo/inspecciones', /^\/riesgo\/inspecciones\/[^/]+$/]
 	},
 

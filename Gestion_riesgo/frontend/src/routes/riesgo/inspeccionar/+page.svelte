@@ -83,7 +83,6 @@
 	import { borrarEvidenciasDe, leerEvidencias } from '$lib/rufe-form/almacen';
 	import ColaDeEnvio from '$lib/rufe-form/componentes/ColaDeEnvio.svelte';
 	import ListoSinSenal from '$lib/components/layout/ListoSinSenal.svelte';
-	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
 	import { aparato } from '$lib/aparato';
 
 	let catalogos = $state<Catalogos | null>(null);
@@ -771,14 +770,6 @@
 
 			<ColaDeEnvio {envio} formato="INSPECCION" nombre="inspección" mostrarVacio />
 
-			<!--
-				El momento en que de verdad hace falta: el profesional acaba de cerrar
-				una casa y el vecino se acerca a preguntar por la suya. Sin esto, la
-				respuesta es «vaya a la Alcaldía» o dictarle una dirección web de
-				memoria, de pie y en la calle.
-			-->
-			<CompartirPreinscripcion titulo="¿Otro hogar necesita registrarse?" />
-
 			<div class="cierre__acciones">
 				<button type="button" class="boton boton--principal" onclick={() => empezarUnaNueva()}>
 					Inspeccionar otra vivienda
@@ -1116,20 +1107,6 @@
 						error={errores.propietario_telefono}
 						alCambiar={alCambiar}
 					/>
-
-					<!--
-						Aquí y no en otro sitio: es el único punto del formato donde ya
-						está escrito el celular de una persona concreta. Puesto arriba
-						pediría el número dos veces; puesto al final, el profesional ya
-						cerró la visita.
-					-->
-					{#if datos.propietario_telefono.trim() !== ''}
-						<CompartirPreinscripcion
-							nombre={datos.propietario_nombres}
-							telefono={datos.propietario_telefono}
-							titulo="Enviarle el enlace de registro"
-						/>
-					{/if}
 					<CampoTexto
 						id="propietario_direccion"
 						etiqueta="Dirección"

@@ -6,6 +6,11 @@ import type { DetalleInspeccion } from '$lib/inspeccion-form/detalle';
 import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
 import type {
+	GestionLlamada,
+	HogarParaLlamar,
+	ResumenCallCenter
+} from '$lib/callcenter/tipos';
+import type {
 	Catalogos,
 	DetalleCompleto,
 	EstadoReporte,
@@ -167,6 +172,41 @@ export const rufeApi = {
  * subida es la misma y el servidor decide a qué expediente adopta la carga
  * según por dónde llegue el envío.
  */
+/**
+ * Call center: la campaña que lleva a la gente del censo hasta la
+ * preinscripción.
+ *
+ * Cuelga de `/callcenter` y no de `/rufe` a propósito: es lo único que alcanza
+ * el rol OPERADOR, y lo que devuelve es una lista para llamar —nombre, teléfono
+ * y barrio—, no las fichas del censo.
+ */
+export const callCenterApi = {
+	resumen: () => api.get<{ resumen: ResumenCallCenter }>('/callcenter/resumen'),
+
+	hogares: (filtros: Record<string, string | number> = {}) => {
+		const q = new URLSearchParams(
+			Object.entries(filtros)
+				.filter(([, v]) => v !== '' && v !== null && v !== undefined)
+				.map(([k, v]) => [k, String(v)])
+		).toString();
+
+		return api.get<{
+			hogares: HogarParaLlamar[];
+			paginacion: { pagina: number; por_pagina: number; total: number; paginas: number };
+			resultados: Record<string, string>;
+		}>(`/callcenter/hogares${q ? `?${q}` : ''}`);
+	},
+
+	historial: (id: number) =>
+		api.get<{ gestiones: GestionLlamada[] }>(`/callcenter/hogares/${id}/gestiones`),
+
+	registrar: (id: number, cuerpo: Record<string, unknown>) =>
+		api.post<{ gestion: { id: number; resultado: string } }>(
+			`/callcenter/hogares/${id}/gestiones`,
+			cuerpo
+		)
+};
+
 export const inspeccionApi = {
 	catalogos: () => api.get<CatalogosInspeccion>('/inspeccion/catalogos'),
 	enviar: (cuerpo: Record<string, unknown>) =>

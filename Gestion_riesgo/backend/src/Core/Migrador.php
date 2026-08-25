@@ -42,6 +42,9 @@ final class Migrador
         'preinscripcion_02_video.sql',
         // Zona urbana/rural y las señales de daño que marca el ciudadano.
         'preinscripcion_03_pasos.sql',
+        // El rol de call center y el registro de llamadas. Va al final: apunta
+        // a `rufe_reportes` y a `usuarios`, que ya existen mucho antes.
+        'callcenter_01.sql',
     ];
 
     /**

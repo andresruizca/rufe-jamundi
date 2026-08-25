@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 use App\Controllers\AcercaController;
 use App\Controllers\AuthController;
+use App\Controllers\CallCenterController;
 use App\Controllers\CategoriasVideoController;
 use App\Controllers\InspeccionCapturaController;
 use App\Controllers\InspeccionController;
@@ -88,6 +89,7 @@ $router = new Router;
 
 $auth = new AuthController;
 $usuarios = new UsuariosController;
+$callCenter = new CallCenterController;
 $acerca = new AcercaController;
 $rufeCaptura = new RufeCapturaController;
 $rufe = new RufeController;
@@ -193,9 +195,9 @@ $router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::INSPECC
 // son las fichas que sustentan una entrega de recursos públicos y quitarle la
 // consulta al rol que existe para supervisar sería justo lo contrario de lo que
 // se busca.
-$router->get('/inspeccion/fichas', [$inspeccion, 'listar'], Auth::TODOS);
-$router->get('/inspeccion/fichas/{id}', [$inspeccion, 'ver'], Auth::TODOS);
-$router->get('/inspeccion/fichas/{id}/fotos/{foto}', [$inspeccion, 'descargarFoto'], Auth::TODOS);
+$router->get('/inspeccion/fichas', [$inspeccion, 'listar'], Auth::LECTURA_INSPECCION);
+$router->get('/inspeccion/fichas/{id}', [$inspeccion, 'ver'], Auth::LECTURA_INSPECCION);
+$router->get('/inspeccion/fichas/{id}/fotos/{foto}', [$inspeccion, 'descargarFoto'], Auth::LECTURA_INSPECCION);
 // Decidir NO: quien inspecciona no puede aprobar su propio trabajo. Es la misma
 // razón por la que la aprobación salió del formulario.
 $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], Auth::ESCRITURA);
@@ -222,6 +224,14 @@ $router->put('/admin/categorias-video/orden', [$categoriasVideo, 'reordenar'], $
 $router->put('/admin/categorias-video/{id}', [$categoriasVideo, 'actualizar'], $soloAdmin);
 $router->put('/admin/categorias-video/{id}/estado', [$categoriasVideo, 'cambiarEstado'], $soloAdmin);
 $router->delete('/admin/categorias-video/{id}', [$categoriasVideo, 'eliminar'], $soloAdmin);
+
+// Call center: la campaña que lleva a la gente del censo hasta la
+// preinscripción. Es lo ÚNICO a lo que llega el rol OPERADOR, y por eso no
+// cuelga de `/rufe/`: quien pueda leer esto no puede leer el censo.
+$router->get('/callcenter/resumen', [$callCenter, 'resumen'], Auth::CALL_CENTER);
+$router->get('/callcenter/hogares', [$callCenter, 'listar'], Auth::CALL_CENTER);
+$router->get('/callcenter/hogares/{id}/gestiones', [$callCenter, 'historial'], Auth::CALL_CENTER);
+$router->post('/callcenter/hogares/{id}/gestiones', [$callCenter, 'registrar'], Auth::CALL_CENTER);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
