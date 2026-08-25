@@ -42,6 +42,15 @@ use Throwable;
 final class PreinscripcionController
 {
     /** Solicitudes por IP y hora. Una familia manda una; un robot, miles. */
+    /**
+     * Cuántas se pueden borrar de una vez.
+     *
+     * No es una cifra caprichosa: cada borrado toca disco. Sin tope, un lote
+     * grande borra archivos hasta que PHP agota su tiempo y la respuesta se
+     * pierde a mitad — y quien está delante no sabe qué se borró.
+     */
+    private const MAX_BORRADO_LOTE = 50;
+
     private const MAX_ENVIOS_HORA = 5;
 
     /** Tope amplio de peticiones, incluidos los reintentos que no crean nada. */
@@ -768,6 +777,133 @@ final class PreinscripcionController
             ]);
         }
 
+        $borrados = $this->borrarFicha($req, $actor, $ficha, $motivo);
+
+        Response::ok([
+            'mensaje' => 'La solicitud '.$ficha['radicado'].' se eliminó.',
+            'archivos_borrados' => $borrados,
+        ]);
+    }
+
+    /**
+     * Borra varias de una vez.
+     *
+     * Nace de una necesidad real —una campaña de prueba, un evento duplicado—,
+     * pero es la operación más destructiva del sistema: se lleva fotos de
+     * cédulas y videos de viviendas que nadie va a volver a tomar. Por eso
+     * repite TODAS las reglas del borrado de una y añade dos suyas.
+     *
+     *  • Mismo rol, mismo motivo obligatorio, misma constancia por solicitud.
+     *  • Las CONVERTIDAS se SALTAN, no rompen el lote. Rechazar las treinta
+     *    porque una ya se inspeccionó obligaría a buscarla a mano; se borran las
+     *    otras y se dice cuáles quedaron y por qué.
+     *  • Un tope por petición. Sin él, un lote de mil borra archivos hasta que
+     *    PHP se queda sin tiempo y la respuesta se pierde: quien está delante no
+     *    sabría qué se borró y qué no. Con el tope, la respuesta siempre llega.
+     */
+    public function eliminarLote(Request $req): void
+    {
+        $actor = Auth::exigirUsuario($req);
+
+        $ids = $req->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        // Enteros, únicos y positivos. Lo que llegue raro no se interpreta.
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($v): int => (int) $v, $ids),
+            static fn (int $v): bool => $v > 0
+        )));
+
+        $errores = [];
+
+        if ($ids === []) {
+            $errores['ids'] = 'Seleccione al menos una solicitud.';
+        } elseif (count($ids) > self::MAX_BORRADO_LOTE) {
+            $errores['ids'] = 'Máximo '.self::MAX_BORRADO_LOTE.' solicitudes por vez.';
+        }
+
+        $motivo = trim($req->texto('motivo'));
+        if (mb_strlen($motivo) < 5) {
+            $errores['motivo'] = 'Escriba por qué se borran. Queda en la auditoría.';
+        }
+
+        if ($errores !== []) {
+            throw HttpError::validacion($errores);
+        }
+
+        $marcas = implode(',', array_fill(0, count($ids), '?'));
+        $fichas = Db::all(
+            'SELECT id, radicado, nombre_completo, estado
+               FROM preinscripciones WHERE id IN ('.$marcas.')',
+            $ids
+        );
+
+        $porId = [];
+        foreach ($fichas as $f) {
+            $porId[(int) $f['id']] = $f;
+        }
+
+        $eliminadas = [];
+        $conservadas = [];
+        $archivos = 0;
+
+        // Se recorre el orden que mandó quien pidió el borrado, no el de la
+        // base: así el informe se lee en el mismo orden en que se seleccionó.
+        foreach ($ids as $id) {
+            $ficha = $porId[$id] ?? null;
+
+            if ($ficha === null) {
+                $conservadas[] = [
+                    'id'     => $id,
+                    'motivo' => 'Ya no existe. Puede que otra persona la borrara antes.',
+                ];
+
+                continue;
+            }
+
+            if ($ficha['estado'] === 'CONVERTIDA') {
+                $conservadas[] = [
+                    'id'       => $id,
+                    'radicado' => $ficha['radicado'],
+                    'motivo'   => 'Ya se convirtió en inspección: es lo único que explica esa visita.',
+                ];
+
+                continue;
+            }
+
+            $archivos += $this->borrarFicha($req, $actor, $ficha, $motivo);
+            $eliminadas[] = $ficha['radicado'];
+        }
+
+        Response::ok([
+            'eliminadas'        => $eliminadas,
+            'conservadas'       => $conservadas,
+            'archivos_borrados' => $archivos,
+            'mensaje'           => count($eliminadas) === 1
+                ? 'Se eliminó 1 solicitud.'
+                : 'Se eliminaron '.count($eliminadas).' solicitudes.',
+        ]);
+    }
+
+    /**
+     * Borra UNA solicitud: sus filas, sus archivos y su constancia.
+     *
+     * Está aparte para que el borrado en lote use exactamente esto y no una
+     * copia. Dos borrados con reglas parecidas acaban divergiendo, y el que se
+     * quede atrás será el que deje la foto de una cédula en el disco.
+     *
+     * Quien llama ya comprobó el rol, el estado y el motivo.
+     *
+     * @param  array<string,mixed>  $ficha
+     * @param  array<string,mixed>  $actor
+     * @return int archivos borrados del disco
+     */
+    private function borrarFicha(Request $req, array $actor, array $ficha, string $motivo): int
+    {
+        $id = (int) $ficha['id'];
+
         // Las rutas se recogen ANTES: en cuanto se borre la fila, la cascada se
         // lleva las de los archivos y ya no habría forma de saber qué borrar.
         $rutas = array_merge(
@@ -795,6 +931,9 @@ final class PreinscripcionController
             }
         }
 
+        // Una anotación POR SOLICITUD, también en el lote. Una sola línea que
+        // dijera «se borraron 30» no dejaría constancia de CUÁLES, y la
+        // constancia de que existió es lo único que queda de esa persona.
         Auditoria::registrar(
             $req,
             'preinscripcion.eliminada',
@@ -808,10 +947,7 @@ final class PreinscripcionController
             )
         );
 
-        Response::ok([
-            'mensaje' => 'La solicitud '.$ficha['radicado'].' se eliminó.',
-            'archivos_borrados' => count($rutas),
-        ]);
+        return count($rutas);
     }
 
     public function cambiarEstado(Request $req): void

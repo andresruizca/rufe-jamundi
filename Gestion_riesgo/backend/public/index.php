@@ -213,6 +213,11 @@ $router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEst
 // Borrar la solicitud de un ciudadano es irreversible y destruye sus fotos y su
 // video. Solo Administrador: el Gestor puede decidirla y descartarla, que es lo
 // que necesita para trabajar, pero no hacerla desaparecer.
+// El borrado en lote va ANTES que el de una: el router se queda con la primera
+// ruta que casa, y `{id}` se tragaría «eliminar-lote» como si fuera un número.
+// Es POST y no DELETE porque lleva cuerpo —los identificadores y el motivo—, y
+// un DELETE con cuerpo lo descartan algunos intermediarios sin avisar.
+$router->post('/preinscripcion/fichas/eliminar-lote', [$preinscripcion, 'eliminarLote'], $soloAdmin);
 $router->delete('/preinscripcion/fichas/{id}', [$preinscripcion, 'eliminar'], $soloAdmin);
 
 // Catálogo de categorías de video, que gestiona el administrador. Qué hay que

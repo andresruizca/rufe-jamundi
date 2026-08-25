@@ -2127,8 +2127,11 @@ prueba('las rutas de archivos se leen ANTES de borrar la fila', function () use 
     // archivos borrar: la foto de la cédula de una persona se quedaría en el
     // servidor para siempre, sin ninguna fila que la nombrara y sin nadie que
     // supiera que está ahí.
+    // Se mira `borrarFicha()`, que es donde vive el borrado desde que lo
+    // comparten el de una y el de lote. Compartirlo es lo que impide que uno de
+    // los dos se quede atrás y deje archivos en el disco.
     $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
-    $metodo = substr($fuente, strpos($fuente, 'public function eliminar(Request'));
+    $metodo = substr($fuente, strpos($fuente, 'private function borrarFicha('));
     $metodo = substr($metodo, 0, strpos($metodo, 'public function cambiarEstado('));
 
     $lectura = strpos($metodo, 'ruta_relativa');
@@ -2144,14 +2147,83 @@ prueba('una solicitud ya convertida en inspección no se puede borrar', function
     // dejaría una inspección —de la que depende una entrega de materiales— sin
     // nada que explique por qué se hizo esa visita.
     $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
-    $metodo = substr($fuente, strpos($fuente, 'public function eliminar(Request'));
-    $metodo = substr($metodo, 0, strpos($metodo, 'public function cambiarEstado('));
+
+    $unaSola = substr($fuente, strpos($fuente, 'public function eliminar(Request'));
+    $unaSola = substr($unaSola, 0, strpos($unaSola, 'public function eliminarLote('));
 
     afirmar(
-        str_contains($metodo, "'CONVERTIDA'"),
+        str_contains($unaSola, "'CONVERTIDA'"),
         'eliminar() debe negarse con una solicitud ya convertida'
     );
+
+    $lote = substr($fuente, strpos($fuente, 'public function eliminarLote('));
+    $lote = substr($lote, 0, strpos($lote, 'private function borrarFicha('));
+
+    afirmar(
+        str_contains($lote, "'CONVERTIDA'"),
+        'y el borrado en lote también: la regla no puede saltarse por la puerta de al lado'
+    );
 });
+
+grupo('Borrar varias solicitudes de una vez');
+
+prueba('el lote es del administrador, igual que el borrado de una', function () use ($raiz): void {
+    // Sería absurdo blindar el borrado de una y dejar abierto el de treinta.
+    $roles = rutasConSusRoles($raiz)['POST /preinscripcion/fichas/eliminar-lote'] ?? null;
+
+    afirmar($roles !== null, 'la ruta del lote debe existir y declarar sus roles');
+    afirmarIgual([App\Core\Auth::ADMINISTRADOR], $roles);
+});
+
+prueba('la ruta del lote se registra ANTES que la que lleva {id}', function () use ($raiz): void {
+    // El router se queda con la primera que casa. Registrada después, `{id}` se
+    // tragaría «eliminar-lote» como si fuera un número de solicitud.
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+
+    $lote = strpos($php, "'/preinscripcion/fichas/eliminar-lote'");
+    $una = strpos($php, "'/preinscripcion/fichas/{id}', [\$preinscripcion, 'eliminar']");
+
+    afirmar($lote !== false && $una !== false, 'faltan las rutas de borrado');
+    afirmar($lote < $una, 'la literal va antes que la del comodín');
+});
+
+prueba('el lote exige motivo, tiene tope y anota UNA constancia por solicitud', function () use ($raiz): void {
+    $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $lote = substr($fuente, strpos($fuente, 'public function eliminarLote('));
+    $lote = substr($lote, 0, strpos($lote, 'private function borrarFicha('));
+
+    afirmar(str_contains($lote, "\$errores['motivo']"), 'el motivo es obligatorio también en lote');
+    afirmar(str_contains($lote, 'MAX_BORRADO_LOTE'), 'debe haber un tope por petición');
+
+    // La constancia va dentro de `borrarFicha()`, que se llama una vez por
+    // solicitud. Una sola línea diciendo «se borraron 30» no dejaría constancia
+    // de CUÁLES, y esa constancia es lo único que queda de esas personas.
+    afirmar(
+        substr_count($lote, 'Auditoria::registrar') === 0
+            && str_contains($lote, '$this->borrarFicha('),
+        'el lote no audita por su cuenta: delega en borrarFicha(), que anota una por una'
+    );
+});
+
+prueba('los dos borrados comparten el mismo código, no una copia', function () use ($raiz): void {
+    // Dos borrados con reglas parecidas acaban divergiendo, y el que se quede
+    // atrás será el que deje la foto de una cédula en el disco.
+    $fuente = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+
+    afirmarIgual(
+        1,
+        substr_count($fuente, 'DELETE FROM preinscripciones WHERE id = :i'),
+        'el DELETE debe estar escrito UNA sola vez'
+    );
+
+    afirmarIgual(
+        2,
+        substr_count($fuente, '$this->borrarFicha('),
+        'y los dos caminos —una y lote— deben pasar por él'
+    );
+});
+
+grupo('Pre-inscripción ciudadana');
 
 prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function () use ($raiz): void {
     // La lista va escrita a mano a propósito. Derivarla del código haría que la

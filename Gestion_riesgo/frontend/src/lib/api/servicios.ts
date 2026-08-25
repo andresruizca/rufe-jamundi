@@ -397,6 +397,25 @@ export const preinscripcionApi = {
 		),
 
 	/**
+	 * Lo mismo, con varias a la vez. Irreversible. Solo Administrador.
+	 *
+	 * Va por POST y no por DELETE porque lleva cuerpo —los identificadores y el
+	 * motivo— y hay intermediarios que descartan el cuerpo de un DELETE sin
+	 * avisar.
+	 *
+	 * La respuesta separa lo borrado de lo conservado: una solicitud ya
+	 * convertida en inspección no se borra, y el lote sigue con las demás en vez
+	 * de fallar entero.
+	 */
+	eliminarLote: (ids: number[], motivo: string) =>
+		api.post<{
+			eliminadas: string[];
+			conservadas: { id: number; radicado?: string; motivo: string }[];
+			archivos_borrados: number;
+			mensaje: string;
+		}>('/preinscripcion/fichas/eliminar-lote', { ids, motivo }),
+
+	/**
 	 * Un video de la solicitud, para verlo en la bandeja.
 	 *
 	 * Igual que las fotos: vive fuera del docroot y solo sale con el token en la

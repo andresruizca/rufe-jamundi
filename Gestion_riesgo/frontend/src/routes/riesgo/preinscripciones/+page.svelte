@@ -107,6 +107,116 @@
 	const puedeBorrar = $derived(!!sesion.rol && SOLO_ADMIN.includes(sesion.rol));
 
 	let aBorrar = $state<Fila | null>(null);
+
+	// ── Selección para el borrado en lote ───────────────────────────────────
+	//
+	// Se guardan identificadores y no filas: quien selecciona diez, cambia de
+	// página y vuelve, espera encontrarlas marcadas. Guardando las filas se
+	// perdería la selección en cada recarga.
+	//
+	// Un `Set` reasignado y no mutado: Svelte 5 no ve las mutaciones de un Set.
+	let seleccion = $state<Set<number>>(new Set());
+	let borrandoLote = $state(false);
+	let pidiendoLote = $state(false);
+	let motivoLote = $state('');
+	let errorLote = $state('');
+	let campoMotivoLote = $state<HTMLInputElement | null>(null);
+	let informeLote = $state<{ id: number; radicado?: string; motivo: string }[]>([]);
+
+	/**
+	 * Lo seleccionado que de verdad se puede borrar.
+	 *
+	 * Las convertidas ni se dejan marcar, pero una puede convertirse mientras
+	 * alguien tiene la lista abierta. Se filtra aquí también.
+	 */
+	const seleccionadas = $derived(
+		filas.filter((f) => seleccion.has(f.id) && f.estado !== 'CONVERTIDA')
+	);
+
+	const archivosSeleccionados = $derived(
+		seleccionadas.reduce((n, f) => n + cuantosArchivos(f), 0)
+	);
+
+	/** Las de esta página que se pueden marcar. Las convertidas no cuentan. */
+	const marcables = $derived(filas.filter((f) => f.estado !== 'CONVERTIDA'));
+
+	const todasMarcadas = $derived(
+		marcables.length > 0 && marcables.every((f) => seleccion.has(f.id))
+	);
+
+	function alternar(id: number) {
+		const copia = new Set(seleccion);
+		copia.has(id) ? copia.delete(id) : copia.add(id);
+		seleccion = copia;
+	}
+
+	function alternarPagina() {
+		const copia = new Set(seleccion);
+
+		// Marca todo lo marcable de ESTA página, o lo desmarca. Nunca toca lo de
+		// otras páginas: desmarcar aquí no puede soltar en silencio lo que se
+		// eligió en la anterior.
+		for (const f of marcables) {
+			todasMarcadas ? copia.delete(f.id) : copia.add(f.id);
+		}
+
+		seleccion = copia;
+	}
+
+	async function pedirBorradoLote() {
+		if (seleccionadas.length === 0) return;
+
+		pidiendoLote = true;
+		motivoLote = '';
+		errorLote = '';
+		informeLote = [];
+
+		await tick();
+		campoMotivoLote?.focus();
+	}
+
+	function cerrarBorradoLote() {
+		if (borrandoLote) return;
+		pidiendoLote = false;
+		motivoLote = '';
+		errorLote = '';
+	}
+
+	async function confirmarBorradoLote() {
+		if (borrandoLote || motivoLote.trim().length < 5) return;
+
+		const ids = seleccionadas.map((f) => f.id);
+		if (ids.length === 0) return;
+
+		borrandoLote = true;
+		errorLote = '';
+
+		try {
+			const r = await preinscripcionApi.eliminarLote(ids, motivoLote.trim());
+
+			// Se quitan de la tabla en vez de recargar: recargar devolvería a la
+			// primera página y perdería el filtro que tuviera puesto.
+			const fuera = new Set(
+				filas.filter((f) => r.eliminadas.includes(f.radicado)).map((f) => f.id)
+			);
+
+			filas = filas.filter((f) => !fuera.has(f.id));
+			total = Math.max(0, total - fuera.size);
+			seleccion = new Set([...seleccion].filter((id) => !fuera.has(id)));
+
+			avisoBorrado = `${r.mensaje} Se borraron ${r.archivos_borrados} archivo(s).`;
+
+			// Lo que NO se pudo borrar se enseña hasta que la persona lo lea. No
+			// puede irse con un «listo» si quedaron tres sin tocar.
+			informeLote = r.conservadas;
+			pidiendoLote = informeLote.length > 0;
+			motivoLote = '';
+		} catch (e) {
+			errorLote = e instanceof ApiError ? e.message : 'No se pudieron eliminar las solicitudes.';
+		} finally {
+			borrandoLote = false;
+		}
+	}
 	let motivoBorrado = $state('');
 	let borrando = $state(false);
 	let errorBorrado = $state('');
@@ -204,10 +314,54 @@
 			No hay solicitudes en este estado.
 		</p>
 	{:else}
+		<!--
+			La barra solo aparece con algo marcado. Un botón de «eliminar
+			seleccionadas» permanente y desactivado invita a probar qué hace; así
+			solo existe cuando ya hay una decisión detrás.
+		-->
+		{#if puedeBorrar && seleccionadas.length > 0}
+			<div class="barra-seleccion" role="status">
+				<span class="barra-seleccion__cuenta">
+					{seleccionadas.length === 1
+						? '1 solicitud marcada'
+						: `${seleccionadas.length} solicitudes marcadas`}
+					{#if archivosSeleccionados > 0}
+						· {archivosSeleccionados}
+						{archivosSeleccionados === 1 ? 'archivo' : 'archivos'}
+					{/if}
+				</span>
+
+				<button type="button" class="boton boton--suave" onclick={() => (seleccion = new Set())}>
+					Quitar la marca
+				</button>
+
+				<button type="button" class="boton boton--peligro" onclick={pedirBorradoLote}>
+					<Trash2 size={15} aria-hidden="true" />
+					Eliminar las marcadas
+				</button>
+			</div>
+		{/if}
+
 		<div class="tabla-envoltura">
 			<table class="tabla">
 				<thead>
 					<tr>
+						{#if puedeBorrar}
+							<th scope="col" class="col-marca">
+								<!--
+									Marca todo lo de ESTA página. Nunca toca lo de otras: al
+									desmarcar aquí no puede soltarse en silencio lo que se
+									eligió antes.
+								-->
+								<input
+									type="checkbox"
+									checked={todasMarcadas}
+									disabled={marcables.length === 0}
+									onchange={alternarPagina}
+									aria-label="Marcar las solicitudes de esta página"
+								/>
+							</th>
+						{/if}
 						<th scope="col">Radicado</th>
 						<th scope="col">Solicitante</th>
 						<th scope="col">Vivienda</th>
@@ -222,7 +376,26 @@
 				</thead>
 				<tbody>
 					{#each filas as f (f.id)}
-						<tr>
+						<tr class:fila--marcada={seleccion.has(f.id)}>
+							{#if puedeBorrar}
+								<td class="col-marca">
+									<!--
+										Una convertida no se puede borrar, así que tampoco se
+										deja marcar: dejar marcarla y rechazarla después haría
+										contar mal lo que se está a punto de perder.
+									-->
+									<input
+										type="checkbox"
+										checked={seleccion.has(f.id)}
+										disabled={f.estado === 'CONVERTIDA'}
+										onchange={() => alternar(f.id)}
+										aria-label="Marcar {f.radicado} de {f.nombre_completo}"
+										title={f.estado === 'CONVERTIDA'
+											? 'Ya se convirtió en inspección: no se puede borrar'
+											: undefined}
+									/>
+								</td>
+							{/if}
 							<td class="radicado">
 								<a href="/riesgo/preinscripciones/{f.id}">{f.radicado}</a>
 							</td>
@@ -437,7 +610,206 @@
 	</div>
 {/if}
 
+
+{#if pidiendoLote}
+	<div
+		class="velo"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="titulo-borrado-lote"
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') cerrarBorradoLote();
+		}}
+	>
+		<div class="dialogo">
+			{#if informeLote.length > 0}
+				<!--
+					Ya se borró lo que se podía. Esto NO es un «listo»: enseña lo que
+					quedó sin tocar y por qué, y no se cierra solo. Irse creyendo que
+					se borraron treinta cuando quedaron tres es peor que no borrar.
+				-->
+				<h2 id="titulo-borrado-lote" class="dialogo__titulo">Quedaron sin eliminar</h2>
+
+				<ul class="conservadas">
+					{#each informeLote as c (c.id)}
+						<li>
+							<strong>{c.radicado ?? `Solicitud #${c.id}`}</strong>
+							<span>{c.motivo}</span>
+						</li>
+					{/each}
+				</ul>
+
+				<div class="dialogo__acciones">
+					<button type="button" class="boton boton--principal" onclick={cerrarBorradoLote}>
+						Entendido
+					</button>
+				</div>
+			{:else}
+				<h2 id="titulo-borrado-lote" class="dialogo__titulo">
+					¿Eliminar {seleccionadas.length}
+					{seleccionadas.length === 1 ? 'solicitud' : 'solicitudes'}?
+				</h2>
+
+				<p class="dialogo__texto">
+					Se borran los datos de {seleccionadas.length === 1 ? 'esta familia' : 'estas familias'}
+					{#if archivosSeleccionados > 0}
+						y <strong
+							>{archivosSeleccionados}
+							{archivosSeleccionados === 1 ? 'archivo' : 'archivos'}</strong
+						> —fotos de cédula y videos de sus viviendas—
+					{/if}
+					del servidor. <strong>No se puede deshacer</strong>, y esas fotos no se vuelven a
+					tomar.
+				</p>
+
+				<!--
+					Se nombran una por una. «12 solicitudes» es un número; con los
+					nombres delante, quien va a pulsar ve a quién está borrando.
+				-->
+				<ul class="aborrar">
+					{#each seleccionadas.slice(0, 12) as f (f.id)}
+						<li><strong>{f.radicado}</strong> · {f.nombre_completo}</li>
+					{/each}
+					{#if seleccionadas.length > 12}
+						<li class="aborrar__resto">y {seleccionadas.length - 12} más</li>
+					{/if}
+				</ul>
+
+				<div class="campo">
+					<label class="campo__etiqueta" for="motivo-borrado-lote">¿Por qué se borran? *</label>
+					<input
+						id="motivo-borrado-lote"
+						class="campo__control"
+						bind:this={campoMotivoLote}
+						bind:value={motivoLote}
+						maxlength="200"
+						placeholder="Ej.: solicitudes de prueba del simulacro"
+						disabled={borrandoLote}
+					/>
+					<span class="campo__ayuda">
+						Queda en la auditoría junto al radicado y el nombre de cada una. Es lo único que va a
+						quedar de estas solicitudes.
+					</span>
+				</div>
+
+				{#if errorLote}
+					<p class="aviso aviso--error" role="alert">{errorLote}</p>
+				{/if}
+
+				<div class="dialogo__acciones">
+					<button
+						type="button"
+						class="boton boton--suave"
+						onclick={cerrarBorradoLote}
+						disabled={borrandoLote}
+					>
+						<X size={15} aria-hidden="true" />
+						Cancelar
+					</button>
+					<button
+						type="button"
+						class="boton boton--peligro"
+						onclick={confirmarBorradoLote}
+						disabled={borrandoLote || motivoLote.trim().length < 5}
+					>
+						{#if borrandoLote}
+							<LoaderCircle size={15} class="girando" aria-hidden="true" />
+							Eliminando…
+						{:else}
+							<Trash2 size={15} aria-hidden="true" />
+							Sí, eliminar {seleccionadas.length}
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
+
 <style>
+	/* ── Selección para el borrado en lote ───────────────────────────────── */
+	.col-marca {
+		width: 2.4rem;
+		text-align: center;
+	}
+
+	.col-marca input {
+		width: 1.05rem;
+		height: 1.05rem;
+		accent-color: var(--color-primary);
+		cursor: pointer;
+	}
+
+	.col-marca input:disabled {
+		cursor: not-allowed;
+		opacity: 0.35;
+	}
+
+	.fila--marcada {
+		background: var(--color-info-bg);
+	}
+
+	/* Pegada arriba: con veinte filas marcadas y la tabla desplazada, el botón
+	   quedaría fuera de la vista justo cuando hace falta. */
+	.barra-seleccion {
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.7rem;
+		padding: 0.6rem 0.8rem;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 10px;
+		background: var(--color-surface);
+		box-shadow: var(--shadow-sm);
+	}
+
+	.barra-seleccion__cuenta {
+		flex: 1 1 12rem;
+		font-size: 0.86rem;
+		font-weight: 600;
+	}
+
+	/* La lista de a quién se está borrando. Con tope de alto: doce nombres no
+	   pueden empujar el botón de cancelar fuera de la pantalla. */
+	.aborrar,
+	.conservadas {
+		list-style: none;
+		margin: 0.7rem 0;
+		padding: 0.6rem 0.7rem;
+		max-height: 11rem;
+		overflow-y: auto;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		background: var(--color-surface-alt);
+		font-size: 0.81rem;
+		line-height: 1.55;
+	}
+
+	.aborrar__resto {
+		color: var(--color-muted);
+		font-style: italic;
+	}
+
+	.conservadas li {
+		display: grid;
+		gap: 0.1rem;
+		padding: 0.35rem 0;
+	}
+
+	.conservadas li + li {
+		border-top: 1px solid var(--color-border);
+	}
+
+	.conservadas span {
+		color: var(--color-muted);
+	}
+
+
 	.filtros {
 		display: flex;
 		flex-wrap: wrap;
