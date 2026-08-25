@@ -5,6 +5,8 @@
 // nada que exija interpretar cadenas — las señales van en su tabla y los
 // adjuntos en la suya.
 
+import { Directory, Filesystem } from '@capacitor/filesystem';
+
 import { abrir } from './base';
 import type { EstadoRegistro } from './sincronizacion';
 
@@ -60,13 +62,33 @@ export type RegistroGuardado = {
  */
 export async function empezar(): Promise<string> {
 	const db = await abrir();
+
+	// Primero se barren los abandonados, con sus archivos. Sin esto, cada
+	// formulario que no se termina deja una fila y sus fotos ocupando el
+	// teléfono para siempre.
+	await borrarArchivos(await purgarBorradores());
+
+	// ⚠ SE REUTILIZA EL BORRADOR ABIERTO, no se crea uno nuevo.
+	//
+	// Esto corre en `onMount`, o sea CADA VEZ que se abre la aplicación. Creando
+	// uno nuevo siempre, veinte aperturas dejaban veinte filas —y las fotos de
+	// cada intento abandonado colgando de una fila distinta, invisibles y sin
+	// borrar hasta que la purga las alcanzara un día después.
+	//
+	// Reutilizar tiene además una consecuencia buena: quien tomó una foto, cerró
+	// la aplicación y volvió, se la encuentra donde la dejó en vez de haberla
+	// perdido en un borrador que nadie volverá a abrir.
+	//
+	// Solo puede haber UNO: la aplicación tiene un formulario, no varios.
+	const abierto = await db.query(
+		"SELECT id FROM registros WHERE estado = 'BORRADOR' ORDER BY creado_en DESC LIMIT 1"
+	);
+
+	const previo = (abierto.values ?? [])[0] as { id: string } | undefined;
+	if (previo) return previo.id;
+
 	const id = crypto.randomUUID();
 	const ahora = new Date().toISOString();
-
-	// De paso se barren los borradores que alguien empezó y abandonó. Sin esto,
-	// cada formulario que no se termina deja una fila y sus fotos ocupando el
-	// teléfono para siempre.
-	await purgarBorradores();
 
 	await db.run(
 		`INSERT INTO registros
@@ -89,17 +111,48 @@ export async function empezar(): Promise<string> {
 export async function purgarBorradores(): Promise<string[]> {
 	const db = await abrir();
 
+	// ⚠ `datetime(creado_en)` y no `creado_en` a secas.
+	//
+	// Las dos puntas de la comparación estaban en formatos distintos:
+	// TypeScript escribe `2026-08-24T05:00:00.000Z` y `datetime('now')` devuelve
+	// `2026-08-24 05:00:00`. Comparadas como texto, la «T» (0x54) es mayor que el
+	// espacio (0x20), así que un borrador del mismo día NUNCA salía menor que el
+	// corte y sobrevivía hasta el día siguiente.
+	//
+	// `datetime()` normaliza las dos formas —entiende la T, la Z y los
+	// milisegundos—, y entonces el margen de un día es de verdad un día.
+	const corte = "datetime(r.creado_en) < datetime('now', '-1 day')";
+
 	const rutas = await db.query(
 		`SELECT a.ruta FROM adjuntos a
 		   JOIN registros r ON r.id = a.registro_id
-		  WHERE r.estado = 'BORRADOR' AND r.creado_en < datetime('now', '-1 day')`
+		  WHERE r.estado = 'BORRADOR' AND ${corte}`
 	);
 
 	await db.run(
-		"DELETE FROM registros WHERE estado = 'BORRADOR' AND creado_en < datetime('now', '-1 day')"
+		`DELETE FROM registros
+		  WHERE estado = 'BORRADOR' AND datetime(creado_en) < datetime('now', '-1 day')`
 	);
 
 	return (rutas.values ?? []).map((f: { ruta: string }) => f.ruta);
+}
+
+/**
+ * Borra del teléfono los archivos de unas rutas.
+ *
+ * Las filas se van solas por las claves foráneas; los ARCHIVOS no. Esta función
+ * existe porque `purgarBorradores()` devolvía las rutas para que alguien las
+ * borrara y NADIE lo hacía: los datos del borrador abandonado desaparecían y sus
+ * fotos y videos se quedaban en el aparato para siempre. Con un video de 8 MB
+ * por solicitud, en un teléfono de gama baja eso se nota en semanas.
+ *
+ * Nunca lanza: un archivo que ya no está no es un problema, y fallar aquí
+ * impediría abrir el formulario — que es lo único que la persona vino a hacer.
+ */
+export async function borrarArchivos(rutas: string[]): Promise<void> {
+	for (const ruta of rutas) {
+		await Filesystem.deleteFile({ path: ruta, directory: Directory.Data }).catch(() => undefined);
+	}
 }
 
 /**
@@ -231,8 +284,18 @@ export async function rutasDeSusArchivos(id: string): Promise<string[]> {
 	return (r.values ?? []).map((f: { ruta: string }) => f.ruta);
 }
 
+/**
+ * Borra una solicitud del teléfono, con sus archivos.
+ *
+ * Los archivos se borran AQUÍ y no en quien llame. Antes esta función solo
+ * quitaba la fila y dejaba a quien la usara la obligación de acordarse de las
+ * rutas; hoy no la llama nadie, y así se queda cerrada antes de que alguien la
+ * conecte a un botón y herede el olvido.
+ */
 export async function borrar(id: string): Promise<void> {
+	const rutas = await rutasDeSusArchivos(id);
 	const db = await abrir();
 
 	await db.run('DELETE FROM registros WHERE id = ?', [id]);
+	await borrarArchivos(rutas);
 }

@@ -274,6 +274,50 @@ try {
 		Number(sql('SELECT COUNT(*) FROM bitacora')) === 0,
 		'la bitácora se va en cascada al borrar el registro'
 	);
+
+	// ── La purga de borradores, con las fechas como las escribe cada lado ─────
+	//
+	// El fallo que esto cierra: TypeScript escribe `2026-08-24T05:00:00.000Z` y
+	// `datetime('now')` devuelve `2026-08-24 05:00:00`. Comparadas como texto, la
+	// «T» es mayor que el espacio, así que un borrador del mismo día nunca salía
+	// menor que el corte y sobrevivía un día de más — con sus fotos.
+
+	const ayer = new Date(Date.now() - 26 * 3600_000).toISOString();
+	const haceUnRato = new Date(Date.now() - 10 * 60_000).toISOString();
+
+	sql(`
+		INSERT INTO registros
+			(id, envio_id, nombre_completo, documento, telefono, zona, direccion,
+			 aviso_version, autorizacion_en, estado, creado_en, actualizado_en)
+		VALUES
+			('viejo','ev','','','','','','','${ayer}','BORRADOR','${ayer}','${ayer}'),
+			('nuevo','en','','','','','','','${haceUnRato}','BORRADOR','${haceUnRato}','${haceUnRato}');
+	`);
+
+	afirmar(
+		sql(
+			"SELECT id FROM registros WHERE estado='BORRADOR' AND " +
+				"datetime(creado_en) < datetime('now','-1 day')"
+		) === 'viejo',
+		'la purga alcanza el borrador de ayer, aunque TypeScript escriba la fecha con T y Z'
+	);
+
+	afirmar(
+		sql(
+			"SELECT COUNT(*) FROM registros WHERE estado='BORRADOR' AND " +
+				"creado_en < datetime('now','-1 day')"
+		) === '0',
+		'y comparando sin `datetime()` no alcanzaba ninguno — que era el fallo'
+	);
+
+	afirmar(
+		sql("SELECT COUNT(*) FROM registros WHERE estado='BORRADOR'") === '2' &&
+			sql(
+				"SELECT id FROM registros WHERE estado='BORRADOR' " +
+					'ORDER BY creado_en DESC LIMIT 1'
+			) === 'nuevo',
+		'y `empezar()` reutiliza el más reciente en vez de abrir otro en cada apertura'
+	);
 } finally {
 	rmSync(temporal, { recursive: true, force: true });
 }
