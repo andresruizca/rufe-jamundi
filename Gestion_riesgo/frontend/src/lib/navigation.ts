@@ -26,7 +26,6 @@ import {
 	ClipboardPlus,
 	Map as IconoMapa,
 	MapPinned,
-	CloudOff,
 	FilePlus2,
 	FileText,
 	HardHat,
@@ -74,7 +73,6 @@ export function esRutaPublica(ruta: string): boolean {
  */
 export const RUTAS_SIN_CONEXION: string[] = [
 	'/riesgo/reportar',
-	'/riesgo/pendientes',
 	// La inspección también se levanta en campo, y su formato viaja entero en
 	// los catálogos —criterios del Anexo 1 y materiales del Anexo 2 incluidos—
 	// justamente para que no haga falta señal.
@@ -187,20 +185,6 @@ export const NAV_ITEMS: NavItem[] = [
 		roles: INSPECCION,
 		match: ['/riesgo/inspeccionar']
 	},
-	{
-		id: 'pendientes-rufe',
-		type: 'item',
-		parentId: 'grupo-registro',
-		label: 'Pendientes',
-		title: 'Fichas pendientes de enviar',
-		href: '/riesgo/pendientes',
-		icon: CloudOff,
-		// La cola es de los dos formatos: sin ella, quien inspecciona no sabe si
-		// su trabajo salió del teléfono.
-		roles: INSPECCION,
-		match: ['/riesgo/pendientes']
-	},
-
 	// «Reportes» es el espejo de «Registro»: los mismos dos formatos, con los
 	// mismos nombres, pero para consultar lo ya registrado en vez de levantarlo.
 	// Que la pareja se repita a un lado y al otro es la intención, no un descuido:

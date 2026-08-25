@@ -81,6 +81,8 @@
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
 	import { borrarEvidenciasDe, leerEvidencias } from '$lib/rufe-form/almacen';
+	import ColaDeEnvio from '$lib/rufe-form/componentes/ColaDeEnvio.svelte';
+	import ListoSinSenal from '$lib/components/layout/ListoSinSenal.svelte';
 	import { aparato } from '$lib/aparato';
 
 	let catalogos = $state<Catalogos | null>(null);
@@ -750,7 +752,7 @@
 				<h2>Inspección guardada</h2>
 				<p class="cierre__motivo">
 					No hay señal. Quedó guardada en {cual.este} y se enviará sola en cuanto vuelva la
-					conexión. Puede verla en <a href="/riesgo/pendientes">Pendientes</a>.
+					conexión. La verá aquí abajo hasta que salga.
 				</p>
 			{:else}
 				<h2>Inspección registrada</h2>
@@ -765,6 +767,8 @@
 			{:else if !enCola}
 				<p class="cierre__motivo">{enviado.motivo}</p>
 			{/if}
+
+			<ColaDeEnvio formato="INSPECCION" nombre="inspección" mostrarVacio />
 
 			<div class="cierre__acciones">
 				<button type="button" class="boton boton--principal" onclick={() => empezarUnaNueva()}>
@@ -890,6 +894,12 @@
 						cambian.
 					</span>
 				</p>
+
+				<!-- Las que ya se terminaron y todavía no salieron del aparato. Van
+				     aquí, junto a las de a medias, porque la pregunta es la misma:
+				     «¿qué me falta de lo de hoy?». -->
+				<ColaDeEnvio formato="INSPECCION" nombre="inspección" />
+				<ListoSinSenal />
 			</div>
 		{:else}
 			<div class="tarjeta">

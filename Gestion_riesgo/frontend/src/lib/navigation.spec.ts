@@ -55,13 +55,6 @@ describe('acceso al formulario de captura', () => {
 		expect(puedeAcceder('/riesgo/reportar', null)).toBe(false);
 	});
 
-	it('Pendientes tiene el mismo control que el formulario', () => {
-		expect(puedeAcceder('/riesgo/pendientes', 'GESTOR')).toBe(true);
-		expect(puedeAcceder('/riesgo/pendientes', 'ADMINISTRADOR')).toBe(true);
-		expect(puedeAcceder('/riesgo/pendientes', 'VISUALIZACION')).toBe(false);
-		expect(puedeAcceder('/riesgo/pendientes', null)).toBe(false);
-	});
-
 	// puedeAcceder() permite por omisión las rutas que no conoce: si la entrada
 	// desapareciera del registro, el formulario quedaría abierto a cualquier rol
 	// autenticado sin que nada más lo delatara.
@@ -98,12 +91,10 @@ describe('menú por rol', () => {
 
 	it('el visor no ve el enlace de registrar', () => {
 		expect(grupos('VISUALIZACION')).not.toContain('Registro');
-		expect(etiquetas('VISUALIZACION')).not.toContain('Pendientes');
 	});
 
 	it('el gestor sí lo ve, y no ve administración', () => {
 		expect(etiquetas('GESTOR')).toContain('RUFE FR-1703-SMD-69');
-		expect(etiquetas('GESTOR')).toContain('Pendientes');
 		expect(etiquetas('GESTOR')).not.toContain('Usuarios del sistema');
 	});
 
@@ -111,22 +102,22 @@ describe('menú por rol', () => {
 		const e = etiquetas('ADMINISTRADOR');
 		expect(e).toContain('RUFE FR-1703-SMD-69');
 		expect(e).toContain('INSP DE VIVIENDA');
-		expect(e).toContain('Pendientes');
 		expect(e).toContain('Usuarios del sistema');
 		expect(grupos('ADMINISTRADOR')).toEqual(['Registro', 'Reportes', 'Administración']);
 	});
 
-	it('dentro de Registro, los dos formatos van antes que Pendientes', () => {
-		// El orden es el del arreglo, y es lo que pidió el equipo: primero lo que se
-		// diligencia, al final el estado de lo ya diligenciado.
+	it('Registro son los dos formatos, y nada más', () => {
+		// «Pendientes» salió del menú: la cola de envío vive ahora DENTRO de cada
+		// formato, junto a sus borradores a medias. Colgada del menú no se
+		// relacionaba con nada, y obligaba a acordarse de que existía otro sitio
+		// donde comprobar si el trabajo del día había salido.
 		const registro = menuParaRol('GESTOR').find(
 			(s) => s.type === 'group' && s.group.id === 'grupo-registro'
 		);
 
 		expect(registro?.type === 'group' && registro.items.map((i) => i.href)).toEqual([
 			'/riesgo/reportar',
-			'/riesgo/inspeccionar',
-			'/riesgo/pendientes'
+			'/riesgo/inspeccionar'
 		]);
 	});
 
@@ -166,7 +157,6 @@ describe('menú por rol', () => {
 		// familias que aún no son caso suyo.
 		expect(etiquetas('INSPECTOR')).toEqual([
 			'INSP DE VIVIENDA',
-			'Pendientes',
 			'INSP DE VIVIENDA',
 			'Acerca de'
 		]);
@@ -197,7 +187,7 @@ describe('menú por rol', () => {
 	});
 
 	it('las suyas sí', () => {
-		for (const ruta of ['/riesgo/inspeccionar', '/riesgo/pendientes', '/riesgo/inspecciones']) {
+		for (const ruta of ['/riesgo/inspeccionar', '/riesgo/inspecciones']) {
 			expect(puedeAcceder(ruta, 'INSPECTOR'), ruta).toBe(true);
 		}
 	});
@@ -212,7 +202,6 @@ describe('títulos', () => {
 		expect(resolverTitulo('/riesgo/reportar')).toBe(
 			'Registro Unifamiliar de Emergencias — captura en campo'
 		);
-		expect(resolverTitulo('/riesgo/pendientes')).toBe('Fichas pendientes de enviar');
 		expect(resolverTitulo('/riesgo/reportes')).toBe('Fichas RUFE registradas');
 	});
 });
@@ -223,11 +212,7 @@ describe('rutas que funcionan sin conexión', () => {
 		// la sesión. Que obligue a tocar la prueba es justamente la intención: la
 		// inspección se sumó a conciencia, porque su formato entero —criterios del
 		// Anexo 1 y materiales del Anexo 2— viaja en los catálogos guardados.
-		expect(RUTAS_SIN_CONEXION).toEqual([
-			'/riesgo/reportar',
-			'/riesgo/pendientes',
-			'/riesgo/inspeccionar'
-		]);
+		expect(RUTAS_SIN_CONEXION).toEqual(['/riesgo/reportar', '/riesgo/inspeccionar']);
 	});
 
 	it('las secciones que leen del servidor no están', () => {

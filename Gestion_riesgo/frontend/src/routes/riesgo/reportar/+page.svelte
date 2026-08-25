@@ -39,6 +39,8 @@
 		type BorradorGuardado
 	} from '$lib/rufe-form/borrador.svelte';
 	import { borrarEvidenciasDe, leerEvidencias } from '$lib/rufe-form/almacen';
+	import ColaDeEnvio from '$lib/rufe-form/componentes/ColaDeEnvio.svelte';
+	import ListoSinSenal from '$lib/components/layout/ListoSinSenal.svelte';
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import { GestorEnvio, hayFichasPendientes } from '$lib/rufe-form/envio.svelte';
 
@@ -645,19 +647,10 @@
 				onOtra={registrarOtra}
 			/>
 
-			{#if guardadaSinEnviar && envio.pendientes > 0}
-				<div class="pendientes-confirmacion">
-					<a class="aviso aviso--info aviso-pendientes" href="/riesgo/pendientes">
-						<CloudOff size={16} aria-hidden="true" />
-						<span>
-							{envio.pendientes === 1
-								? 'Hay 1 ficha esperando salir.'
-								: `Hay ${envio.pendientes} fichas esperando salir.`}
-							<strong>Ver pendientes</strong>
-						</span>
-					</a>
-				</div>
-			{/if}
+			<!-- La lista misma, no un enlace a otra pantalla. Quien acaba de guardar
+			     sin señal quiere ver que su ficha está ahí, no que le prometan que
+			     está en otro sitio. -->
+			<ColaDeEnvio formato="RUFE" mostrarVacio />
 		{:else if catalogos}
 			{#if borrador.otraPestana}
 				<div class="aviso aviso--error" role="alert">
@@ -684,20 +677,10 @@
 
 			<!-- ── Paso 0: orientación ─────────────────────────────────── -->
 			{#if paso.id === 'inicio'}
-				<!-- Un aviso, no la lista: vigilar la cola es trabajo de «Pendientes».
-				     Pero callarlo del todo sería peor — el censador tiene que saber que
-				     hay trabajo sin salir antes de empezar otra casa. -->
-				{#if envio.pendientes > 0}
-					<a class="aviso aviso--info aviso-pendientes" href="/riesgo/pendientes">
-						<CloudOff size={16} aria-hidden="true" />
-						<span>
-							{envio.pendientes === 1
-								? 'Hay 1 ficha guardada sin enviar.'
-								: `Hay ${envio.pendientes} fichas guardadas sin enviar.`}
-							<strong>Ver pendientes</strong>
-						</span>
-					</a>
-				{/if}
+				<!-- La cola vive aquí, junto a los borradores a medias. Antes era una
+				     pantalla aparte colgada del menú, y el censador tenía que acordarse
+				     de que existía otro sitio donde comprobar si su trabajo salió. -->
+				<ColaDeEnvio formato="RUFE" />
 
 				<div class="intro">
 					<h1 class="intro__titulo">Registrar un RUFE</h1>
@@ -1342,24 +1325,6 @@
 		width: 100%;
 		max-width: 44rem;
 		margin: 0 auto;
-	}
-
-	.pendientes-confirmacion {
-		max-width: 34rem;
-		margin: 1.5rem auto 0;
-	}
-
-	.aviso-pendientes {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		text-decoration: none;
-		color: var(--aviso-info-texto);
-	}
-
-	.aviso-pendientes strong {
-		text-decoration: underline;
-		white-space: nowrap;
 	}
 
 	.ayuda-paso {
