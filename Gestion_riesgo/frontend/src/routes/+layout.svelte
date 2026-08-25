@@ -11,6 +11,7 @@
 	import escudo from '$lib/assets/logo-jamundi.svg';
 	import { resolverTitulo, puedeAcceder, esRutaPublica, funcionaSinConexion } from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
+	import { aparato } from '$lib/aparato';
 
 	let { children } = $props();
 
@@ -20,6 +21,10 @@
 
 	const ruta = $derived(page.url.pathname);
 	const esLogin = $derived(ruta === '/login');
+
+	// En qué se está usando el sistema, para no prometerle a quien está en un
+	// computador que sus fichas quedan «en el teléfono».
+	const cual = aparato();
 
 	// El login y el formulario ciudadano se sirven sin sesión y sin armazón. La
 	// lista vive en $lib/navigation para que sumar una ruta pública sea una
@@ -237,7 +242,7 @@
 				<p class="aviso-sin-red" role="status">
 					<WifiOff size={15} aria-hidden="true" />
 					<span>
-						Sin conexión. Las fichas se guardan en el teléfono y se envían solas cuando vuelva la
+						Sin conexión. Las fichas se guardan en {cual.el} y se envían solas cuando vuelva la
 						señal.
 					</span>
 				</p>
@@ -261,7 +266,7 @@
 							{titulo} lee la información del servidor, así que sin señal no hay nada que mostrar.
 						</p>
 						<p class="sin-red__nota">
-							Lo que sí funciona sin internet es levantar fichas: se guardan en el teléfono y se
+							Lo que sí funciona sin internet es levantar fichas: se guardan en {cual.el} y se
 							envían solas cuando vuelva la señal.
 						</p>
 						{#if puedeAcceder('/riesgo/reportar', sesion.rol)}

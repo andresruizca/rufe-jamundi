@@ -12,7 +12,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
-		CheckCircle2, CloudOff, LoaderCircle, RefreshCw, Trash2, TriangleAlert, DownloadCloud, Smartphone
+		CheckCircle2, CloudOff, LoaderCircle, RefreshCw, Trash2, TriangleAlert, DownloadCloud, Smartphone, Tablet, Laptop
 	} from '@lucide/svelte';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import {
@@ -28,6 +28,7 @@
 	import { tamanoLegible } from '$lib/rufe-form/imagen';
 	import { preparacion } from '$lib/offline/estado.svelte';
 	import { estaInstalada } from '$lib/offline/preparar';
+	import { aparato } from '$lib/aparato';
 
 	let fichas = $state<FichaEnCola[]>([]);
 	let fotosPorFicha = $state<Record<string, number>>({});
@@ -36,6 +37,17 @@
 	let espacio = $state<{ usado: number; total: number } | null>(null);
 	let confirmandoBorrado = $state<string | null>(null);
 	let instalada = $state(true);
+
+	// Esta pantalla entera habla de dónde está guardado lo que aún no salió, y
+	// se abre tanto desde el teléfono del censador como desde el computador de
+	// la Alcaldía. Decirle «este teléfono» a quien está en un escritorio hace
+	// dudar de si está viendo lo suyo.
+	const cual = aparato();
+
+	// El dibujo dice lo mismo que la frase. Un teléfono dibujado junto a «este
+	// equipo» se contradice, y el icono es lo primero que se mira.
+	const IconoAparato =
+		cual.clave === 'telefono' ? Smartphone : cual.clave === 'tableta' ? Tablet : Laptop;
 
 	const envio = new GestorEnvio();
 	let detener: (() => void) | null = null;
@@ -137,7 +149,7 @@
 <div class="tarjeta">
 	<h2 class="tarjeta__titulo">Fichas pendientes de enviar</h2>
 	<p class="tarjeta__nota">
-		Fichas levantadas en este teléfono que todavía no llegaron a la Alcaldía. Se envían solas en
+		Fichas levantadas en {cual.este} que todavía no llegaron a la Alcaldía. Se envían solas en
 		cuanto haya señal; esta pantalla funciona sin conexión.
 	</p>
 
@@ -164,7 +176,7 @@
 	{:else if fichas.length === 0}
 		<p class="vacio">
 			<CheckCircle2 size={26} aria-hidden="true" />
-			<span>No hay nada pendiente. Todas las fichas levantadas en este teléfono ya se enviaron.</span>
+			<span>No hay nada pendiente. Todas las fichas levantadas en {cual.este} ya se enviaron.</span>
 		</p>
 	{:else}
 		<div class="acciones">
@@ -273,13 +285,13 @@
 	{:else if preparacion.parte?.listo}
 		<p class="aviso aviso--ok" role="status">
 			<CheckCircle2 size={15} aria-hidden="true" />
-			Listo para trabajar sin internet. El formulario está guardado en este teléfono.
+			Listo para trabajar sin internet. El formulario está guardado en {cual.este}.
 		</p>
 	{:else if preparacion.parte}
 		<p class="aviso aviso--error" role="status">
 			<TriangleAlert size={15} aria-hidden="true" />
 			Todavía falta descargar {preparacion.parte.faltantes.join(', ')}. Con señal, pulse «Preparar
-			este teléfono».
+			{cual.este}».
 		</p>
 	{:else if !enLinea}
 		<p class="aviso aviso--info" role="status">
@@ -290,7 +302,7 @@
 
 	<ul class="explicacion">
 		<li>
-			El formulario, sus listas de opciones y la aplicación quedan guardados en el teléfono.
+			El formulario, sus listas de opciones y la aplicación quedan guardados en {cual.el}.
 		</li>
 		<li>
 			Las fichas y sus fotos se guardan aquí y se envían solas al recuperar la señal.
@@ -303,8 +315,8 @@
 
 	{#if !instalada}
 		<p class="aviso aviso--info" role="status">
-			<Smartphone size={15} aria-hidden="true" />
-			Instale la aplicación desde el menú lateral. Sin instalar, el teléfono puede borrar lo
+			<IconoAparato size={15} aria-hidden="true" />
+			Instale la aplicación desde el menú lateral. Sin instalar, {cual.el} puede borrar lo
 			guardado —fichas incluidas— cuando le falte espacio.
 		</p>
 	{/if}
@@ -317,7 +329,7 @@
 			disabled={!enLinea || preparacion.trabajando}
 		>
 			<DownloadCloud size={15} aria-hidden="true" />
-			Preparar este teléfono
+			Preparar {cual.este}
 		</button>
 
 		{#if !enLinea}
@@ -330,7 +342,7 @@
 	<h2 class="tarjeta__titulo">Cómo funciona</h2>
 	<ul class="explicacion">
 		<li>
-			Las fichas se guardan en este teléfono en cuanto pulsa «Guardar», aunque no haya señal.
+			Las fichas se guardan en {cual.este} en cuanto pulsa «Guardar», aunque no haya señal.
 		</li>
 		<li>
 			Se envían solas cuando vuelve la conexión.

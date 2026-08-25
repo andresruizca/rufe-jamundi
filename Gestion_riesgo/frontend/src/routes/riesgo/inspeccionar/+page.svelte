@@ -67,6 +67,7 @@
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import { aparato } from '$lib/aparato';
 
 	let catalogos = $state<Catalogos | null>(null);
 	let datos = $state<FormularioInspeccion>(formularioVacio());
@@ -99,6 +100,11 @@
 	// La misma cola del censo, con su discriminador. Sin esto, enviar en una
 	// vereda solo mostraba un error: el trabajo quedaba en el borrador, pero
 	// nadie garantizaba que saliera al volver la señal.
+	// Un inspector puede llenar esto desde el computador de la oficina con el
+	// acta en la mano; «este teléfono» sería una promesa sobre un aparato que no
+	// tiene delante.
+	const cual = aparato();
+
 	const envio = new GestorEnvio();
 	let detenerEnvio: (() => void) | null = null;
 
@@ -542,7 +548,7 @@
 			{#if enCola}
 				<h2>Inspección guardada</h2>
 				<p class="cierre__motivo">
-					No hay señal. Quedó guardada en este teléfono y se enviará sola en cuanto vuelva la
+					No hay señal. Quedó guardada en {cual.este} y se enviará sola en cuanto vuelva la
 					conexión. Puede verla en <a href="/riesgo/pendientes">Pendientes</a>.
 				</p>
 			{:else}
@@ -571,7 +577,7 @@
 			<div class="tarjeta">
 				<h2 class="tarjeta__titulo">Hay una inspección sin terminar</h2>
 				<p class="tarjeta__nota">
-					Se guardó en este teléfono y todavía no se ha enviado. Puede continuarla o empezar de nuevo.
+					Se guardó en {cual.este} y todavía no se ha enviado. Puede continuarla o empezar de nuevo.
 				</p>
 				<div class="acciones">
 					<button type="button" class="boton boton--principal" onclick={continuarBorrador}>
@@ -610,7 +616,7 @@
 							>. Lo diligencia el profesional responsable de la inspección.
 						</p>
 						<ul>
-							<li>Se guarda solo en este teléfono mientras lo llena.</li>
+							<li>Se guarda solo en {cual.este} mientras lo llena.</li>
 							<li>
 								Los criterios del <strong>Anexo 1</strong> aparecen al elegir cada nivel de daño: no
 								hace falta la hoja impresa.
@@ -997,7 +1003,7 @@
 							gestor={evidencias}
 							tipo="INSPECCION"
 							titulo="Registro fotográfico"
-							ayuda="Las diez casillas del numeral 11. Se guardan en el teléfono y salen solas cuando haya señal."
+							ayuda="Las diez casillas del numeral 11. Se guardan en {cual.el} y salen solas cuando haya señal."
 							textoCamara="Tomar foto"
 							pieDeFoto={{
 								etiqueta: 'Fotografía de',

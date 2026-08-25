@@ -15,6 +15,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { Download, Share, Info } from '@lucide/svelte';
 	import { esIOS, estaInstalada } from '$lib/offline/preparar';
+	import { aparato, nombreApple, type Aparato } from '$lib/aparato';
 	import { preparacion } from '$lib/offline/estado.svelte';
 
 	type EventoInstalar = Event & {
@@ -27,6 +28,12 @@
 	let instalada = $state(true);
 	let ios = $state(false);
 	let comoEnIphone = $state(false);
+
+	// `aparato()` ya devuelve «equipo» cuando no hay `navigator` —al generar la
+	// página—, así que puede resolverse aquí. Y aunque se equivocara, este botón
+	// no se dibuja hasta que el navegador ofrece instalar, que es siempre en el
+	// cliente.
+	let cual = $state<Aparato>(aparato());
 
 	let alOfrecer: ((e: Event) => void) | null = null;
 	let alInstalar: (() => void) | null = null;
@@ -80,7 +87,7 @@
 {#if pendiente}
 	<button type="button" class="boton boton--suave instalar" onclick={instalar} disabled={instalando}>
 		<Download size={15} aria-hidden="true" />
-		Instalar en este teléfono
+		Instalar en {cual.este}
 	</button>
 {:else if ios && !instalada}
 	<button
@@ -90,7 +97,7 @@
 		aria-expanded={comoEnIphone}
 	>
 		<Share size={15} aria-hidden="true" />
-		Instalar en este iPhone
+		Instalar en este {nombreApple(cual)}
 	</button>
 
 	{#if comoEnIphone}

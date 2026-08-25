@@ -10,6 +10,9 @@
 	// varias casas seguidas y no debería tener que volver por el menú cada vez.
 
 	import { Check, ClipboardPlus, CloudOff, Copy, List, Printer } from '@lucide/svelte';
+	import { aparato } from '$lib/aparato';
+
+	const cual = aparato();
 
 	type Props = {
 		radicado: string;
@@ -65,7 +68,7 @@
 	{#if enCola}
 		<div class="marca marca--espera" aria-hidden="true"><CloudOff size={30} /></div>
 
-		<h1 class="titulo">Ficha guardada en el teléfono</h1>
+		<h1 class="titulo">Ficha guardada en {cual.el}</h1>
 		<p class="entrada">
 			No se ha perdido nada: los datos están guardados en este dispositivo y se enviarán solos.
 		</p>
@@ -73,7 +76,7 @@
 		<div class="espera">
 			<p class="espera__texto">
 				{#if enSegundoPlano}
-					Se enviará en cuanto el teléfono recupere señal, <strong>aunque cierre la aplicación</strong>.
+					Se enviará en cuanto {cual.el} recupere señal, <strong>aunque cierre la aplicación</strong>.
 				{:else}
 					Se enviará en cuanto vuelva la señal. Deje la aplicación abierta: este navegador no
 					permite enviarla en segundo plano.
