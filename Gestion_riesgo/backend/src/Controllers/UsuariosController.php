@@ -54,7 +54,11 @@ final class UsuariosController
             // TypeScript, para que sea la MISMA que ofrece el numeral 1 del
             // formato. Dos listas parecidas acaban divergiendo, y entonces el
             // dato precargado no coincide con ninguna opción del formulario.
-            'profesiones' => array_values(CatalogosInspeccion::PROFESIONES),
+            // Con código Y etiqueta. Antes viajaban solo las etiquetas y el
+            // desplegable guardaba «Ingeniero(a) civil» donde el formato de
+            // inspección espera «INGENIERO_CIVIL»: la profesión se guardaba
+            // bien, se veía bien, y aun así no llegaba nunca al numeral 1.
+            'profesiones' => CatalogosInspeccion::opcionesProfesiones(),
         ]);
     }
 
@@ -283,6 +287,11 @@ final class UsuariosController
             $salida[$campo] = $valor === '' ? null : mb_substr($valor, 0, 160);
         }
 
+        // La profesión se guarda SIEMPRE como código, venga como venga. Es el
+        // valor con el que trabaja el formato de inspección, y aceptar la
+        // etiqueta sin traducirla es lo que rompía la precarga.
+        $salida['profesion'] = CatalogosInspeccion::codigoProfesion($salida['profesion']) ?: null;
+
         return $salida;
     }
 
@@ -300,7 +309,9 @@ final class UsuariosController
             // El perfil viaja siempre, aunque el rol no sea inspector: si a
             // alguien se le cambia el rol y luego se le devuelve, sus datos
             // siguen ahí en vez de haberse perdido por el camino.
-            'profesion'           => $u['profesion'] ?? null,
+            // Normalizada también al leer, para que los usuarios guardados
+            // antes del arreglo funcionen sin tocar la base de datos.
+            'profesion'           => CatalogosInspeccion::codigoProfesion($u['profesion'] ?? null) ?: null,
             'tarjeta_profesional' => $u['tarjeta_profesional'] ?? null,
             'documento'           => $u['documento'] ?? null,
             'documento_de'        => $u['documento_de'] ?? null,

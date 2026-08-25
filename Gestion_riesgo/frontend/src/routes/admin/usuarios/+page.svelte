@@ -53,8 +53,13 @@
 	 * Vienen del servidor, de la MISMA lista que ofrece el numeral 1. Escritas
 	 * aquí a mano acabarían divergiendo, y entonces el dato precargado no
 	 * coincidiría con ninguna opción del formulario.
+	 *
+	 * Se guarda el CÓDIGO, no la etiqueta. Antes viajaban solo etiquetas y aquí
+	 * se guardaba «Ingeniero(a) civil» donde el formato espera
+	 * «INGENIERO_CIVIL»: las dos pantallas se veían bien por separado y la
+	 * precarga del numeral 1 salía siempre en blanco.
 	 */
-	let profesiones = $state<string[]>([]);
+	let profesiones = $state<{ codigo: string; etiqueta: string }[]>([]);
 	let passwordNueva = $state('');
 
 	const CLASE_ROL: Record<string, string> = {
@@ -389,8 +394,8 @@
 							<span class="campo__etiqueta">Profesión</span>
 							<select class="campo__control" bind:value={form.profesion} disabled={guardando}>
 								<option value="">Sin definir</option>
-								{#each profesiones as p (p)}
-									<option value={p}>{p}</option>
+								{#each profesiones as p (p.codigo)}
+									<option value={p.codigo}>{p.etiqueta}</option>
 								{/each}
 							</select>
 							<span class="ayuda">

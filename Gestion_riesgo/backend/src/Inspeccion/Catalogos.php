@@ -158,6 +158,52 @@ final class Catalogos
         return isset(self::PROFESIONES[$codigo]);
     }
 
+    /** Las profesiones como las pide un desplegable: código y etiqueta. */
+    public static function opcionesProfesiones(): array
+    {
+        return array_map(
+            static fn ($codigo, $etiqueta): array => ['codigo' => (string) $codigo, 'etiqueta' => $etiqueta],
+            array_keys(self::PROFESIONES),
+            self::PROFESIONES
+        );
+    }
+
+    /**
+     * El código de una profesión, venga como venga.
+     *
+     * Existe por un fallo que llegó a producción: la ficha de usuario guardaba
+     * la ETIQUETA («Ingeniero(a) civil») mientras el formato de inspección
+     * trabaja con el CÓDIGO («INGENIERO_CIVIL»). Los dos valores se veían bien
+     * por separado, así que nadie lo notó; lo que fallaba era el puente entre
+     * ambos: al precargar el numeral 1, la profesión guardada no coincidía con
+     * ninguna opción de la lista y el campo salía en blanco.
+     *
+     * Acepta las dos formas para que los usuarios ya guardados sigan
+     * funcionando sin tocar la base. Lo que no reconoce devuelve cadena vacía,
+     * que es «sin definir»: es preferible a dejar el desplegable con un valor
+     * que no corresponde a ninguna opción.
+     */
+    public static function codigoProfesion(?string $valor): string
+    {
+        $valor = trim((string) $valor);
+
+        if ($valor === '') {
+            return '';
+        }
+
+        if (self::esProfesionValida($valor)) {
+            return $valor;
+        }
+
+        foreach (self::PROFESIONES as $codigo => $etiqueta) {
+            if (mb_strtolower($etiqueta) === mb_strtolower($valor)) {
+                return (string) $codigo;
+            }
+        }
+
+        return '';
+    }
+
     public static function esEventoValido(string $codigo): bool
     {
         return isset(self::EVENTOS[$codigo]);

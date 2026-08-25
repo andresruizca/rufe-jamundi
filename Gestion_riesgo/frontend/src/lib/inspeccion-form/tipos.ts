@@ -151,3 +151,22 @@ export type FormularioInspeccion = {
 	/** Ficha RUFE de la que se partió, si se partió de una. */
 	rufe_reporte_id: number | null;
 };
+
+/**
+ * Un profesional que puede firmar el numeral 1.
+ *
+ * Son los usuarios con rol de inspección de vivienda. `profesion` viaja como
+ * CÓDIGO —«INGENIERO_CIVIL»— y no como etiqueta, que es lo que espera el
+ * desplegable del formato: guardar la etiqueta fue justamente el fallo que
+ * dejaba la precarga en blanco.
+ */
+export type ProfesionalInspeccion = {
+	id: number;
+	nombre: string;
+	profesion: string;
+	tarjeta_profesional: string;
+	documento: string;
+	documento_de: string;
+	telefono: string;
+	direccion: string;
+};

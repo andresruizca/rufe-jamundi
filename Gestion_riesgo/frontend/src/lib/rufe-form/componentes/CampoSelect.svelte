@@ -16,6 +16,15 @@
 		vacio?: string;
 		numerico?: boolean;
 		alCambiar?: () => void;
+		/**
+		 * Como `alCambiar`, pero recibe lo elegido.
+		 *
+		 * Existe para el caso en que la elección no ES el dato sino que lo TRAE:
+		 * elegir un profesional rellena siete campos del numeral 1. Ahí no sirve
+		 * `bind:valor`, porque el valor del desplegable —un id— no es ninguno de
+		 * los campos que se guardan.
+		 */
+		alElegir?: (valor: string | number | null) => void;
 	};
 
 	let {
@@ -28,7 +37,8 @@
 		requerido = false,
 		vacio = 'Seleccione…',
 		numerico = false,
-		alCambiar
+		alCambiar,
+		alElegir
 	}: Props = $props();
 
 	const idAyuda = $derived(`${id}-ayuda`);
@@ -43,6 +53,7 @@
 		// Los catálogos del formato usan códigos numéricos; el DOM siempre devuelve
 		// cadenas, así que hay que reconvertir o el === contra el catálogo fallaría.
 		valor = bruto === '' ? null : numerico ? Number(bruto) : bruto;
+		alElegir?.(valor);
 		alCambiar?.();
 	}
 </script>

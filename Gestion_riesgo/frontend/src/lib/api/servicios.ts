@@ -1,4 +1,7 @@
-import type { Catalogos as CatalogosInspeccion } from '$lib/inspeccion-form/tipos';
+import type {
+	Catalogos as CatalogosInspeccion,
+	ProfesionalInspeccion
+} from '$lib/inspeccion-form/tipos';
 import type { DetalleInspeccion } from '$lib/inspeccion-form/detalle';
 import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
@@ -47,7 +50,13 @@ export type DatosUsuario = {
 /** Administración → Gestión de usuarios del sistema. */
 export const usuariosApi = {
 	listar: () =>
-		api.get<{ usuarios: Usuario[]; roles: RolCatalogo[]; profesiones: string[] }>('/usuarios'),
+		api.get<{
+			usuarios: Usuario[];
+			roles: RolCatalogo[];
+			// Código y etiqueta. Con solo la etiqueta, la ficha de usuario no tenía
+			// con qué guardar el código que el formato de inspección espera.
+			profesiones: { codigo: string; etiqueta: string }[];
+		}>('/usuarios'),
 	crear: (datos: DatosUsuario) => api.post<{ usuario: Usuario }>('/usuarios', datos),
 	actualizar: (id: number, datos: Partial<DatosUsuario>) =>
 		api.put<{ usuario: Usuario }>(`/usuarios/${id}`, datos),
@@ -165,6 +174,17 @@ export const inspeccionApi = {
 			'/inspeccion/fichas',
 			cuerpo
 		),
+
+	/**
+	 * Los profesionales que pueden figurar como responsables del numeral 1.
+	 *
+	 * NO se guarda para trabajar sin señal, a diferencia de los catálogos: trae
+	 * cédulas y teléfonos de funcionarios, y la caché del navegador vive en un
+	 * teléfono que se presta y se pierde. Sin conexión el formato sigue
+	 * funcionando con el nombre escrito a mano.
+	 */
+	profesionales: () =>
+		api.get<{ profesionales: ProfesionalInspeccion[] }>('/inspeccion/profesionales'),
 
 	/** ¿Ya se inspeccionó esta vivienda? Avisa, no impide: puede ser legítimo. */
 	duplicados: (documento: string) =>

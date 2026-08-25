@@ -2170,6 +2170,9 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
         // Su formato.
         'GET /inspeccion/catalogos',
         'GET /inspeccion/duplicados',
+        // A nombre de quién firma. Son sus propios compañeros de rol, con los
+        // datos que el numeral 1 pide de ellos; nada del censo.
+        'GET /inspeccion/profesionales',
         'POST /inspeccion/fichas',
         'GET /inspeccion/fichas',
         'GET /inspeccion/fichas/{id}',
@@ -2769,6 +2772,46 @@ prueba('la huella junta la misma vivienda del mismo solicitante', function (): v
 
     afirmarIgual($a, $b, 'la misma casa y persona deben coincidir');
     afirmar($a !== $c, 'otro solicitante es otra solicitud');
+});
+
+grupo('La profesión del inspector, de la ficha de usuario al numeral 1');
+
+prueba('el puente entre las dos pantallas: etiqueta guardada, código esperado', function (): void {
+    // El fallo que esto cierra. La ficha de usuario guardaba «Ingeniero(a)
+    // civil» —la etiqueta— porque su desplegable solo recibía etiquetas; el
+    // formato de inspección trabaja con «INGENIERO_CIVIL». Cada pantalla se
+    // veía bien por su cuenta y la precarga del numeral 1 salía en blanco.
+    afirmarIgual('INGENIERO_CIVIL', CatalogosInspeccion::codigoProfesion('Ingeniero(a) civil'));
+    afirmarIgual('INGENIERO_CIVIL', CatalogosInspeccion::codigoProfesion('INGENIERO_CIVIL'));
+});
+
+prueba('los usuarios guardados antes del arreglo siguen funcionando', function (): void {
+    // No hay consola en el servidor para migrar la tabla, así que se traduce al
+    // leer. Sin esto habría que reeditar a mano cada inspector ya creado.
+    foreach (CatalogosInspeccion::PROFESIONES as $codigo => $etiqueta) {
+        afirmarIgual((string) $codigo, CatalogosInspeccion::codigoProfesion($etiqueta), "etiqueta {$etiqueta}");
+    }
+});
+
+prueba('lo que no se reconoce queda sin definir, no a medias', function (): void {
+    // Dejar un valor que no corresponde a ninguna opción pondría el desplegable
+    // en un estado que no existe: parecería lleno y no lo estaría.
+    afirmarIgual('', CatalogosInspeccion::codigoProfesion('Ingeniera sanitaria'));
+    afirmarIgual('', CatalogosInspeccion::codigoProfesion(null));
+    afirmarIgual('', CatalogosInspeccion::codigoProfesion('   '));
+});
+
+prueba('las opciones que viajan a la ficha de usuario traen código Y etiqueta', function (): void {
+    // Es la causa raíz: mandando solo etiquetas, el desplegable no tenía con qué
+    // guardar el código aunque quisiera.
+    $opciones = CatalogosInspeccion::opcionesProfesiones();
+
+    afirmar($opciones !== [], 'la lista no puede estar vacía');
+
+    foreach ($opciones as $o) {
+        afirmar(isset($o['codigo'], $o['etiqueta']), 'cada opción lleva código y etiqueta');
+        afirmar(CatalogosInspeccion::esProfesionValida($o['codigo']), "código válido: {$o['codigo']}");
+    }
 });
 
 // ── Resumen ──────────────────────────────────────────────────────────────────

@@ -37,6 +37,55 @@ final class InspeccionCapturaController
     }
 
     /**
+     * Quiénes pueden figurar como responsables del numeral 1.
+     *
+     * Los usuarios con rol de inspección de vivienda y activos, con los datos
+     * que el formato pide de ellos. El rol se creó justamente para esto: que la
+     * profesión, la tarjeta y la cédula del profesional se guarden una vez y no
+     * se reescriban a mano, de pie y en un teléfono, en cada visita.
+     *
+     * Va aparte de `/inspeccion/catalogos` y NO se guarda para trabajar sin
+     * señal, a propósito. Los catálogos son listas de opciones sin dato
+     * personal alguno, y esa es la razón por la que se les permite quedarse en
+     * la caché del navegador; esto trae cédulas y teléfonos de funcionarios y
+     * mezclarlo allí convertiría cada teléfono prestado en una filtración.
+     *
+     * La consecuencia se asume: sin señal el desplegable no aparece y el nombre
+     * se escribe a mano, como hasta ahora. Elegir de una lista es comodidad de
+     * oficina; llenar el formato en la vereda tiene que seguir funcionando.
+     */
+    public function profesionales(Request $req): void
+    {
+        $filas = Db::all(
+            'SELECT id, nombre, profesion, tarjeta_profesional, documento, documento_de,
+                    telefono, direccion
+               FROM usuarios
+              WHERE rol = :rol AND activo = 1
+              ORDER BY nombre ASC',
+            ['rol' => Auth::INSPECTOR]
+        );
+
+        Response::ok([
+            'profesionales' => array_map(
+                static fn (array $u): array => [
+                    'id'                  => (int) $u['id'],
+                    'nombre'              => (string) $u['nombre'],
+                    // Como código, igual que el desplegable del formato. Se
+                    // normaliza aquí también porque puede venir una etiqueta
+                    // guardada antes de que esto se arreglara.
+                    'profesion'           => Catalogos::codigoProfesion($u['profesion'] ?? null),
+                    'tarjeta_profesional' => (string) ($u['tarjeta_profesional'] ?? ''),
+                    'documento'           => (string) ($u['documento'] ?? ''),
+                    'documento_de'        => (string) ($u['documento_de'] ?? ''),
+                    'telefono'            => (string) ($u['telefono'] ?? ''),
+                    'direccion'           => (string) ($u['direccion'] ?? ''),
+                ],
+                $filas
+            ),
+        ]);
+    }
+
+    /**
      * Registra una inspección.
      *
      * El combo de materiales NO se toma de lo que mande el navegador: lo calcula

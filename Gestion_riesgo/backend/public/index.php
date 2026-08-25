@@ -185,6 +185,9 @@ $router->post('/mapa/reubicar', [$mapa, 'reubicar'], $soloAdmin);
 // en el RUFE.
 $router->get('/inspeccion/catalogos', [$inspeccionCaptura, 'catalogos'], Auth::INSPECCION);
 $router->get('/inspeccion/duplicados', [$inspeccionCaptura, 'duplicados'], Auth::INSPECCION);
+// Los profesionales que pueden firmar el numeral 1. Mismo permiso que el
+// formato: quien puede llenarlo puede saber a nombre de quién lo llena.
+$router->get('/inspeccion/profesionales', [$inspeccionCaptura, 'profesionales'], Auth::INSPECCION);
 $router->post('/inspeccion/fichas', [$inspeccionCaptura, 'crear'], Auth::INSPECCION);
 // Consultarlas sigue siendo de cualquier rol con sesión, incluido Visualización:
 // son las fichas que sustentan una entrega de recursos públicos y quitarle la

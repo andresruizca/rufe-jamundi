@@ -62,7 +62,11 @@
 		descartarBorrador,
 		leerBorrador
 	} from '$lib/inspeccion-form/borrador.svelte';
-	import type { Catalogos, FormularioInspeccion } from '$lib/inspeccion-form/tipos';
+	import type {
+		Catalogos,
+		FormularioInspeccion,
+		ProfesionalInspeccion
+	} from '$lib/inspeccion-form/tipos';
 	import type { ListaMateriales } from '$lib/inspeccion-form/detalle';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
@@ -103,6 +107,9 @@
 	// Un inspector puede llenar esto desde el computador de la oficina con el
 	// acta en la mano; «este teléfono» sería una promesa sobre un aparato que no
 	// tiene delante.
+	/** El valor del desplegable que significa «no está en la lista». */
+	const OTRO_PROFESIONAL = 'OTRA';
+
 	const cual = aparato();
 
 	const envio = new GestorEnvio();
@@ -159,6 +166,100 @@
 	 * Se puede corregir todo en la visita: un dato mal cargado no puede dejar al
 	 * profesional atascado delante de una casa.
 	 */
+	/**
+	 * Los profesionales registrados con rol de inspección de vivienda.
+	 *
+	 * El rol se creó para esto: que la profesión, la tarjeta y la cédula del
+	 * ingeniero se guarden UNA vez y no se reescriban a mano, de pie y en un
+	 * teléfono, en cada visita. Faltaba el puente — la lista donde elegirlo.
+	 *
+	 * Puede quedar vacía sin que sea un error: sin señal no se pide, y el
+	 * formato tiene que poder llenarse igual. En ese caso el nombre se escribe
+	 * a mano, exactamente como hasta ahora.
+	 */
+	let profesionales = $state<ProfesionalInspeccion[]>([]);
+
+	/** Quien firma no está en la lista: se escribe a mano. */
+	let profesionalAMano = $state(false);
+
+	const opcionesProfesional = $derived([
+		...profesionales.map((p) => ({ valor: String(p.id), etiqueta: p.nombre })),
+		{ valor: OTRO_PROFESIONAL, etiqueta: 'Otra persona (escribir el nombre)' }
+	]);
+
+	/**
+	 * Cuál de la lista corresponde a lo que hay escrito.
+	 *
+	 * Se compara por nombre y no se guarda el id, a propósito: el formato es un
+	 * documento firmado y lo que vale es el nombre que quedó escrito en él. Si
+	 * mañana ese usuario se borra o cambia de nombre, la ficha ya emitida no
+	 * puede cambiar con él.
+	 */
+	const profesionalElegido = $derived(
+		profesionales.find((p) => p.nombre === datos.profesional_nombre)?.id ?? null
+	);
+
+	async function cargarProfesionales() {
+		try {
+			const { profesionales: lista } = await inspeccionApi.profesionales();
+			profesionales = lista;
+		} catch {
+			// Sin señal, o sin permiso. No se le cuenta a nadie: el formulario
+			// sigue funcionando con el campo de texto, que es lo que importa.
+			profesionales = [];
+			return;
+		}
+
+		// Un borrador puede traer un nombre escrito a mano, o el de alguien que
+		// ya no es usuario. El desplegable no lo reconocería y el nombre se
+		// volvería invisible: parecería que el campo está vacío cuando no lo
+		// está, y saldría firmado quien no fue. Se empieza a mano.
+		const escrito = datos.profesional_nombre.trim();
+		if (escrito !== '' && !profesionales.some((p) => p.nombre === escrito)) {
+			profesionalAMano = true;
+		}
+	}
+
+	/**
+	 * Trae al formato los datos guardados de quien se eligió.
+	 *
+	 * Rellena el numeral 1 entero, no solo el nombre: la profesión, la tarjeta y
+	 * la cédula son justamente lo que nadie se sabe de memoria delante de una
+	 * casa. Todo queda editable — un dato viejo no puede dejar al profesional
+	 * atascado en la visita.
+	 */
+	function elegirProfesional(valor: string | number | null) {
+		const elegido = String(valor ?? '');
+
+		// «Seleccione…». Se borra el nombre y no el resto del numeral: el
+		// desplegable ES el campo del nombre, y dejarlo puesto mientras la lista
+		// se ve vacía es lo que hace firmar a quien no fue.
+		if (elegido === '') {
+			datos.profesional_nombre = '';
+			alCambiar();
+			return;
+		}
+
+		if (elegido === OTRO_PROFESIONAL) {
+			profesionalAMano = true;
+			datos.profesional_nombre = '';
+			alCambiar();
+			return;
+		}
+
+		const p = profesionales.find((x) => String(x.id) === elegido);
+		if (!p) return;
+
+		datos.profesional_nombre = p.nombre;
+		datos.profesional_profesion = p.profesion;
+		datos.profesional_tarjeta = p.tarjeta_profesional;
+		datos.profesional_documento = p.documento;
+		datos.profesional_documento_de = p.documento_de;
+		datos.profesional_telefono = p.telefono;
+		datos.profesional_direccion = p.direccion;
+		alCambiar();
+	}
+
 	function precargarProfesional() {
 		const u = sesion.usuario;
 		if (!u || u.rol !== ROLES.INSPECTOR) return;
@@ -345,6 +446,10 @@
 
 		evidencias = new GestorEvidencias({ INSPECCION: catalogos.limites.fotos }, borrador.clave);
 		detenerEvidencias = evidencias.iniciar();
+
+		// Sin `await`: es una comodidad, no un requisito. Que tarde —o que no
+		// llegue por falta de señal— no puede retrasar el dibujo del formato.
+		void cargarProfesionales();
 
 		const previo = leerBorrador();
 
@@ -635,15 +740,45 @@
 						max={hoy()}
 						alCambiar={alCambiar}
 					/>
-					<CampoTexto
-						id="profesional_nombre"
-						etiqueta="Nombre del profesional responsable"
-						marcador="Ej.: Ana María Ruiz Cadavid"
-						bind:valor={datos.profesional_nombre}
-						error={errores.profesional_nombre}
-						requerido
-						alCambiar={alCambiar}
-					/>
+					<!--
+						El nombre se ELIGE cuando hay a quién elegir, y se escribe cuando
+						no. Al elegir se trae el numeral 1 entero —profesión, tarjeta,
+						cédula—, que es justo lo que nadie recuerda de memoria delante de
+						una casa.
+
+						El campo de texto no desaparece: sigue ahí para quien no está en la
+						lista, y también cuando se recupera un borrador con un nombre que
+						ya no corresponde a ningún usuario. Perder un nombre ya escrito
+						porque el desplegable no lo reconoce sería peor que no tener
+						desplegable.
+					-->
+					{#if profesionales.length > 0 && !profesionalAMano}
+						<CampoSelect
+							id="profesional_nombre_lista"
+							etiqueta="Nombre del profesional responsable"
+							valor={profesionalElegido === null ? '' : String(profesionalElegido)}
+							opciones={opcionesProfesional}
+							error={errores.profesional_nombre}
+							requerido
+							ayuda="Al elegirlo se traen su profesión, su tarjeta y su cédula. Todo se puede corregir."
+							alElegir={elegirProfesional}
+						/>
+					{:else}
+						<CampoTexto
+							id="profesional_nombre"
+							etiqueta="Nombre del profesional responsable"
+							marcador="Ej.: Ana María Ruiz Cadavid"
+							bind:valor={datos.profesional_nombre}
+							error={errores.profesional_nombre}
+							requerido
+							alCambiar={alCambiar}
+						/>
+						{#if profesionales.length > 0}
+							<button type="button" class="enlace-suave" onclick={() => (profesionalAMano = false)}>
+								Elegir de la lista de profesionales
+							</button>
+						{/if}
+					{/if}
 					<CampoSelect
 						id="profesional_profesion"
 						etiqueta="Profesión"
@@ -1123,6 +1258,22 @@
 </div>
 
 <style>
+	/* Volver al desplegable. Va como enlace y no como botón porque es una salida
+	   de emergencia del camino normal, no una acción del formulario: compitiendo
+	   con «Siguiente» se pulsaría por error. */
+	.enlace-suave {
+		align-self: flex-start;
+		margin: -0.35rem 0 0.4rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--color-primary);
+		font: inherit;
+		font-size: 0.82rem;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
 	/* El menú, la barra superior y el fondo los pone el armazón del sistema; aquí
 	   solo se limita el ancho, igual que en el formulario del RUFE, para que las
 	   dos pantallas de campo se vean iguales y las líneas no queden ilegibles en
