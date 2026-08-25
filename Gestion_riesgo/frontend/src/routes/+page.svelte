@@ -18,5 +18,5 @@
 
 <div class="cargando" style="min-height:60vh">
 	<LoaderCircle size={20} class="girando" aria-hidden="true" />
-	Abriendo el tablero…
+	Abriendo el sistema…
 </div>
