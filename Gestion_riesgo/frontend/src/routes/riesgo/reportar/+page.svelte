@@ -650,7 +650,7 @@
 			<!-- La lista misma, no un enlace a otra pantalla. Quien acaba de guardar
 			     sin señal quiere ver que su ficha está ahí, no que le prometan que
 			     está en otro sitio. -->
-			<ColaDeEnvio formato="RUFE" mostrarVacio />
+			<ColaDeEnvio {envio} formato="RUFE" mostrarVacio />
 		{:else if catalogos}
 			{#if borrador.otraPestana}
 				<div class="aviso aviso--error" role="alert">
@@ -680,7 +680,8 @@
 				<!-- La cola vive aquí, junto a los borradores a medias. Antes era una
 				     pantalla aparte colgada del menú, y el censador tenía que acordarse
 				     de que existía otro sitio donde comprobar si su trabajo salió. -->
-				<ColaDeEnvio formato="RUFE" />
+				<ColaDeEnvio {envio} formato="RUFE" />
+				<ListoSinSenal />
 
 				<div class="intro">
 					<h1 class="intro__titulo">Registrar un RUFE</h1>

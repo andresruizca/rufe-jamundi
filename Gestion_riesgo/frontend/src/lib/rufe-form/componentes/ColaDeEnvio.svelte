@@ -16,7 +16,7 @@
 	// Lee de IndexedDB, no de la API: funciona en plena vereda, sin señal, que es
 	// justo cuando hace falta.
 
-	import { onDestroy, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
 		CheckCircle2,
@@ -38,6 +38,17 @@
 	import { aparato } from '$lib/aparato';
 
 	type Props = {
+		/**
+		 * El gestor de envío de la página, NO uno propio.
+		 *
+		 * Crear otro aquí ponía dos en marcha en la misma pantalla, cada uno con
+		 * su latido de reintento cada 30 segundos. El seguro contra envíos
+		 * simultáneos es `estado === 'enviando'`, y es POR INSTANCIA: dos gestores
+		 * pueden mandar la misma ficha a la vez. La API es idempotente por
+		 * `envio_id` y no se duplicaría el expediente, pero se gastarían datos
+		 * móviles por partida doble en una vereda.
+		 */
+		envio: GestorEnvio;
 		formato: TipoFicha;
 		/** Palabra con la que se nombra una ficha de este formato, en singular. */
 		nombre?: string;
@@ -51,7 +62,7 @@
 		mostrarVacio?: boolean;
 	};
 
-	let { formato, nombre = 'ficha', mostrarVacio = false }: Props = $props();
+	let { envio, formato, nombre = 'ficha', mostrarVacio = false }: Props = $props();
 
 	const cual = aparato();
 
@@ -59,9 +70,6 @@
 	let fotosPorFicha = $state<Record<string, number>>({});
 	let enLinea = $state(true);
 	let confirmandoBorrado = $state<string | null>(null);
-
-	const envio = new GestorEnvio();
-	let detener: (() => void) | null = null;
 
 	const plural = $derived(nombre === 'ficha' ? 'fichas' : `${nombre}s`);
 
@@ -77,7 +85,6 @@
 		window.addEventListener('online', conectar);
 		window.addEventListener('offline', desconectar);
 
-		detener = envio.iniciar();
 		void refrescar();
 
 		// La cola la mueve el Service Worker por su cuenta; sin releer cada tanto,
@@ -90,8 +97,6 @@
 			clearInterval(latido);
 		};
 	});
-
-	onDestroy(() => detener?.());
 
 	async function refrescar() {
 		if (!browser) return;

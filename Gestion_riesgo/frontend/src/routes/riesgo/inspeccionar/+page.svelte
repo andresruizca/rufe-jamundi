@@ -768,7 +768,7 @@
 				<p class="cierre__motivo">{enviado.motivo}</p>
 			{/if}
 
-			<ColaDeEnvio formato="INSPECCION" nombre="inspección" mostrarVacio />
+			<ColaDeEnvio {envio} formato="INSPECCION" nombre="inspección" mostrarVacio />
 
 			<div class="cierre__acciones">
 				<button type="button" class="boton boton--principal" onclick={() => empezarUnaNueva()}>
@@ -778,6 +778,22 @@
 			</div>
 		</div>
 	{:else if catalogos && paso}
+		<!--
+			Lo que ya se terminó y todavía no salió del aparato.
+
+			Va fuera del `{#if}` de los borradores a propósito: estaba dentro y solo
+			se veía cuando además había alguna inspección a medias. Quien terminó
+			todas sus fichas pero ninguna llegó a la Alcaldía es justamente el caso
+			en que hay algo que contar, y era el único que no lo veía.
+
+			Solo al principio del formato: seguir al profesional por los diez pasos
+			sería estorbar mientras evalúa una casa.
+		-->
+		{#if indice === 0}
+			<ColaDeEnvio {envio} formato="INSPECCION" nombre="inspección" />
+			<ListoSinSenal />
+		{/if}
+
 		{#if borradoresPrevios.length > 0}
 			<!--
 				La lista de lo que quedó a medias.
@@ -894,12 +910,6 @@
 						cambian.
 					</span>
 				</p>
-
-				<!-- Las que ya se terminaron y todavía no salieron del aparato. Van
-				     aquí, junto a las de a medias, porque la pregunta es la misma:
-				     «¿qué me falta de lo de hoy?». -->
-				<ColaDeEnvio formato="INSPECCION" nombre="inspección" />
-				<ListoSinSenal />
 			</div>
 		{:else}
 			<div class="tarjeta">
