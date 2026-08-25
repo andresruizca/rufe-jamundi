@@ -12,7 +12,9 @@ import {
 	menuParaRol,
 	puedeAcceder,
 	resolverTitulo,
-	type Rol
+	type Rol,
+	inicioPara,
+	TODOS
 } from './navigation';
 
 describe('rutas públicas', () => {
@@ -226,6 +228,36 @@ describe('menú por rol', () => {
 	});
 });
 
+describe('a dónde entra cada rol', () => {
+	// La prueba que habría impedido el bucle.
+	//
+	// Los tres sitios que redirigen mandaban al tablero escrito a mano, y el
+	// tablero está vedado al inspector y al operador: la guardia los mandaba
+	// allí, allí los rechazaban, y la guardia los volvía a mandar. No se salía.
+	it('todos los roles entran a una pantalla que SÍ pueden abrir', () => {
+		for (const rol of TODOS) {
+			const destino = inicioPara(rol);
+
+			expect(destino, rol).not.toBe('/login');
+			expect(puedeAcceder(destino, rol), `${rol} → ${destino}`).toBe(true);
+		}
+	});
+
+	it('el inspector y el operador NO acaban en el tablero', () => {
+		// Es el caso concreto que fallaba. Escrito aparte para que se lea qué se
+		// rompió, no solo que algo se rompía.
+		expect(puedeAcceder('/dashboard', 'INSPECTOR')).toBe(false);
+		expect(puedeAcceder('/dashboard', 'OPERADOR')).toBe(false);
+
+		expect(inicioPara('INSPECTOR')).toBe('/riesgo/inspeccionar');
+		expect(inicioPara('OPERADOR')).toBe('/riesgo/callcenter');
+	});
+
+	it('sin sesión, al login', () => {
+		expect(inicioPara(null)).toBe('/login');
+	});
+});
+
 describe('títulos', () => {
 	it('cada ruta registrada resuelve a su título', () => {
 		expect(resolverTitulo('/riesgo/reportar')).toBe(
@@ -236,23 +268,32 @@ describe('títulos', () => {
 });
 
 describe('rutas que funcionan sin conexión', () => {
-	it('son exactamente las del trabajo de campo', () => {
+	it('son exactamente estas', () => {
 		// Ampliar esta lista abre una pantalla sin que el servidor haya confirmado
-		// la sesión. Que obligue a tocar la prueba es justamente la intención: la
-		// inspección se sumó a conciencia, porque su formato entero —criterios del
-		// Anexo 1 y materiales del Anexo 2— viaja en los catálogos guardados.
-		expect(RUTAS_SIN_CONEXION).toEqual(['/riesgo/reportar', '/riesgo/inspeccionar']);
-	});
-
-	it('las secciones que leen del servidor no están', () => {
-		for (const ruta of [
+		// la sesión. Que obligue a tocar la prueba es justamente la intención.
+		//
+		// Las de consulta se sumaron a conciencia, cuando la Alcaldía pidió que el
+		// sistema entero funcionara sin señal. No descargan nada por adelantado:
+		// se dibujan solo si sus datos quedaron guardados de una visita anterior,
+		// dicen de cuándo son, y caducan a las 24 h.
+		expect(RUTAS_SIN_CONEXION).toEqual([
+			'/riesgo/reportar',
+			'/riesgo/inspeccionar',
 			'/dashboard',
 			'/riesgo/reportes',
 			'/riesgo/inspecciones',
+			'/riesgo/preinscripciones',
 			'/riesgo/mapas',
-			'/admin/usuarios'
-		]) {
-			expect(funcionaSinConexion(ruta)).toBe(false);
+			'/riesgo/callcenter'
+		]);
+	});
+
+	it('la administración NO está, ni lo estará', () => {
+		// Crear usuarios, restablecer contraseñas o tocar el catálogo de videos
+		// son operaciones de escritura contra el servidor: sin él no hay nada que
+		// hacer, y abrir la pantalla solo prometería algo que va a fallar.
+		for (const ruta of ['/admin/usuarios', '/admin/ubicaciones', '/admin/videos']) {
+			expect(funcionaSinConexion(ruta), ruta).toBe(false);
 		}
 	});
 

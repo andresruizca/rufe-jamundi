@@ -4,7 +4,7 @@
   "description": "Registro Unifamiliar de Emergencias y tablero de la Alcaldía Municipal de Jamundí.",
   "lang": "es-CO",
   "dir": "ltr",
-  "start_url": "/riesgo/reportar",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

@@ -9,9 +9,16 @@
 	import MenuLateral from '$lib/components/layout/MenuLateral.svelte';
 	import BotonArriba from '$lib/components/layout/BotonArriba.svelte';
 	import escudo from '$lib/assets/logo-jamundi.svg';
-	import { resolverTitulo, puedeAcceder, esRutaPublica, funcionaSinConexion } from '$lib/navigation';
+	import {
+		resolverTitulo,
+		puedeAcceder,
+		esRutaPublica,
+		funcionaSinConexion,
+		inicioPara
+	} from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { aparato } from '$lib/aparato';
+	import { comoSeLee, datosGuardados } from '$lib/offline/guardado.svelte';
 
 	let { children } = $props();
 
@@ -48,7 +55,7 @@
 	 * escribir, al tablero, que al menos le explicará que necesita conexión.
 	 */
 	const inicioSinConexion = $derived(
-		puedeAcceder('/riesgo/reportar', sesion.rol) ? '/riesgo/reportar' : '/dashboard'
+		puedeAcceder('/riesgo/reportar', sesion.rol) ? '/riesgo/reportar' : inicioPara(sesion.rol)
 	);
 
 	/**
@@ -149,7 +156,15 @@
 		}
 
 		if (!puedeAcceder(ruta, sesion.rol)) {
-			void goto('/dashboard', { replaceState: true });
+			// A su inicio, no al tablero: el tablero está vedado al inspector y al
+			// operador, y mandarlos allí los devolvía aquí en un bucle.
+			const destino = inicioPara(sesion.rol);
+
+			// El guardarraíl: si el destino tampoco fuera accesible, redirigir sería
+			// volver a entrar aquí para siempre. Antes que eso, la sesión.
+			void goto(puedeAcceder(destino, sesion.rol) ? destino : '/login', {
+				replaceState: true
+			});
 		}
 	});
 
@@ -244,6 +259,16 @@
 					<span>
 						Sin conexión. Las fichas se guardan en {cual.el} y se envían solas cuando vuelva la
 						señal.
+						{#if datosGuardados.cuando}
+							<!--
+								De cuándo es lo que se está viendo. Se decide sobre familias
+								damnificadas: mirar el estado de anteayer creyendo que es el de
+								hoy es peor que no verlo.
+							-->
+							<strong class="aviso-sin-red__fecha">
+								Lo que ve está {comoSeLee(datosGuardados.cuando)}.
+							</strong>
+						{/if}
 					</span>
 				</p>
 			{/if}

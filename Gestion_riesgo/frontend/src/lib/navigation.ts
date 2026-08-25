@@ -73,11 +73,27 @@ export function esRutaPublica(ruta: string): boolean {
  * un solo archivo, no un `if` escondido en el layout.
  */
 export const RUTAS_SIN_CONEXION: string[] = [
+	// Levantar fichas: es el trabajo de campo y siempre funcionó sin señal.
 	'/riesgo/reportar',
 	// La inspección también se levanta en campo, y su formato viaja entero en
 	// los catálogos —criterios del Anexo 1 y materiales del Anexo 2 incluidos—
 	// justamente para que no haga falta señal.
-	'/riesgo/inspeccionar'
+	'/riesgo/inspeccionar',
+
+	// ── Consultar, desde que la Alcaldía pidió el sistema entero sin señal ────
+	//
+	// Estas pantallas solo se dibujan si sus datos están guardados de una visita
+	// anterior; no se descarga nada por adelantado. Cuando se sirven de la copia
+	// lo dicen, con la fecha, y lo guardado caduca a las 24 h.
+	//
+	// El coste está asumido y escrito: el censo que alguien consulte vive en su
+	// aparato hasta que cierre sesión. Ver `docs/offline.md`.
+	'/dashboard',
+	'/riesgo/reportes',
+	'/riesgo/inspecciones',
+	'/riesgo/preinscripciones',
+	'/riesgo/mapas',
+	'/riesgo/callcenter'
 ];
 
 export function funcionaSinConexion(ruta: string): boolean {
@@ -432,4 +448,35 @@ export function puedeAcceder(ruta: string, rol: Rol | null): boolean {
 	if (!item) return true;
 
 	return item.roles.includes(rol);
+}
+
+/**
+ * A dónde llevar a alguien de este rol cuando no hay una ruta concreta.
+ *
+ * ⚠ NO puede ser `/dashboard` escrito a mano, que es lo que había en los tres
+ * sitios que llaman aquí.
+ *
+ * El tablero está protegido por `LECTURA_RUFE`, y ni el inspector de vivienda ni
+ * el operador de call center están en esa lista. La guardia los mandaba al
+ * tablero, el tablero los rechazaba, la guardia los volvía a mandar: un bucle de
+ * redirección del que no se sale. El inspector ya lo sufría antes de que
+ * existiera el call center.
+ *
+ * Se deriva del MISMO registro que dibuja el menú, así que un rol nuevo tiene
+ * su sitio sin que nadie se acuerde de tocar esto: es el primer enlace que ese
+ * rol vería al abrir el menú.
+ *
+ * Sin rol, al login. Y si un rol no tuviera ningún enlace —no debería pasar,
+ * pero un catálogo mal editado lo haría posible—, también al login: es preferible
+ * pedir sesión otra vez a dejar a alguien girando en el vacío.
+ */
+export function inicioPara(rol: Rol | null): string {
+	if (!rol) return '/login';
+
+	for (const item of NAV_ITEMS) {
+		if (item.type !== 'item' || !item.href) continue;
+		if (item.roles.includes(rol)) return item.href;
+	}
+
+	return '/login';
 }

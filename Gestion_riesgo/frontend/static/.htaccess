@@ -28,6 +28,14 @@ DirectoryIndex index.html
     application/javascript application/json image/svg+xml
 </IfModule>
 
+# Apache no conoce `.webmanifest` y lo servía SIN Content-Type. Chrome lo
+# tolera; Safari y las herramientas de auditoría no tienen por qué. Es el
+# archivo que decide cómo se instala la aplicación: conviene que se anuncie por
+# lo que es.
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
 <IfModule mod_headers.c>
   # Los assets de /_app/immutable llevan hash en el nombre: nunca cambian.
   <FilesMatch "\.(js|css|woff2)$">

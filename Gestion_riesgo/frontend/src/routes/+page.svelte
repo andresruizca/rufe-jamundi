@@ -2,11 +2,17 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { LoaderCircle } from '@lucide/svelte';
+	import { inicioPara } from '$lib/navigation';
+	import { sesion } from '$lib/stores/sesion.svelte';
 
 	// La raíz no tiene contenido propio: el layout ya decide si hay sesión, y
-	// aquí solo se manda al tablero (o al login, si el layout lo redirige).
+	// aquí solo se manda a donde ese rol pueda entrar.
+	//
+	// Antes mandaba al tablero escrito a mano, y el tablero está vedado al
+	// inspector de vivienda y al operador de call center: los mandaba allí, allí
+	// los rechazaban, y vuelta a empezar.
 	onMount(() => {
-		void goto('/dashboard', { replaceState: true });
+		void goto(inicioPara(sesion.rol), { replaceState: true });
 	});
 </script>
 

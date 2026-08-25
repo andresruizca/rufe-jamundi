@@ -171,8 +171,11 @@ sw.addEventListener('fetch', (evento) => {
 
 	if (url.pathname.startsWith('/api/')) {
 		// De la API solo se guarda lo que está en la lista, y nada más.
+		// La clave incluye la CONSULTA: `?estado=RECIBIDA` y `?estado=CONVERTIDA`
+		// son dos bandejas distintas, y guardarlas bajo la misma ruta haría que
+		// una filtrada enseñara los resultados de la otra.
 		if (seGuardaDeLaApi(url.pathname)) {
-			e.respondWith(responderCatalogos(peticion, url));
+			e.respondWith(responderConsulta(peticion, url.pathname + url.search));
 		}
 
 		return;
@@ -182,27 +185,79 @@ sw.addEventListener('fetch', (evento) => {
 });
 
 /**
- * Los catálogos: primero la red, y si no hay, la copia guardada.
+ * Cuánto vale una respuesta guardada.
  *
- * En ese orden porque un catálogo nuevo —un corregimiento que se suma, un tipo
- * de bien que se corrige— debe verse en cuanto haya señal. La copia es la red de
- * seguridad para la vereda, no la fuente habitual.
+ * A las 24 h deja de servirse. Un dato de hace una semana sobre un hogar
+ * damnificado —su estado, si ya se inspeccionó, si se le entregaron
+ * materiales— es peor que no tener dato: se decide sobre una familia creyendo
+ * saber algo que ya no es cierto.
  */
-async function responderCatalogos(peticion: Request, url: URL): Promise<Response> {
+const VIGENCIA_MS = 24 * 60 * 60 * 1000;
+
+/** Cuándo se guardó. La lee la página para poder decirlo en pantalla. */
+const CABECERA_FECHA = 'X-SGR-Guardado';
+
+/**
+ * Una consulta al API: primero la red, y si no hay, la copia guardada.
+ *
+ * En ese orden porque un dato nuevo —una ficha que cambió de estado, un
+ * corregimiento que se suma— debe verse en cuanto haya señal. La copia es la red
+ * de seguridad para la vereda, no la fuente habitual.
+ *
+ * Lo guardado se marca con la fecha y caduca. Las dos cosas son deliberadas:
+ * desde que el sistema entero funciona sin señal, en el aparato vive el censo
+ * que esa persona consultó, y quien lo mira tiene derecho a saber de cuándo es.
+ */
+async function responderConsulta(peticion: Request, clave: string): Promise<Response> {
 	const cache = await caches.open(CACHE_DATOS);
 
 	try {
 		const red = await fetch(peticion);
 
-		if (red.ok) void cache.put(url.pathname, red.clone());
+		if (red.ok) {
+			// Se guarda una COPIA con la fecha añadida; lo que va a la página es la
+			// respuesta de red tal cual. `Response` solo se puede leer una vez, de
+			// ahí el `clone()`.
+			const conFecha = new Response(red.clone().body, {
+				status: red.status,
+                statusText: red.statusText,
+				headers: new Headers(red.headers)
+			});
+
+			conFecha.headers.set(CABECERA_FECHA, new Date().toISOString());
+			void cache.put(clave, conFecha);
+		}
 
 		return red;
 	} catch {
-		const guardado = await cache.match(url.pathname);
-		if (guardado) return guardado;
+		const guardado = await cache.match(clave);
 
-		throw new Error('Sin conexión y sin catálogos guardados.');
+		if (guardado) {
+			const cuando = guardado.headers.get(CABECERA_FECHA);
+			const vieja = cuando !== null && Date.now() - Date.parse(cuando) > VIGENCIA_MS;
+
+			// Sin fecha es de una versión anterior del Service Worker: se sirve, que
+			// es lo que la persona espera, pero no se puede decir de cuándo.
+			if (!vieja) return guardado;
+
+			// Caducada: se tira. Dejarla ocupando sitio solo aplazaría el problema
+			// hasta que alguien la viera creyendo que es de hoy.
+			void cache.delete(clave);
+		}
+
+		throw new Error('Sin conexión y sin copia guardada.');
 	}
+}
+
+/**
+ * Vacía lo guardado del API.
+ *
+ * La pide la página al cerrar sesión, incluida la sesión que caduca sola. Es la
+ * salvaguarda que impide que un teléfono prestado —o el de alguien que dejó el
+ * contrato— conserve el censo que su antiguo dueño consultó.
+ */
+async function vaciarDatos(): Promise<void> {
+	await caches.delete(CACHE_DATOS);
 }
 
 async function responder(peticion: Request, url: URL): Promise<Response> {
@@ -262,6 +317,14 @@ sw.addEventListener('message', (evento) => {
 	if (evento.data?.tipo === 'enviar-pendientes') {
 		evento.waitUntil?.(enviarPendientes());
 		void enviarPendientes();
+	}
+
+	// Al cerrar sesión. `waitUntil` no es adorno: sin él el navegador puede
+	// apagar el Service Worker antes de terminar de borrar, y el censo se
+	// quedaría a medio vaciar en el aparato.
+	if (evento.data?.tipo === 'vaciar-datos') {
+		evento.waitUntil?.(vaciarDatos());
+		void vaciarDatos();
 	}
 });
 

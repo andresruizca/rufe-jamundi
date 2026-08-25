@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { datosGuardados } from '$lib/offline/guardado.svelte';
 import { borrarSesionGuardada } from '$lib/stores/sesionCache';
 
 /**
@@ -37,6 +38,20 @@ export function borrarToken(): void {
 	// sistema arrancando sin conexión con una identidad cuya credencial ya no
 	// existe: el formulario se dibujaría y el envío fallaría después.
 	borrarSesionGuardada();
+
+	// Y con ellos, lo que se haya guardado del censo para trabajar sin señal.
+	//
+	// Es la salvaguarda del modo sin conexión ampliado: desde que las consultas
+	// se guardan, en el aparato vive el censo que esa persona miró. Un teléfono
+	// prestado, o el de alguien que terminó su contrato, no puede conservarlo
+	// después de cerrar sesión.
+	//
+	// Pasa por AQUÍ y no por el botón de salir a propósito: esta función es
+	// también la que se llama cuando el servidor responde 401 y la sesión se cae
+	// sola. Ponerlo en el botón dejaría fuera justo el caso que nadie decide.
+	if (browser) {
+		navigator.serviceWorker?.controller?.postMessage({ tipo: 'vaciar-datos' });
+	}
 }
 
 /** Error de la API con el estado HTTP y los errores por campo. */
@@ -79,6 +94,13 @@ async function request<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
 		// mensaje evita culpar al servidor cuando puede ser la conexión.
 		throw new ApiError('No se pudo conectar con el servidor. Revisa tu conexión.', 0);
 	}
+
+	// ¿Esto vino de la copia guardada en el aparato? Lo marca el Service Worker,
+	// y el armazón lo enseña. Va aquí, en el único sitio por donde pasan TODAS
+	// las peticiones: en cada pantalla habría que acordarse, y bastaría con
+	// olvidarlo en una para que alguien decidiera sobre una familia creyendo que
+	// ve el estado de hoy.
+	datosGuardados.anotar(respuesta);
 
 	if (respuesta.status === 204) return undefined as T;
 

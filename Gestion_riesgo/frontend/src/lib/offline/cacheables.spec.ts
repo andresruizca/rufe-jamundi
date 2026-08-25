@@ -1,46 +1,86 @@
-// La regla que separa lo que el teléfono puede guardar de lo que no.
+// Qué se guarda del API en el aparato, y sobre todo qué NO.
 //
-// Se prueba porque un descuido aquí no se ve: la aplicación seguiría
-// funcionando igual, solo que con fichas de hogares damnificados guardadas en un
-// teléfono que puede perderse o prestarse.
+// Desde que la Alcaldía pidió que el sistema entero funcione sin señal, el censo
+// que alguien consulta vive en su teléfono. Estas pruebas son el límite de esa
+// decisión: lo que aquí se rechace no puede acabar en un aparato prestado.
 
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { API_CACHEABLE, seGuardaDeLaApi } from './cacheables';
 
-describe('seGuardaDeLaApi', () => {
-	it('guarda los catálogos, sin los cuales no hay formulario sin señal', () => {
+describe('lo que SÍ se guarda', () => {
+	it('los catálogos de los dos formatos, sin los que no hay formulario', () => {
 		expect(seGuardaDeLaApi('/api/rufe/catalogos')).toBe(true);
 		expect(seGuardaDeLaApi('/api/inspeccion/catalogos')).toBe(true);
 	});
 
-	it('NO guarda nada que lleve datos de personas', () => {
-		for (const ruta of [
-			'/api/rufe/reportes',
-			'/api/rufe/reportes/9',
-			'/api/usuarios',
-			'/api/mapa/fichas',
-			'/api/inspeccion/fichas',
-			'/api/inspeccion/fichas/3',
-			'/api/inspeccion/duplicados',
-			'/api/auth/me',
-			'/api/rufe/reportes?buscar=cedula'
-		]) {
-			expect(seGuardaDeLaApi(ruta)).toBe(false);
-		}
+	it('las bandejas y las fichas que se consultan', () => {
+		expect(seGuardaDeLaApi('/api/rufe/reportes')).toBe(true);
+		expect(seGuardaDeLaApi('/api/rufe/reportes/128')).toBe(true);
+		expect(seGuardaDeLaApi('/api/inspeccion/fichas/7')).toBe(true);
+		expect(seGuardaDeLaApi('/api/preinscripcion/fichas/3')).toBe(true);
+		expect(seGuardaDeLaApi('/api/mapa/fichas')).toBe(true);
+		expect(seGuardaDeLaApi('/api/callcenter/hogares')).toBe(true);
 	});
 
-	it('no cae en la trampa del prefijo', () => {
-		// Si mañana existe una ruta que cuelgue de los catálogos y sí lleve datos,
-		// no debe entrar en la caché por parecerse en el nombre.
+	it('quién soy: sin eso, abrir sin señal no sabe ni qué menú dibujar', () => {
+		expect(seGuardaDeLaApi('/api/auth/me')).toBe(true);
+	});
+});
+
+describe('lo que NUNCA se guarda', () => {
+	it('las evidencias: la foto de una cédula no se queda en un teléfono', () => {
+		// Es el dato más sensible del sistema y pesa megabytes. Que la ficha se
+		// guarde no autoriza a guardar sus archivos.
+		expect(seGuardaDeLaApi('/api/rufe/reportes/128/evidencias/9')).toBe(false);
+		expect(seGuardaDeLaApi('/api/preinscripcion/fichas/3/fotos/1')).toBe(false);
+		expect(seGuardaDeLaApi('/api/preinscripcion/fichas/3/videos/2')).toBe(false);
+		expect(seGuardaDeLaApi('/api/inspeccion/fichas/7/fotos/4')).toBe(false);
+	});
+
+	it('el login y el cambio de contraseña', () => {
+		expect(seGuardaDeLaApi('/api/auth/login')).toBe(false);
+		expect(seGuardaDeLaApi('/api/auth/password')).toBe(false);
+		expect(seGuardaDeLaApi('/api/auth/logout')).toBe(false);
+	});
+
+	it('la administración de usuarios', () => {
+		expect(seGuardaDeLaApi('/api/usuarios')).toBe(false);
+		expect(seGuardaDeLaApi('/api/usuarios/4')).toBe(false);
+	});
+
+	it('lo que no está en la lista, aunque se le parezca', () => {
+		expect(seGuardaDeLaApi('/api/rufe/reportes/128/estado')).toBe(false);
+		expect(seGuardaDeLaApi('/api/sistema/actualizaciones')).toBe(false);
+	});
+});
+
+describe('cómo se compara', () => {
+	it('el comodín cubre UN tramo, no una rama entera', () => {
+		// Con un prefijo suelto, añadir mañana una ruta bajo `/fichas/` la metería
+		// en la caché sin que nadie hubiera decidido nada.
+		expect(seGuardaDeLaApi('/api/inspeccion/fichas/7')).toBe(true);
+		expect(seGuardaDeLaApi('/api/inspeccion/fichas/7/algo')).toBe(false);
+	});
+
+	it('y no casa con un tramo vacío', () => {
+		expect(seGuardaDeLaApi('/api/inspeccion/fichas/')).toBe(false);
+	});
+
+	it('la ruta se compara entera, no por su comienzo', () => {
 		expect(seGuardaDeLaApi('/api/rufe/catalogos/personas')).toBe(false);
-		expect(seGuardaDeLaApi('/api/rufe/catalogos-privados')).toBe(false);
+		expect(seGuardaDeLaApi('/otro/api/rufe/catalogos')).toBe(false);
+	});
+});
+
+describe('la lista', () => {
+	it('no lleva nada de auth salvo saber quién soy', () => {
+		// Un despiste aquí es una respuesta de login guardada en un aparato.
+		const deAuth = API_CACHEABLE.filter((r) => r.startsWith('/api/auth/'));
+
+		expect(deAuth).toEqual(['/api/auth/me']);
 	});
 
-	it('la lista se mantiene mínima a propósito', () => {
-		// Que crecer la lista obligue a tocar esta prueba es el punto: cada entrada
-		// nueva es una decisión sobre datos personales, no un detalle técnico.
-		// Las dos que hay son catálogos de formato: opciones, límites y los anexos
-		// de la norma. Ninguna trae el nombre de nadie.
-		expect(API_CACHEABLE).toEqual(['/api/rufe/catalogos', '/api/inspeccion/catalogos']);
+	it('no lleva ninguna ruta de archivos', () => {
+		expect(API_CACHEABLE.filter((r) => /fotos|videos|evidencias|archivos/.test(r))).toEqual([]);
 	});
 });
