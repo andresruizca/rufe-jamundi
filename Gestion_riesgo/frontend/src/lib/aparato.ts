@@ -26,34 +26,34 @@ export type ClaveAparato = "telefono" | "tableta" | "equipo";
  * «esta teléfono» que nadie revisa.
  */
 export type Aparato = {
-  clave: ClaveAparato;
-  /** «teléfono» */
-  nombre: string;
-  /** «este teléfono» */
-  este: string;
-  /** «el teléfono» */
-  el: string;
+	clave: ClaveAparato;
+	/** «teléfono» */
+	nombre: string;
+	/** «este teléfono» */
+	este: string;
+	/** «el teléfono» */
+	el: string;
 };
 
 const APARATOS: Record<ClaveAparato, Aparato> = {
-  telefono: {
-    clave: "telefono",
-    nombre: "teléfono",
-    este: "este teléfono",
-    el: "el teléfono",
-  },
-  tableta: {
-    clave: "tableta",
-    nombre: "tableta",
-    este: "esta tableta",
-    el: "la tableta",
-  },
-  equipo: {
-    clave: "equipo",
-    nombre: "equipo",
-    este: "este equipo",
-    el: "el equipo",
-  },
+	telefono: {
+		clave: "telefono",
+		nombre: "teléfono",
+		este: "este teléfono",
+		el: "el teléfono",
+	},
+	tableta: {
+		clave: "tableta",
+		nombre: "tableta",
+		este: "esta tableta",
+		el: "la tableta",
+	},
+	equipo: {
+		clave: "equipo",
+		nombre: "equipo",
+		este: "este equipo",
+		el: "el equipo",
+	},
 };
 
 /**
@@ -68,44 +68,44 @@ const APARATOS: Record<ClaveAparato, Aparato> = {
  *                     saben distinguir tabletas, no antes.
  */
 export function reconocerAparato(
-  ua: string,
-  tactil = 0,
-  movilDeclarado?: boolean,
+	ua: string,
+	tactil = 0,
+	movilDeclarado?: boolean,
 ): Aparato {
-  if (/iPhone|iPod/.test(ua)) return APARATOS.telefono;
-  if (/iPad/.test(ua)) return APARATOS.tableta;
+	if (/iPhone|iPod/.test(ua)) return APARATOS.telefono;
+	if (/iPad/.test(ua)) return APARATOS.tableta;
 
-  // El iPad se anuncia como Mac desde iPadOS 13 y no hay nada en el agente que
-  // lo delate salvo que tenga pantalla táctil. Un Mac de verdad responde 0.
-  if (/Macintosh/.test(ua) && tactil > 1) return APARATOS.tableta;
+	// El iPad se anuncia como Mac desde iPadOS 13 y no hay nada en el agente que
+	// lo delate salvo que tenga pantalla táctil. Un Mac de verdad responde 0.
+	if (/Macintosh/.test(ua) && tactil > 1) return APARATOS.tableta;
 
-  // En Android la palabra «Mobile» es la que separa teléfono de tableta; el
-  // agente de una tableta trae «Android» y no la trae.
-  if (/Android/.test(ua))
-    return /Mobile/.test(ua) ? APARATOS.telefono : APARATOS.tableta;
+	// En Android la palabra «Mobile» es la que separa teléfono de tableta; el
+	// agente de una tableta trae «Android» y no la trae.
+	if (/Android/.test(ua))
+		return /Mobile/.test(ua) ? APARATOS.telefono : APARATOS.tableta;
 
-  if (/Tablet|PlayBook|Silk|Kindle/.test(ua)) return APARATOS.tableta;
-  if (/Mobi|Windows Phone|IEMobile|Opera Mini|BlackBerry/.test(ua))
-    return APARATOS.telefono;
+	if (/Tablet|PlayBook|Silk|Kindle/.test(ua)) return APARATOS.tableta;
+	if (/Mobi|Windows Phone|IEMobile|Opera Mini|BlackBerry/.test(ua))
+		return APARATOS.telefono;
 
-  if (movilDeclarado === true) return APARATOS.telefono;
+	if (movilDeclarado === true) return APARATOS.telefono;
 
-  return APARATOS.equipo;
+	return APARATOS.equipo;
 }
 
 /** Lo mismo, leyendo del navegador. En el servidor no hay aparato: se asume equipo. */
 export function aparato(): Aparato {
-  if (typeof navigator === "undefined") return APARATOS.equipo;
+	if (typeof navigator === "undefined") return APARATOS.equipo;
 
-  const datos = (
-    navigator as Navigator & { userAgentData?: { mobile?: boolean } }
-  ).userAgentData;
+	const datos = (
+		navigator as Navigator & { userAgentData?: { mobile?: boolean } }
+	).userAgentData;
 
-  return reconocerAparato(
-    navigator.userAgent,
-    navigator.maxTouchPoints ?? 0,
-    datos?.mobile,
-  );
+	return reconocerAparato(
+		navigator.userAgent,
+		navigator.maxTouchPoints ?? 0,
+		datos?.mobile,
+	);
 }
 
 /**
@@ -114,5 +114,5 @@ export function aparato(): Aparato {
  * reconoce «iPhone» o «iPad» antes que «este aparato».
  */
 export function nombreApple(a: Aparato = aparato()): string {
-  return a.clave === "tableta" ? "iPad" : "iPhone";
+	return a.clave === "tableta" ? "iPad" : "iPhone";
 }

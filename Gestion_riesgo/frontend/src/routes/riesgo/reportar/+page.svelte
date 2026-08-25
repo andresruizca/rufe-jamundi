@@ -22,13 +22,23 @@
 	import {
 		PASOS, PASOS_CON_PROGRESO, aCuerpoDeApi, etiquetaLugar, formularioVacio,
 		limpiarCondicionales, muestraAgropecuario, muestraCorregimiento,
-		muestraDireccionAlojamiento, muestraEventoOtro, personaVacia, renglonAgroVacio,
+		muestraDireccionAlojamiento, muestraEventoOtro, personaVacia, renglonAgroVacio, uid,
 		type IdPaso
 	} from '$lib/rufe-form/esquema';
 	import {
 		haceAnos, hoy as hoyISO, pasoDelError, validarPaso, validarTodo, type Errores
 	} from '$lib/rufe-form/validacion';
-	import { GestorBorrador, leerBorrador } from '$lib/rufe-form/borrador.svelte';
+	import {
+		GestorBorrador,
+		leerBorrador,
+		leerBorradores,
+		descartarBorrador,
+		senasDe,
+		haceCuanto,
+		diasQueLeQuedan,
+		type BorradorGuardado
+	} from '$lib/rufe-form/borrador.svelte';
+	import { borrarEvidenciasDe, leerEvidencias } from '$lib/rufe-form/almacen';
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import { GestorEnvio, hayFichasPendientes } from '$lib/rufe-form/envio.svelte';
 
@@ -66,7 +76,20 @@
 	 */
 	let guardadaSinEnviar = $state(false);
 	let enLinea = $state(true);
-	let hayBorradorPrevio = $state(false);
+	/**
+	 * Las fichas a medias que hay guardadas en este aparato.
+	 *
+	 * En plural: una brigada levanta varias casas seguidas y deja alguna sin
+	 * terminar porque falta un documento. Antes la siguiente pisaba a la
+	 * anterior.
+	 */
+	let borradoresPrevios = $state<BorradorGuardado[]>([]);
+
+	/** Cuál se está a punto de descartar, a la espera de confirmación. */
+	let confirmandoDescarte = $state<string | null>(null);
+
+	/** Cuántas fotos tiene cada una. Es lo que de verdad se pierde al descartar. */
+	let fotosPorBorrador = $state<Record<string, number>>({});
 	let ubicando = $state(false);
 	let avisoUbicacion = $state<string | null>(null);
 
@@ -143,34 +166,82 @@
 			return;
 		}
 
-		const previo = leerBorrador();
-		if (previo) {
-			hayBorradorPrevio = true;
-			borrador.clave = previo.clave;
-		} else {
-			// La emergencia que se atiende es una sola: precargarla ahorra dos campos
-			// a cada persona. Solo en un formulario nuevo — un borrador recuperado
-			// manda sobre esto, porque ahí el ciudadano ya decidió.
-			datos.evento = catalogos.predeterminados.evento;
-			datos.fecha_evento = catalogos.predeterminados.fecha_evento;
-		}
+		borradoresPrevios = leerBorradores();
+
+		if (borradoresPrevios.length > 0) void contarFotos();
+
+		// La emergencia que se atiende es una sola: precargarla ahorra dos campos
+		// a cada persona. Va siempre, porque detrás de la lista de borradores hay
+		// un formulario en blanco que también la necesita; si se retoma uno, sus
+		// datos mandan sobre esto porque el ciudadano ya decidió.
+		datos.evento = catalogos.predeterminados.evento;
+		datos.fecha_evento = catalogos.predeterminados.fecha_evento;
 
 		evidencias = GestorEvidencias.paraRufe(catalogos, borrador.clave);
 		detenerEvidencias = evidencias.iniciar();
 		cargando = false;
 	}
 
-	function continuarBorrador() {
-		const previo = leerBorrador();
-		if (!previo) return;
+	/**
+	 * Cuántas fotos guarda cada borrador.
+	 *
+	 * Se enseña antes de descartar porque es lo que de verdad se pierde: los
+	 * datos se vuelven a escribir, las fotos del daño exigen volver a la casa.
+	 */
+	async function contarFotos() {
+		const cuenta: Record<string, number> = {};
 
+		for (const b of borradoresPrevios) {
+			try {
+				cuenta[b.clave] = (await leerEvidencias(b.clave)).length;
+			} catch {
+				cuenta[b.clave] = 0;
+			}
+		}
+
+		fotosPorBorrador = cuenta;
+	}
+
+	function continuarBorrador(clave: string) {
+		const previo = leerBorrador(clave);
+		if (!previo || !catalogos) return;
+
+		borrador.clave = previo.clave;
 		datos = previo.datos;
 		afectacionAgro =
 			datos.tiene_afectacion_agro === null ? null : datos.tiene_afectacion_agro ? 'si' : 'no';
 		indice = Math.max(1, PASOS.findIndex((p) => p.id === previo.paso));
 		borrador.marcarRecuperado(previo.actualizado_en);
-		hayBorradorPrevio = false;
-		void evidencias?.restaurar();
+		borradoresPrevios = [];
+
+		// Las fotos viven atadas a la clave del borrador, así que el gestor se
+		// rehace con la clave recuperada antes de repoblar la lista.
+		detenerEvidencias?.();
+		evidencias = GestorEvidencias.paraRufe(catalogos, borrador.clave);
+		detenerEvidencias = evidencias.iniciar();
+		void evidencias.restaurar();
+	}
+
+	/**
+	 * Descarta una ficha a medias, con sus fotos.
+	 *
+	 * Las fotos viven en IndexedDB atadas a la clave del borrador y no se van
+	 * solas: sin esto quedan megabytes de fotos de casas ajenas en un aparato
+	 * que se presta.
+	 */
+	async function descartarUno(clave: string) {
+		descartarBorrador(clave);
+		confirmandoDescarte = null;
+
+		try {
+			await borrarEvidenciasDe(clave);
+		} catch {
+			// Si el navegador no deja tocar IndexedDB, la ficha ya se fue de la
+			// lista. No es motivo para dejar en pantalla una que se pidió
+			// descartar.
+		}
+
+		borradoresPrevios = leerBorradores();
 	}
 
 	/**
@@ -215,7 +286,41 @@
 		errores = {};
 		borrador.descartar();
 		await evidencias?.limpiar();
-		hayBorradorPrevio = false;
+		borradoresPrevios = [];
+		confirmandoDescarte = null;
+	}
+
+	/**
+	 * Una ficha más, sin tocar las que ya están guardadas.
+	 *
+	 * A diferencia de `empezarDeNuevo`, no descarta nada: estrena clave y deja
+	 * intactas las demás. Es lo que se pulsa desde la lista de pendientes.
+	 */
+	function empezarUnaNueva() {
+		datos = formularioVacio();
+
+		if (catalogos) {
+			datos.evento = catalogos.predeterminados.evento;
+			datos.fecha_evento = catalogos.predeterminados.fecha_evento;
+		}
+
+		afectacionAgro = null;
+		indice = 0;
+		errores = {};
+		borradoresPrevios = [];
+		confirmandoDescarte = null;
+
+		// Clave nueva: reutilizar la anterior arrastraría las fotos de la casa
+		// pasada y guardaría encima de su borrador.
+		borrador.clave = uid();
+		borrador.guardadoEn = null;
+		borrador.estado = 'sin-cambios';
+
+		if (catalogos) {
+			detenerEvidencias?.();
+			evidencias = GestorEvidencias.paraRufe(catalogos, borrador.clave);
+			detenerEvidencias = evidencias.iniciar();
+		}
 	}
 
 	// ── Autoguardado ────────────────────────────────────────────────────────
@@ -618,20 +723,117 @@
 
 					<AvisoDatos />
 
-					{#if hayBorradorPrevio}
+					{#if borradoresPrevios.length > 0}
+						<!--
+							Las fichas que quedaron a medias, cada una con su nombre.
+
+							Antes cabía una sola y decía «Hay una ficha sin terminar» sin
+							decir de quién: la única forma de saber qué se iba a perder era
+							abrirla. Una brigada levanta varias casas seguidas y deja alguna
+							pendiente porque falta un documento.
+						-->
 						<div class="recuperar">
 							<p class="recuperar__texto">
-								Hay una ficha sin terminar guardada en este dispositivo.
+								{borradoresPrevios.length === 1
+									? 'Tiene una ficha sin terminar en este dispositivo.'
+									: `Tiene ${borradoresPrevios.length} fichas sin terminar en este dispositivo.`}
+								Retome la que necesite o siga con esta: no se pisan entre ellas.
 							</p>
+
+							<ul class="pendientes">
+								{#each borradoresPrevios as b (b.clave)}
+									{@const senas = senasDe(b)}
+									{@const fotos = fotosPorBorrador[b.clave] ?? 0}
+									{@const dias = diasQueLeQuedan(b)}
+									<li class="pendiente">
+										<div class="pendiente__quien">
+											<span
+												class="pendiente__nombre"
+												class:pendiente__nombre--sin={senas.anonima}
+											>
+												{senas.titulo}
+											</span>
+											{#if senas.lugar}
+												<span class="pendiente__lugar">
+													<MapPin size={13} aria-hidden="true" />
+													{senas.lugar}
+												</span>
+											{/if}
+											<span class="pendiente__datos">
+												{haceCuanto(b.actualizado_en)}
+												{#if fotos > 0}
+													· {fotos === 1 ? '1 foto' : `${fotos} fotos`}
+												{/if}
+												{#if dias <= 2}
+													· <strong class="pendiente__caduca">
+														{dias <= 1 ? 'caduca hoy' : 'caduca en 2 días'}
+													</strong>
+												{/if}
+											</span>
+										</div>
+
+										{#if confirmandoDescarte === b.clave}
+											<!--
+												La confirmación dice lo que se pierde, no «¿está
+												seguro?». Los datos se vuelven a escribir; las fotos
+												del daño exigen volver a la casa.
+											-->
+											<div class="pendiente__confirmar">
+												<span>
+													Se borrará lo diligenciado{#if fotos > 0}
+														y {fotos === 1 ? 'su foto' : `sus ${fotos} fotos`}{/if}. No se
+													puede deshacer.
+												</span>
+												<div class="pendiente__acciones">
+													<button
+														type="button"
+														class="boton boton--peligro"
+														onclick={() => descartarUno(b.clave)}
+													>
+														<Trash2 size={14} aria-hidden="true" />
+														Sí, descartar
+													</button>
+													<button
+														type="button"
+														class="boton boton--suave"
+														onclick={() => (confirmandoDescarte = null)}
+													>
+														Conservarla
+													</button>
+												</div>
+											</div>
+										{:else}
+											<div class="pendiente__acciones">
+												<button
+													type="button"
+													class="boton"
+													onclick={() => continuarBorrador(b.clave)}
+												>
+													Retomar
+												</button>
+												<button
+													type="button"
+													class="boton boton--suave"
+													onclick={() => (confirmandoDescarte = b.clave)}
+												>
+													<Trash2 size={14} aria-hidden="true" />
+													Descartar
+												</button>
+											</div>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+
 							<div class="recuperar__acciones">
-								<button type="button" class="boton" onclick={continuarBorrador}>
-									Continuar esa ficha
-								</button>
-								<button type="button" class="boton boton--suave" onclick={empezarDeNuevo}>
-									<Trash2 size={15} aria-hidden="true" />
-									Empezar de nuevo
+								<button type="button" class="boton boton--suave" onclick={empezarUnaNueva}>
+									Seguir con una ficha nueva
 								</button>
 							</div>
+
+							<p class="pendientes__ojo">
+								Se guardan una semana en este dispositivo y no salen de aquí hasta que se envían.
+							</p>
 						</div>
 					{/if}
 				</div>
@@ -1049,6 +1251,90 @@
 </div>
 
 <style>
+	/* ── Las fichas a medias ────────────────────────────────────────────────
+	   Cada una es una tarjeta y no una fila de tabla: en un teléfono, tres
+	   columnas con dos botones al final acaban en una tabla que se desplaza a
+	   lo ancho, y el botón de descartar queda fuera de la vista. */
+	.pendientes {
+		list-style: none;
+		margin: 0.8rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.pendiente {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.7rem;
+		padding: 0.75rem 0.85rem;
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		background: var(--color-surface);
+	}
+
+	.pendiente__quien {
+		display: grid;
+		gap: 0.18rem;
+		min-width: 0;
+		flex: 1 1 14rem;
+	}
+
+	.pendiente__nombre {
+		font-weight: 600;
+		font-size: 0.94rem;
+		overflow-wrap: anywhere;
+	}
+
+	/* Sin datos todavía no es un nombre: en gris y cursiva para que no se lea
+	   como si el hogar se llamara así. */
+	.pendiente__nombre--sin {
+		font-weight: 500;
+		font-style: italic;
+		color: var(--color-muted);
+	}
+
+	.pendiente__lugar,
+	.pendiente__datos {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.79rem;
+		color: var(--color-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.pendiente__caduca {
+		color: var(--color-warning);
+	}
+
+	.pendiente__acciones {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+
+	.pendiente__confirmar {
+		display: grid;
+		gap: 0.5rem;
+		flex: 1 1 100%;
+		padding-top: 0.6rem;
+		border-top: 1px solid var(--color-border);
+		font-size: 0.82rem;
+		line-height: 1.45;
+		color: var(--color-text);
+	}
+
+	.pendientes__ojo {
+		margin: 0.75rem 0 0;
+		font-size: 0.77rem;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
+
 	/* El menú, la barra superior y el fondo los pone el armazón del sistema; aquí
 	   solo se limita el ancho para que las líneas no queden ilegibles en un
 	   monitor de escritorio. */

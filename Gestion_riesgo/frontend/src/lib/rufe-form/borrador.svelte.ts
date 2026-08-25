@@ -8,33 +8,42 @@
 // Las casillas de autorización se excluyen a propósito de lo que se guarda: el
 // consentimiento debe darse en la sesión del envío, no heredarse de un borrador
 // de hace tres días.
+//
+// ── Por qué caben VARIAS ─────────────────────────────────────────────────────
+//
+// Antes solo cabía una y la pantalla decía «Hay una ficha sin terminar» sin
+// decir de quién. Una brigada levanta varias casas seguidas y deja alguna a
+// medias porque falta un documento: con un solo borrador, la siguiente pisaba a
+// la anterior, y como no tenía nombre, la única forma de saber qué se iba a
+// perder era abrirla.
+//
+// La caja donde se guardan es la de `$lib/borradores`, la misma del formato de
+// inspección. Aquí queda lo propio del RUFE: qué campos no se persisten nunca y
+// con qué nombre se reconoce cada ficha.
 
 import { browser } from '$app/environment';
+import {
+	crearAlmacen,
+	diasQueLeQuedan as diasRestantes,
+	haceCuanto,
+	type BorradorBase
+} from '$lib/borradores';
 import type { FormularioRufe } from './tipos';
 import type { IdPaso } from './esquema';
 import { uid } from './esquema';
 
-export const CLAVE_ALMACEN = 'sgr_rufe_borrador_v1';
+export const CLAVE_ALMACEN = 'sgr_rufe_borradores_v2';
 
-const VERSION = 1;
+/** Donde vivía el borrador único, antes de que cupieran varias. */
+export const CLAVE_ALMACEN_V1 = 'sgr_rufe_borrador_v1';
+
+const VERSION = 2;
 const DIAS_VIGENCIA = 7;
 const DEBOUNCE_MS = 800;
 
-export type EstadoGuardado =
-	| 'sin-cambios'
-	| 'guardando'
-	| 'guardado'
-	| 'error'
-	| 'recuperado';
+export type EstadoGuardado = 'sin-cambios' | 'guardando' | 'guardado' | 'error' | 'recuperado';
 
-export type BorradorGuardado = {
-	version: number;
-	clave: string;
-	actualizado_en: number;
-	expira_en: number;
-	paso: IdPaso;
-	datos: FormularioRufe;
-};
+export type BorradorGuardado = BorradorBase<FormularioRufe> & { paso: IdPaso };
 
 /** Campos que nunca se persisten. */
 const NO_PERSISTIR = ['autoriza_tratamiento'] as const;
@@ -46,50 +55,77 @@ function limpiarParaGuardar(d: FormularioRufe): FormularioRufe {
 	return copia;
 }
 
-export function leerBorrador(): BorradorGuardado | null {
-	if (!browser) return null;
+const almacen = crearAlmacen<FormularioRufe>({
+	clave: CLAVE_ALMACEN,
+	claveAnterior: CLAVE_ALMACEN_V1,
+	version: VERSION,
+	diasVigencia: DIAS_VIGENCIA
+});
 
-	let crudo: string | null;
-	try {
-		crudo = window.localStorage.getItem(CLAVE_ALMACEN);
-	} catch {
-		return null;
-	}
-	if (!crudo) return null;
+export const leerBorradores = (ahora?: number): BorradorGuardado[] =>
+	almacen.leer(ahora) as BorradorGuardado[];
 
-	try {
-		const b = JSON.parse(crudo) as BorradorGuardado;
+export const leerBorrador = (clave: string, ahora?: number): BorradorGuardado | null =>
+	almacen.leerUno(clave, ahora) as BorradorGuardado | null;
 
-		// Una versión distinta significa que el esquema cambió: el borrador podría
-		// tener campos que ya no existen o faltarle otros. Se descarta en vez de
-		// intentar migrarlo.
-		if (b.version !== VERSION || !b.datos) {
-			descartarBorrador();
+/**
+ * Descarta una.
+ *
+ * NO borra sus fotos: viven en IndexedDB atadas a la misma clave y quien llama
+ * tiene que encargarse. Sin eso quedan megabytes de fotos de casas ajenas en un
+ * aparato que se presta.
+ */
+export const descartarBorrador = (clave: string): void => almacen.descartar(clave);
 
-			return null;
-		}
+export { haceCuanto };
 
-		if (Date.now() > b.expira_en) {
-			descartarBorrador();
-
-			return null;
-		}
-
-		return b;
-	} catch {
-		descartarBorrador();
-
-		return null;
-	}
+/** Cuándo deja de poder retomarse, para poder avisarlo antes de que pase. */
+export function diasQueLeQuedan(b: BorradorGuardado, ahora = Date.now()): number {
+	return diasRestantes(b.expira_en, ahora);
 }
 
-export function descartarBorrador(): void {
-	if (!browser) return;
-	try {
-		window.localStorage.removeItem(CLAVE_ALMACEN);
-	} catch {
-		/* almacenamiento bloqueado: no hay nada que borrar */
-	}
+// ── Cómo se reconoce cada una ────────────────────────────────────────────────
+
+export type SenasBorrador = {
+	/** A nombre de quién. Es lo que se lee primero. */
+	titulo: string;
+	/** Dónde queda. Distingue dos casas del mismo apellido. */
+	lugar: string;
+	/** `true` cuando aún no hay nada con qué nombrarla. */
+	anonima: boolean;
+};
+
+/**
+ * Con qué nombre aparece una ficha en la lista.
+ *
+ * El jefe de hogar es la primera persona de la lista del numeral 6 y la
+ * dirección es del 4: los dos se llenan antes que casi todo lo demás, así que
+ * casi siempre hay con qué nombrarla.
+ *
+ * Cuando no hay nada se dice —«Sin datos del hogar todavía»— en vez de inventar
+ * un nombre: quien decide si la descarta necesita saber que no puede
+ * identificarla, no una etiqueta que parezca un dato.
+ */
+export function senasDe(b: BorradorGuardado): SenasBorrador {
+	const d = b.datos;
+	const jefe = d?.personas?.[0];
+
+	const nombre = [(jefe?.nombres ?? '').trim(), (jefe?.apellidos ?? '').trim()]
+		.filter(Boolean)
+		.join(' ')
+		.trim();
+
+	const lugar =
+		(d?.direccion ?? '').trim() ||
+		[(d?.corregimiento ?? '').trim(), (d?.vereda_sector_barrio ?? '').trim()]
+			.filter(Boolean)
+			.join(' · ');
+
+	return {
+		titulo: nombre || 'Sin datos del hogar todavía',
+		lugar,
+		anonima: nombre === ''
+	};
 }
 
 /**
@@ -126,8 +162,13 @@ export class GestorBorrador {
 			if (e.key !== CLAVE_ALMACEN || !e.newValue) return;
 
 			try {
-				const otro = JSON.parse(e.newValue) as BorradorGuardado;
-				if (otro.clave !== this.clave) return;
+				// Ahora la caja guarda una lista, así que hay que buscar la propia:
+				// otra pestaña trabajando en OTRA ficha ya no es un conflicto — es
+				// justamente lo que este cambio vino a permitir.
+				const lista = JSON.parse(e.newValue) as BorradorGuardado[];
+				const otro = Array.isArray(lista) ? lista.find((b) => b.clave === this.clave) : null;
+				if (!otro) return;
+
 				if (this.guardadoEn !== null && otro.actualizado_en > this.guardadoEn + 50) {
 					this.otraPestana = true;
 				}
@@ -170,30 +211,34 @@ export class GestorBorrador {
 		}
 
 		const ahora = Date.now();
-		const carga: BorradorGuardado = {
-			version: VERSION,
-			clave: this.clave,
-			actualizado_en: ahora,
-			expira_en: ahora + DIAS_VIGENCIA * 86400000,
-			paso,
-			datos: limpiarParaGuardar(datos)
-		};
 
-		try {
-			window.localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(carga));
+		const ok = almacen.guardar(
+			{
+				version: VERSION,
+				clave: this.clave,
+				actualizado_en: ahora,
+				expira_en: ahora + almacen.vigenciaMs,
+				paso,
+				datos: limpiarParaGuardar(datos)
+			},
+			ahora
+		);
+
+		if (ok) {
 			this.guardadoEn = ahora;
 			this.estado = 'guardado';
-		} catch {
+		} else {
 			// Cuota llena o almacenamiento bloqueado. Se avisa, pero el formulario
 			// sigue usable: los datos están en memoria mientras no se recargue.
 			this.estado = 'error';
 		}
 	}
 
+	/** Suelta ESTA ficha y estrena clave. Las demás siguen guardadas. */
 	descartar(): void {
 		if (this.#temporizador) clearTimeout(this.#temporizador);
 		this.#temporizador = null;
-		descartarBorrador();
+		almacen.descartar(this.clave);
 		this.clave = uid();
 		this.guardadoEn = null;
 		this.otraPestana = false;
@@ -211,7 +256,9 @@ export function describirEstado(estado: EstadoGuardado, guardadoEn: number | nul
 		case 'guardando':
 			return 'Guardando…';
 		case 'guardado':
-			return guardadoEn ? `Guardado en este dispositivo · ${hora(guardadoEn)}` : 'Guardado en este dispositivo';
+			return guardadoEn
+				? `Guardado en este dispositivo · ${hora(guardadoEn)}`
+				: 'Guardado en este dispositivo';
 		case 'error':
 			return 'No se pudo guardar en este dispositivo';
 		case 'recuperado':
