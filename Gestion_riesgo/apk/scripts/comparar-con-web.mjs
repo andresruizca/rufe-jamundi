@@ -94,12 +94,11 @@ const ARCHIVOS = [
 		nombre: 'imagen.ts',
 		origen: raizRufe,
 		motivo:
-			'Dos cambios. (1) No importa `./tipos`, que aquí no existe: declara el ' +
-			'suyo. (2) `escaleraPara` trata PRE_CEDULA como documento. En la web, ' +
-			'PRE_CEDULA cae en la escalera del daño y puede bajar a 1440 px, por ' +
-			'debajo del piso de 1600 px que el propio archivo declara necesario ' +
-			'para leer un número de cédula. Corregirlo en la web es un arreglo ' +
-			'aparte, no del APK.'
+			'Un solo cambio: no importa `./tipos`, que aquí no existe, y declara el ' +
+			'suyo. Antes se apartaba además en `escaleraPara`, porque la web trataba ' +
+			'PRE_CEDULA como foto de daño y la bajaba a 1440 px, por debajo del piso ' +
+			'de 1600 px necesario para leer un número de cédula. Eso ya está ' +
+			'corregido en la web y las dos copias vuelven a decidirlo igual.'
 	}
 ];
 

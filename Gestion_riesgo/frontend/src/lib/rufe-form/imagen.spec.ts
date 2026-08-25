@@ -46,6 +46,23 @@ describe('escaleras', () => {
 		expect(escaleraPara('DANO')).toBe(ESCALERA_NORMAL);
 	});
 
+	it('la cédula del formulario ciudadano también es un documento', () => {
+		// Estaba cayendo en la escalera del daño, que baja hasta 1440 px — por
+		// debajo del piso de 1600 px que este módulo declara necesario para leer
+		// un número de cédula. Y es la cédula que sube TODO el que se preinscribe.
+		expect(escaleraPara('PRE_CEDULA')).toBe(ESCALERA_DETALLE);
+		expect(escaleraPara('PRE_DANO')).toBe(ESCALERA_NORMAL);
+	});
+
+	it('la escalera de detalle nunca baja del piso de legibilidad', () => {
+		// Es la regla que el fallo de arriba rompía. Escrita aquí, cambiar un
+		// escalón por debajo de 1600 px falla en vez de degradar cédulas en
+		// silencio.
+		for (const paso of ESCALERA_DETALLE) {
+			expect(paso.lado).toBeGreaterThanOrEqual(1600);
+		}
+	});
+
 	it('ambas aprietan de forma monótona: nunca un escalón afloja', () => {
 		for (const escalera of [ESCALERA_NORMAL, ESCALERA_DETALLE]) {
 			for (let i = 1; i < escalera.length; i++) {

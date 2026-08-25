@@ -64,8 +64,23 @@ export const ESCALERA_DETALLE: PasoEscalera[] = [
 	{ lado: 1600, calidad: 0.74, meta: 900 * 1024 }
 ];
 
+/**
+ * Qué escalera le toca a cada tipo de evidencia.
+ *
+ * `PRE_CEDULA` es la cédula del formulario ciudadano y estaba cayendo en la
+ * escalera del daño, que puede bajar a 1440 px: por debajo del piso de 1600 px
+ * que este mismo archivo declara necesario para leer un número de cédula. Es
+ * decir, la única foto de todo el sistema donde la legibilidad es el punto era
+ * la que peor se trataba, y en el formulario público, que es el que usa todo el
+ * mundo.
+ *
+ * Se decide por una lista y no por un `if` con dos nombres para que añadir un
+ * tipo de documento obligue a mirar esta línea.
+ */
+const DE_DETALLE: TipoEvidencia[] = ['DOCUMENTO', 'PRE_CEDULA'];
+
 export function escaleraPara(tipo: TipoEvidencia): PasoEscalera[] {
-	return tipo === 'DOCUMENTO' ? ESCALERA_DETALLE : ESCALERA_NORMAL;
+	return DE_DETALLE.includes(tipo) ? ESCALERA_DETALLE : ESCALERA_NORMAL;
 }
 
 /** ¿Hay que seguir apretando, o ya cabe? */
