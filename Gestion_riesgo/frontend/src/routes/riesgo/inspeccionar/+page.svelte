@@ -18,9 +18,12 @@
 		ArrowLeft,
 		ArrowRight,
 		CheckCircle2,
+		ClipboardPlus,
+		Info,
 		LoaderCircle,
 		MapPin,
 		Send,
+		Trash2,
 		TriangleAlert
 	} from '@lucide/svelte';
 	import { browser } from '$app/environment';
@@ -60,7 +63,13 @@
 		GestorBorrador,
 		describirEstado,
 		descartarBorrador,
-		leerBorrador
+		leerBorrador,
+		leerBorradores,
+		senasDe,
+		haceCuanto,
+		diasQueLeQuedan,
+		uid,
+		type BorradorGuardado
 	} from '$lib/inspeccion-form/borrador.svelte';
 	import type {
 		Catalogos,
@@ -71,6 +80,7 @@
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 	import { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import { borrarEvidenciasDe, leerEvidencias } from '$lib/rufe-form/almacen';
 	import { aparato } from '$lib/aparato';
 
 	let catalogos = $state<Catalogos | null>(null);
@@ -84,7 +94,19 @@
 	let enviando = $state(false);
 	let errorEnvio = $state('');
 	let enviado = $state<{ numero: string; combo: string | null; motivo: string | null } | null>(null);
-	let hayBorradorPrevio = $state(false);
+	/**
+	 * Las inspecciones a medias que hay guardadas en este aparato.
+	 *
+	 * En plural porque es lo que hace una brigada en una mañana: deja una casa a
+	 * medias porque falta hablar con el propietario y sigue con la de al lado.
+	 */
+	let borradoresPrevios = $state<BorradorGuardado[]>([]);
+
+	/** Cuál se está a punto de descartar, a la espera de confirmación. */
+	let confirmandoDescarte = $state<string | null>(null);
+
+	/** Cuántas fotos tiene cada uno. Es lo que de verdad se pierde al descartar. */
+	let fotosPorBorrador = $state<Record<string, number>>({});
 	let avisoDuplicado = $state<string>('');
 
 	/**
@@ -451,23 +473,50 @@
 		// llegue por falta de señal— no puede retrasar el dibujo del formato.
 		void cargarProfesionales();
 
-		const previo = leerBorrador();
+		borradoresPrevios = leerBorradores();
 
-		if (previo) {
-			hayBorradorPrevio = true;
-			borrador.clave = previo.clave;
-		} else {
-			datos.fecha_evaluacion = hoy();
-			precargarProfesional();
-			await precargarDesdeSolicitud();
-		}
+		// La precarga corre SIEMPRE, haya borradores o no. Si los hay, el
+		// formulario en blanco que queda detrás de la lista ya viene con lo que
+		// el ciudadano escribió en su solicitud; sin esto, quien llega desde la
+		// bandeja con `?preinscripcion=` y además tiene una inspección a medias
+		// perdía la precarga entera al pulsar «Inspeccionar otra vivienda».
+		//
+		// Si en cambio retoma un borrador, `datos` se reemplaza por el suyo y
+		// esto no deja rastro.
+		datos.fecha_evaluacion = hoy();
+		precargarProfesional();
+		await precargarDesdeSolicitud();
+
+		if (borradoresPrevios.length > 0) void contarFotos();
 
 		cargando = false;
 	}
 
-	function continuarBorrador() {
-		const previo = leerBorrador();
+	/**
+	 * Cuántas fotos guarda cada borrador.
+	 *
+	 * Se enseña antes de descartar porque es lo que de verdad se pierde: los
+	 * datos se vuelven a escribir, las fotos del daño exigen volver a la casa.
+	 */
+	async function contarFotos() {
+		const cuenta: Record<string, number> = {};
+
+		for (const b of borradoresPrevios) {
+			try {
+				cuenta[b.clave] = (await leerEvidencias(b.clave)).length;
+			} catch {
+				cuenta[b.clave] = 0;
+			}
+		}
+
+		fotosPorBorrador = cuenta;
+	}
+
+	function continuarBorrador(clave: string) {
+		const previo = leerBorrador(clave);
 		if (!previo || !catalogos) return;
+
+		borrador.clave = previo.clave;
 
 		// Un borrador guardado con una versión anterior puede no traer todas las
 		// claves, y un catálogo que crezca traería claves nuevas a uno viejo.
@@ -475,7 +524,7 @@
 		const pos = pasosVigentes(datos, catalogos).findIndex((p) => p.id === previo.paso);
 		indice = Math.max(1, pos);
 		borrador.marcarRecuperado(previo.actualizado_en);
-		hayBorradorPrevio = false;
+		borradoresPrevios = [];
 
 		// Las fotos viven atadas a la clave del borrador, así que el gestor se
 		// rehace con la clave recuperada antes de repoblar la lista.
@@ -485,18 +534,65 @@
 		void evidencias.restaurar();
 	}
 
-	function empezarDeNuevo() {
-		void evidencias?.limpiar();
-		descartarBorrador();
+	/**
+	 * Descarta una inspección a medias.
+	 *
+	 * Borra también sus fotos. Viven en IndexedDB atadas a la clave del
+	 * borrador y no se van solas: sin esto quedan megabytes de fotos de casas
+	 * ajenas en un aparato que se presta.
+	 */
+	async function descartarUno(clave: string) {
+		descartarBorrador(clave);
+		confirmandoDescarte = null;
+
+		try {
+			await borrarEvidenciasDe(clave);
+		} catch {
+			// Si el navegador no deja tocar IndexedDB, el borrador ya se fue de la
+			// lista y las fotos huérfanas caducan con su propia limpieza. No es
+			// motivo para dejar en pantalla una inspección que se pidió descartar.
+		}
+
+		borradoresPrevios = leerBorradores();
+
+		// Era la última: se sigue al formulario en blanco en vez de dejar una
+		// tarjeta vacía preguntando por inspecciones que ya no existen.
+		if (borradoresPrevios.length === 0) await empezarUnaNueva(true);
+	}
+
+	/**
+	 * Una inspección más, sin tocar las que ya están guardadas.
+	 *
+	 * @param conSolicitud vuelve a traer lo del ciudadano desde `?preinscripcion=`.
+	 *   Es `true` al salir de la lista de borradores —quien llegó desde la
+	 *   bandeja sigue queriendo inspeccionar ESA vivienda— y `false` al terminar
+	 *   una, donde repetir la precarga llenaría la siguiente casa con los datos
+	 *   de la que se acaba de enviar.
+	 */
+	async function empezarUnaNueva(conSolicitud = false) {
 		enCola = false;
 		enviado = null;
 		datos = formularioVacio();
 		datos.fecha_evaluacion = hoy();
 		if (catalogos) datos = conValoresIniciales(datos, catalogos);
 		precargarProfesional();
+		if (conSolicitud) await precargarDesdeSolicitud();
 		indice = 0;
-		hayBorradorPrevio = false;
+		borradoresPrevios = [];
+		confirmandoDescarte = null;
 		errores = {};
+
+		// Clave nueva: si reutilizara la anterior, esta inspección heredaría las
+		// fotos de la otra y se guardaría encima de ella.
+		borrador.clave = uid();
+		borrador.estado = 'sin-cambios';
+		borrador.guardadoEn = null;
+
+		detenerEvidencias?.();
+		if (catalogos) {
+			evidencias = new GestorEvidencias({ INSPECCION: catalogos.limites.fotos }, borrador.clave);
+			detenerEvidencias = evidencias.iniciar();
+		}
 	}
 
 	function alCambiar() {
@@ -601,7 +697,7 @@
 				// seguir con la siguiente sin esperar a que vuelva la señal.
 				enCola = true;
 				enviado = { numero: '', combo: null, motivo: null };
-				descartarBorrador();
+				descartarBorrador(borrador.clave);
 
 				return;
 			}
@@ -617,7 +713,7 @@
 				combo: respuesta.combo,
 				motivo: respuesta.combo_motivo
 			};
-			descartarBorrador();
+			descartarBorrador(borrador.clave);
 		} catch (e) {
 			if (e instanceof ApiError) {
 				errorEnvio = e.message;
@@ -671,27 +767,129 @@
 			{/if}
 
 			<div class="cierre__acciones">
-				<button type="button" class="boton boton--principal" onclick={empezarDeNuevo}>
+				<button type="button" class="boton boton--principal" onclick={() => empezarUnaNueva()}>
 					Inspeccionar otra vivienda
 				</button>
 				<a class="boton boton--suave" href="/riesgo/inspecciones">Ver las inspecciones</a>
 			</div>
 		</div>
 	{:else if catalogos && paso}
-		{#if hayBorradorPrevio}
+		{#if borradoresPrevios.length > 0}
+			<!--
+				La lista de lo que quedó a medias.
+
+				Antes decía «Hay una inspección sin terminar» sin decir de quién, y
+				solo cabía una: la única forma de saber qué se estaba a punto de
+				perder era abrirla. Ahora cada una se reconoce por el propietario y
+				la dirección, y empezar otra no pisa ninguna.
+			-->
 			<div class="tarjeta">
-				<h2 class="tarjeta__titulo">Hay una inspección sin terminar</h2>
+				<h2 class="tarjeta__titulo">
+					{borradoresPrevios.length === 1
+						? 'Tiene una inspección sin terminar'
+						: `Tiene ${borradoresPrevios.length} inspecciones sin terminar`}
+				</h2>
 				<p class="tarjeta__nota">
-					Se guardó en {cual.este} y todavía no se ha enviado. Puede continuarla o empezar de nuevo.
+					Están guardadas en {cual.este} y todavía no se han enviado. Retome la que necesite o
+					empiece otra: no se pisan entre ellas.
 				</p>
+
+				<ul class="pendientes">
+					{#each borradoresPrevios as b (b.clave)}
+						{@const senas = senasDe(b)}
+						{@const fotos = fotosPorBorrador[b.clave] ?? 0}
+						{@const dias = diasQueLeQuedan(b)}
+						<li class="pendiente">
+							<div class="pendiente__quien">
+								<span class="pendiente__nombre" class:pendiente__nombre--sin={senas.anonima}>
+									{senas.titulo}
+								</span>
+								{#if senas.lugar}
+									<span class="pendiente__lugar">
+										<MapPin size={13} aria-hidden="true" />
+										{senas.lugar}
+									</span>
+								{/if}
+								<span class="pendiente__datos">
+									{haceCuanto(b.actualizado_en)}
+									{#if fotos > 0}
+										· {fotos === 1 ? '1 foto' : `${fotos} fotos`}
+									{/if}
+									{#if dias <= 2}
+										· <strong class="pendiente__caduca">
+											{dias <= 1 ? 'caduca hoy' : 'caduca en 2 días'}
+										</strong>
+									{/if}
+								</span>
+							</div>
+
+							{#if confirmandoDescarte === b.clave}
+								<!--
+									La confirmación dice lo que se pierde, no «¿está seguro?».
+									Los datos se vuelven a escribir; las fotos del daño exigen
+									volver a la casa.
+								-->
+								<div class="pendiente__confirmar">
+									<span>
+										Se borrará lo diligenciado{#if fotos > 0}
+											y {fotos === 1 ? 'su foto' : `sus ${fotos} fotos`}{/if}. No se puede
+										deshacer.
+									</span>
+									<div class="pendiente__acciones">
+										<button
+											type="button"
+											class="boton boton--peligro"
+											onclick={() => descartarUno(b.clave)}
+										>
+											<Trash2 size={14} aria-hidden="true" />
+											Sí, descartar
+										</button>
+										<button
+											type="button"
+											class="boton boton--suave"
+											onclick={() => (confirmandoDescarte = null)}
+										>
+											Conservarla
+										</button>
+									</div>
+								</div>
+							{:else}
+								<div class="pendiente__acciones">
+									<button
+										type="button"
+										class="boton boton--principal"
+										onclick={() => continuarBorrador(b.clave)}
+									>
+										Retomar
+									</button>
+									<button
+										type="button"
+										class="boton boton--suave"
+										onclick={() => (confirmandoDescarte = b.clave)}
+									>
+										<Trash2 size={14} aria-hidden="true" />
+										Descartar
+									</button>
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+
 				<div class="acciones">
-					<button type="button" class="boton boton--principal" onclick={continuarBorrador}>
-						Continuar
-					</button>
-					<button type="button" class="boton boton--suave" onclick={empezarDeNuevo}>
-						Empezar de nuevo
+					<button type="button" class="boton" onclick={() => empezarUnaNueva(true)}>
+						<ClipboardPlus size={15} aria-hidden="true" />
+						Inspeccionar otra vivienda
 					</button>
 				</div>
+
+				<p class="pendientes__ojo">
+					<Info size={14} aria-hidden="true" />
+					<span>
+						Se guardan una semana. Después hay que volver a hacerlas: los daños de una vivienda
+						cambian.
+					</span>
+				</p>
 			</div>
 		{:else}
 			<div class="tarjeta">
@@ -1258,6 +1456,98 @@
 </div>
 
 <style>
+	/* ── Las inspecciones a medias ──────────────────────────────────────────
+	   Cada una es una tarjeta y no una fila de tabla: en un teléfono, tres
+	   columnas con dos botones al final acaban en una tabla que se desplaza a
+	   lo ancho, y el botón de descartar queda fuera de la vista. */
+	.pendientes {
+		list-style: none;
+		margin: 1rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	.pendiente {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		background: var(--color-surface);
+	}
+
+	.pendiente__quien {
+		display: grid;
+		gap: 0.2rem;
+		min-width: 0;
+		flex: 1 1 15rem;
+	}
+
+	.pendiente__nombre {
+		font-weight: 600;
+		font-size: 0.95rem;
+		overflow-wrap: anywhere;
+	}
+
+	/* Sin nombre todavía no es un dato: se dice en gris y en cursiva para que no
+	   se lea como si la casa fuera de alguien llamado así. */
+	.pendiente__nombre--sin {
+		font-weight: 500;
+		font-style: italic;
+		color: var(--color-muted);
+	}
+
+	.pendiente__lugar,
+	.pendiente__datos {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.8rem;
+		color: var(--color-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.pendiente__caduca {
+		color: var(--color-warning);
+	}
+
+	.pendiente__acciones {
+		display: flex;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.pendiente__confirmar {
+		display: grid;
+		gap: 0.5rem;
+		flex: 1 1 100%;
+		padding-top: 0.6rem;
+		border-top: 1px solid var(--color-border);
+		font-size: 0.82rem;
+		line-height: 1.45;
+		color: var(--color-text);
+	}
+
+	.pendientes__ojo {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+		margin: 0.9rem 0 0;
+		font-size: 0.78rem;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
+	.pendientes__ojo :global(svg) {
+		flex: none;
+		margin-top: 0.15rem;
+	}
+
+
 	/* Volver al desplegable. Va como enlace y no como botón porque es una salida
 	   de emergencia del camino normal, no una acción del formulario: compitiendo
 	   con «Siguiente» se pulsaría por error. */
