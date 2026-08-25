@@ -11,6 +11,7 @@
 
 	import { Check, ClipboardPlus, CloudOff, Copy, List, Printer } from '@lucide/svelte';
 	import { aparato } from '$lib/aparato';
+	import { porQueNoSaleSolo } from '$lib/offline/plataforma';
 
 	const cual = aparato();
 
@@ -78,8 +79,8 @@
 				{#if enSegundoPlano}
 					Se enviará en cuanto {cual.el} recupere señal, <strong>aunque cierre la aplicación</strong>.
 				{:else}
-					Se enviará en cuanto vuelva la señal. Deje la aplicación abierta: este navegador no
-					permite enviarla en segundo plano.
+					Se enviará en cuanto vuelva la señal, pero <strong>deje la aplicación abierta</strong>.
+					{porQueNoSaleSolo()}
 				{/if}
 			</p>
 

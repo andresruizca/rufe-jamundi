@@ -61,6 +61,37 @@ pierde o cambia de manos.
 4. **Se dice en pantalla.** Cuando lo que se ve viene de la copia, el aviso lo
    indica con su fecha: «Lo que ve está guardado hoy a las 9:14 a. m.».
 
+## Android y iPhone NO se comportan igual
+
+Es la diferencia que más consecuencias tiene, y el sistema la distingue.
+
+| | Chrome (Android, escritorio) | Safari (iPhone, iPad) |
+|---|---|---|
+| Envío con la aplicación cerrada | **Sí**, Background Sync | **No existe** |
+| Lo guardado se conserva | Mientras haya espacio | **Se borra a los pocos días si no está instalada** |
+| Instalar | Botón propio del navegador | Compartir → Añadir a inicio |
+| Grabar video | WebM (VP9/VP8) | MP4/H.264, y exige iOS 14.3+ |
+
+**En un iPhone todos los navegadores son Safari por dentro.** Apple obliga a
+Chrome, Firefox y Edge de iOS a usar WebKit, así que «Chrome en iPhone» tampoco
+tiene envío en segundo plano. El sistema lo detecta por la capacidad
+(`'sync' in registro`), no por el nombre del navegador: el día que Safari lo
+implemente, lo dará por bueno solo.
+
+Consecuencias en pantalla, y por qué:
+
+- Donde Chrome dice «se enviará **aunque cierre la aplicación**», Safari dice
+  «**deje esta aplicación abierta**». Prometer lo primero en un iPhone es que
+  alguien la cierre tranquilo y su ficha no llegue nunca.
+- Con fichas en cola **sin la aplicación instalada**, se avisa — y en iPhone se
+  explica que Safari las borra tras unos días sin abrirla, que es un riesgo que
+  en Android no existe igual.
+- El texto nombra a Safari cuando toca. Sin nombrarlo, suena a que la aplicación
+  está a medio hacer y alguien pierde el día buscando un fallo que no existe.
+
+Nada de esto se decide mirando el nombre del navegador salvo para **explicar**;
+lo que se puede o no se puede hacer se le pregunta siempre a la API.
+
 ## Lo que NUNCA se guarda
 
 - **Las evidencias**: la foto de una cédula, el video de una vivienda. Es el dato

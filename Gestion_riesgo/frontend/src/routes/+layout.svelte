@@ -19,6 +19,10 @@
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import { aparato } from '$lib/aparato';
 	import { comoSeLee, datosGuardados } from '$lib/offline/guardado.svelte';
+	import {
+		haySincronizacionEnSegundoPlano,
+		porQueNoSaleSolo
+	} from '$lib/offline/plataforma';
 
 	let { children } = $props();
 
@@ -32,6 +36,14 @@
 	// En qué se está usando el sistema, para no prometerle a quien está en un
 	// computador que sus fichas quedan «en el teléfono».
 	const cual = aparato();
+
+	/**
+	 * ¿La cola sale sola con la aplicación cerrada?
+	 *
+	 * `null` mientras se averigua: hasta saberlo no se dice nada. Prometer de
+	 * más y desdecirse un segundo después es peor que callar un segundo.
+	 */
+	let saleSolo = $state<boolean | null>(null);
 
 	// El login y el formulario ciudadano se sirven sin sesión y sin armazón. La
 	// lista vive en $lib/navigation para que sumar una ruta pública sea una
@@ -69,6 +81,10 @@
 
 	onMount(() => {
 		void sesion.restaurar();
+
+		// Qué puede prometer este navegador. Se pregunta una vez, al arrancar, y
+		// no cambia mientras la pestaña viva.
+		void haySincronizacionEnSegundoPlano().then((si) => (saleSolo = si));
 
 		// El Service Worker avisa cuando terminó de guardar una versión nueva. Se
 		// muestra un aviso en vez de recargar por sorpresa: recargar a alguien a
@@ -257,8 +273,18 @@
 				<p class="aviso-sin-red" role="status">
 					<WifiOff size={15} aria-hidden="true" />
 					<span>
-						Sin conexión. Las fichas se guardan en {cual.el} y se envían solas cuando vuelva la
-						señal.
+						Sin conexión. Las fichas se guardan en {cual.el} y salen cuando vuelva la señal.
+						{#if saleSolo === false}
+							<!--
+								Background Sync solo existe en Chrome y derivados. En un
+								iPhone NO hay —todos sus navegadores son Safari por dentro—,
+								así que prometer que sale sola es que alguien cierre la
+								aplicación tranquilo y su ficha no llegue.
+							-->
+							<strong class="aviso-sin-red__fecha">
+								{porQueNoSaleSolo()} Deje esta pantalla abierta.
+							</strong>
+						{/if}
 						{#if datosGuardados.cuando}
 							<!--
 								De cuándo es lo que se está viendo. Se decide sobre familias

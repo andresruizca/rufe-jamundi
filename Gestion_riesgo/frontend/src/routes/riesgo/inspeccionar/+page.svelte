@@ -84,6 +84,7 @@
 	import ColaDeEnvio from '$lib/rufe-form/componentes/ColaDeEnvio.svelte';
 	import ListoSinSenal from '$lib/components/layout/ListoSinSenal.svelte';
 	import { aparato } from '$lib/aparato';
+	import { porQueNoSaleSolo } from '$lib/offline/plataforma';
 
 	let catalogos = $state<Catalogos | null>(null);
 	let datos = $state<FormularioInspeccion>(formularioVacio());
@@ -750,9 +751,29 @@
 			<CheckCircle2 size={40} aria-hidden="true" />
 			{#if enCola}
 				<h2>Inspección guardada</h2>
+				<!--
+					Lo que se promete depende del NAVEGADOR, no del sistema.
+
+					Background Sync solo existe en Chrome y derivados. En Safari —o
+					sea, en cualquier iPhone, porque allí todos los navegadores son
+					Safari por dentro— no hay: si se cierra la aplicación, la ficha se
+					queda esperando y nadie la manda.
+
+					Decirle a un profesional «se enviará sola» en un iPhone es que
+					cierre la aplicación tranquilo y que la inspección no llegue. El
+					formulario del censo ya distinguía los dos casos; este no, y era la
+					misma promesa.
+				-->
 				<p class="cierre__motivo">
-					No hay señal. Quedó guardada en {cual.este} y se enviará sola en cuanto vuelva la
-					conexión. La verá aquí abajo hasta que salga.
+					No hay señal. Quedó guardada en {cual.este}.
+					{#if envio.enSegundoPlano}
+						Se enviará sola en cuanto vuelva la conexión, <strong>aunque cierre la
+						aplicación</strong>.
+					{:else}
+						Se enviará en cuanto vuelva la conexión, pero
+						<strong>deje esta aplicación abierta</strong>. {porQueNoSaleSolo()}
+					{/if}
+					La verá aquí abajo hasta que salga.
 				</p>
 			{:else}
 				<h2>Inspección registrada</h2>
@@ -1356,7 +1377,7 @@
 							gestor={evidencias}
 							tipo="INSPECCION"
 							titulo="Registro fotográfico"
-							ayuda="Las diez casillas del numeral 11. Se guardan en {cual.el} y salen solas cuando haya señal."
+							ayuda="Las diez casillas del numeral 11. Se guardan en {cual.el} y salen con la ficha cuando haya señal."
 							textoCamara="Tomar foto"
 							pieDeFoto={{
 								etiqueta: 'Fotografía de',

@@ -36,6 +36,8 @@
 	} from '$lib/rufe-form/cola';
 	import { GestorEnvio } from '$lib/rufe-form/envio.svelte';
 	import { aparato } from '$lib/aparato';
+	import { esWebKitDeApple, porQueNoSaleSolo } from '$lib/offline/plataforma';
+	import { estaInstalada } from '$lib/offline/preparar';
 
 	type Props = {
 		/**
@@ -66,6 +68,25 @@
 
 	const cual = aparato();
 
+	/**
+	 * Sin instalar, lo guardado se puede perder — y en iPhone es peor.
+	 *
+	 * Chrome desaloja el almacenamiento cuando al aparato le falta espacio, y
+	 * `pedirAlmacenamientoPersistente()` intenta evitarlo. **Safari no da esa
+	 * garantía**: borra los datos de un sitio NO instalado tras unos días sin
+	 * abrirlo, aunque sobre espacio. Un censador con iPhone que levante fichas un
+	 * viernes y no vuelva a abrir hasta el otro puede encontrarlas borradas.
+	 *
+	 * Instalada, en los dos casos el sistema operativo la trata como aplicación y
+	 * deja de desalojarla.
+	 *
+	 * Este aviso vivía en la pantalla «Pendientes» y se perdió al mudarla aquí
+	 * dentro. Vuelve, pero SOLO cuando hay algo que perder: un cartel permanente
+	 * pidiendo instalar es el que nadie lee el día que sí importa.
+	 */
+	let instalada = $state(true);
+	const enApple = esWebKitDeApple();
+
 	let fichas = $state<FichaEnCola[]>([]);
 	let fotosPorFicha = $state<Record<string, number>>({});
 	let enLinea = $state(true);
@@ -75,6 +96,7 @@
 
 	onMount(() => {
 		enLinea = navigator.onLine;
+		instalada = estaInstalada();
 
 		const conectar = () => {
 			enLinea = true;
@@ -266,6 +288,22 @@
 			{/each}
 		</ul>
 
+		{#if !instalada}
+			<p class="cola__riesgo">
+				<TriangleAlert size={15} aria-hidden="true" />
+				<span>
+					{#if enApple}
+						<strong>Instale la aplicación</strong> desde Compartir → Añadir a inicio. En iPhone,
+						Safari borra lo guardado de un sitio sin instalar tras unos días sin abrirlo — y con
+						ello estas fichas.
+					{:else}
+						<strong>Instale la aplicación</strong> desde el menú lateral. Sin instalar,
+						{cual.el} puede borrar lo guardado —estas fichas incluidas— cuando le falte espacio.
+					{/if}
+				</span>
+			</p>
+		{/if}
+
 		<div class="cola__acciones">
 			<button
 				type="button"
@@ -284,7 +322,12 @@
 
 			{#if !envio.enSegundoPlano}
 				<span class="cola__ojo">
-					Este navegador no envía en segundo plano: deje la aplicación abierta.
+					<!--
+						Se nombra a Safari cuando toca. Sin nombrarlo, en un iPhone suena
+						a que la aplicación está a medio hacer y alguien se pone a buscar
+						un fallo que no existe.
+					-->
+					{porQueNoSaleSolo()} Deje la aplicación abierta.
 				</span>
 			{/if}
 		</div>
@@ -297,6 +340,29 @@
 {/if}
 
 <style>
+	/* El aviso de instalar. En ámbar y no en rojo: no es un error, es un riesgo
+	   —lo guardado sigue ahí— y pintarlo de rojo junto a fichas sin enviar haría
+	   pensar que ya se perdió algo. */
+	.cola__riesgo {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+		margin: 0.75rem 0 0;
+		padding: 0.6rem 0.7rem;
+		border: 1px solid var(--aviso-alerta-borde);
+		border-radius: 8px;
+		background: var(--aviso-alerta-fondo);
+		color: var(--aviso-alerta-texto);
+		font-size: 0.8rem;
+		line-height: 1.45;
+	}
+
+	.cola__riesgo :global(svg) {
+		flex: none;
+		margin-top: 0.1rem;
+	}
+
+
 	.cola {
 		margin-top: 1rem;
 		padding: 0.9rem;
