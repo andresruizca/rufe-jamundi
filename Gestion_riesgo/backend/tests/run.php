@@ -2268,6 +2268,40 @@ prueba('el operador no está en las listas que abren el censo', function (): voi
     afirmar(in_array(Auth::OPERADOR, Auth::TODOS, true), 'sí es un usuario autenticado');
 });
 
+prueba('el cruce del call center da UNA fila por hogar, pase lo que pase', function () use ($raiz): void {
+    // El fallo que esto cierra: el cruce con `preinscripciones` era un JOIN
+    // directo. Una persona puede pre-inscribirse más de una vez —el esquema lo
+    // permite a propósito— y entonces su hogar salía DOS VECES en la lista y se
+    // contaba DOS VECES en el resumen.
+    //
+    // Lo segundo es lo grave: la cifra de avance de la campaña se le reporta a
+    // la Alcaldía y estaba inflada sin que nada lo delatara. Lo primero se notó
+    // solo porque la pantalla se quedaba cargando.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    preg_match('/private const CRUCE = \'(.*?)\';/s', $php, $m);
+    afirmar(isset($m[1]), 'no se encontró la constante CRUCE');
+
+    $cruce = $m[1];
+
+    foreach (['preinscripciones pre', 'rufe_personas jefe', 'rufe_gestiones g'] as $tabla) {
+        afirmar(str_contains($cruce, $tabla), "el cruce ya no une con {$tabla}");
+    }
+
+    // Cada tabla del cruce tiene que engancharse por `id = (SELECT … LIMIT 1)`.
+    // Sin el LIMIT, una fila de más al otro lado multiplica el hogar.
+    afirmarIgual(
+        3,
+        preg_match_all('/LIMIT 1\)/', $cruce),
+        'cada tabla del cruce debe engancharse por una subconsulta con LIMIT 1'
+    );
+
+    afirmar(
+        preg_match('/ON\s+pre\.documento\s*=/i', $cruce) !== 1,
+        'la preinscripción vuelve a unirse por documento: eso multiplica filas'
+    );
+});
+
 grupo('Rutas');
 
 prueba('el inspector no puede aprobar una inspección', function () use ($raiz): void {

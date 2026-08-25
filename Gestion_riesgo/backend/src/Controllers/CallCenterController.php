@@ -65,14 +65,35 @@ final class CallCenterController
      *
      * Las descartadas no cuentan: una solicitud descartada es una persona que
      * sigue sin estar en el proceso, y volver a llamarla es lo correcto.
+     *
+     * ── Por qué son subconsultas y no un JOIN directo ────────────────────────
+     *
+     * Porque un JOIN multiplica filas, y aquí las dos puntas pueden repetirse:
+     * una misma persona puede pre-inscribirse más de una vez —el esquema lo
+     * permite a propósito, «una casa puede pre-inscribirse otra vez tras otro
+     * evento»— y una ficha del censo podría traer dos personas marcadas como
+     * jefe de hogar.
+     *
+     * Con JOIN, un hogar con dos preinscripciones salía DOS VECES en la lista y
+     * se contaba DOS VECES en el resumen. Lo segundo es lo grave: la cifra de
+     * avance de la campaña es un dato que se le reporta a la Alcaldía, y estaba
+     * inflada sin que nada lo delatara. Lo primero se notó porque la pantalla se
+     * quedaba cargando —dos filas con la misma clave rompen el dibujado—, que
+     * fue la suerte de este fallo.
+     *
+     * Con `pre.id = (SELECT … LIMIT 1)` cada hogar aporta UNA fila, siempre.
      */
     private const CRUCE = '
         LEFT JOIN rufe_personas jefe
-               ON jefe.reporte_id = r.id AND jefe.parentesco = :jefe
+               ON jefe.id = (SELECT j2.id FROM rufe_personas j2
+                              WHERE j2.reporte_id = r.id AND j2.parentesco = :jefe
+                              ORDER BY j2.orden ASC LIMIT 1)
         LEFT JOIN preinscripciones pre
-               ON pre.documento = jefe.numero_documento
-              AND jefe.numero_documento IS NOT NULL
-              AND pre.estado <> \'DESCARTADA\'
+               ON pre.id = (SELECT p2.id FROM preinscripciones p2
+                             WHERE p2.documento = jefe.numero_documento
+                               AND jefe.numero_documento IS NOT NULL
+                               AND p2.estado <> \'DESCARTADA\'
+                             ORDER BY p2.creado_en DESC, p2.id DESC LIMIT 1)
         LEFT JOIN rufe_gestiones g
                ON g.id = (SELECT g2.id FROM rufe_gestiones g2
                            WHERE g2.reporte_id = r.id
