@@ -27,6 +27,7 @@
 	import { callCenterApi } from '$lib/api/servicios';
 	import KpiTile from '$lib/components/KpiTile.svelte';
 	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
+	import CompartirFormulario from '$lib/components/CompartirFormulario.svelte';
 	import {
 		PESTANAS,
 		estadoDe,
@@ -134,11 +135,26 @@
 </script>
 
 <div class="tarjeta">
-	<h2 class="tarjeta__titulo">Avance de la campaña</h2>
-	<p class="tarjeta__nota">
-		Cuánta gente del censo ha llegado ya al formulario de preinscripción, y cuánta falta por
-		llamar.
-	</p>
+	<!--
+		El enlace del formulario, arriba y siempre a mano.
+
+		Es la herramienta de trabajo del operador: llama, explica, y manda el
+		enlace. Dentro de cada hogar está el botón que lo manda a ESE número —lo
+		que hace falta casi siempre—, pero también hace falta el enlace suelto: para
+		dictarlo, para abrirlo y acompañar a alguien paso a paso por teléfono, o
+		para pegarlo en el chat de una junta de acción comunal.
+	-->
+	<div class="encabezado">
+		<div class="encabezado__texto">
+			<h2 class="tarjeta__titulo">Avance de la campaña</h2>
+			<p class="tarjeta__nota">
+				Cuánta gente del censo ha llegado ya al formulario de preinscripción, y cuánta falta por
+				llamar.
+			</p>
+		</div>
+
+		<CompartirFormulario />
+	</div>
 
 	{#if resumen}
 		<div class="kpi-grid">
@@ -427,6 +443,26 @@
 </div>
 
 <style>
+	/* El título y el botón de compartir en la misma línea cuando cabe. El botón
+	   no se estira: es una herramienta a mano, no el asunto de la pantalla. */
+	.encabezado {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.9rem;
+		flex-wrap: wrap;
+	}
+
+	.encabezado__texto {
+		flex: 1 1 22rem;
+		min-width: 0;
+	}
+
+	.encabezado__texto .tarjeta__titulo {
+		margin-top: 0;
+	}
+
+
 	.kpi-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));

@@ -89,6 +89,15 @@ describe('el mensaje general de la bandeja', () => {
 		expect(fuente).toContain('${enlace}');
 	});
 
+	it('se puede ABRIR el formulario, no solo copiarlo', () => {
+		// Quien va a pegarlo en un grupo quiere ver primero qué se encuentra la
+		// gente; y quien atiende el teléfono lo abre para acompañar a alguien paso
+		// a paso. En pestaña nueva, para no perder el filtro de la bandeja.
+		expect(fuente).toContain('Abrir el formulario');
+		expect(fuente).toContain('href={enlace}');
+		expect(fuente).toContain('target="_blank"');
+	});
+
 	it('WhatsApp se abre SIN número: aquí no se sabe a quién', () => {
 		// Con número es el call center, que sí sabe a quién llama. Aquí el enlace
 		// es general y `wa.me` sin número abre la lista de contactos.

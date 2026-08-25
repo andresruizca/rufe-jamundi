@@ -12,7 +12,7 @@
 	// barrio o para pegarlo en una cartelera.
 
 	import { tick } from 'svelte';
-	import { Check, Copy, MessageCircle, QrCode, Share2, X } from '@lucide/svelte';
+	import { Check, Copy, ExternalLink, MessageCircle, QrCode, Share2, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { enlaceDePreinscripcion } from '$lib/compartir';
 
@@ -159,9 +159,31 @@
 			</div>
 
 			<!--
+				Abrirlo antes de mandarlo.
+
+				Quien va a pegar este enlace en un grupo del barrio quiere ver primero
+				qué se va a encontrar la gente — y quien atiende el teléfono lo abre
+				para acompañar a alguien paso a paso: «ahora le sale la casilla de
+				autorización, márquela». Sin esto había que copiar el enlace y pegarlo
+				en otra pestaña a mano.
+
+				En pestaña nueva a propósito: la bandeja o la lista de llamadas se
+				quedan donde estaban, con su filtro y su página.
+			-->
+			<a
+				class="boton boton--suave panel__wa"
+				href={enlace}
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<ExternalLink size={15} aria-hidden="true" />
+				Abrir el formulario
+			</a>
+
+			<!--
 				`wa.me` SIN número abre la lista de contactos para elegir a quién.
-				Para mandárselo a alguien concreto de la base del RUFE está el call
-				center, que ya sabe su teléfono.
+				Para mandárselo a alguien concreto de la base del RUFE está la ficha
+				de ese hogar, que ya sabe su teléfono.
 			-->
 			<a
 				class="boton boton--suave panel__wa"
