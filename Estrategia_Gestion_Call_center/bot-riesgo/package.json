@@ -1,0 +1,22 @@
+{
+  "name": "bot-riesgo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bot de WhatsApp para Gestión del Riesgo — receptor de webhooks de WaSphere y autómata determinista",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "prisma migrate deploy",
+    "generate": "prisma generate",
+    "test": "node --test src/**/*.test.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

@@ -1,0 +1,58 @@
+// Bot de Gestión del Riesgo. Base propia, separada de la de WaSphere: el bot
+// no debe poder corromper el estado de la sesión de WhatsApp, y WaSphere se
+// actualiza desde upstream sin arrastrar nuestras tablas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Una conversación abierta. Una fila por número.
+model BotSession {
+  id         String    @id @default(cuid())
+  /// Teléfono normalizado, solo dígitos con indicativo. Es la clave real.
+  phone      String    @unique
+  /// Dirección EXACTA por la que WhatsApp direcciona el hilo. Puede ser un
+  /// `…@lid` en vez del teléfono; responder al número en ese caso parte la
+  /// sesión Signal y el mensaje siguiente del ciudadano ya no descifra.
+  jid        String?
+  /// Nodo actual del autómata. Ver src/bot/engine.js.
+  state      String    @default("NUEVA")
+  /// Lo recogido hasta ahora en la conversación.
+  context    Json?
+  /// Handoff a agente humano: hasta cuándo el bot guarda silencio.
+  mutedUntil DateTime? @map("muted_until")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([lastSeenAt])
+  @@index([mutedUntil])
+  @@map("bot_sessions")
+}
+
+/// Bitácora de todo lo que entra y sale. Es la auditoría y, además, cómo se
+/// descubren los formatos que el proveedor no documenta.
+model BotEvent {
+  id          String   @id @default(cuid())
+  /// Id del mensaje en el proveedor. ÚNICO: es lo que hace idempotente el
+  /// reintento del webhook.
+  externalId  String?  @unique @map("external_id")
+  phone       String?
+  /// "in" | "out"
+  direction   String   @default("in")
+  text        String?
+  raw         Json?
+  stateBefore String?  @map("state_before")
+  stateAfter  String?  @map("state_after")
+  error       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([phone])
+  @@index([createdAt])
+  @@map("bot_events")
+}
