@@ -5,7 +5,7 @@
 	// evento, el lugar y la fecha. Los datos identificatorios solo aparecen al
 	// abrir un reporte, que es la acción que queda registrada en auditoría.
 
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { Download, FileWarning, Flag, LoaderCircle, Search, X } from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { rufeApi, type FiltrosReportes } from '$lib/api/servicios';
@@ -17,6 +17,8 @@
 	let reportes = $state<ReporteResumen[]>([]);
 	let paginacion = $state<Paginacion | null>(null);
 	let cargando = $state(true);
+	/** Un refresco con resultados ya en pantalla: se atenúa, no se vacía. */
+	let buscando = $state(false);
 	let error = $state<string | null>(null);
 
 	let filtros = $state<FiltrosReportes>({ estado: '', zona: '', q: '', pagina: 1 });
@@ -120,34 +122,99 @@
 		{ codigo: 'RURAL', etiqueta: 'Rural' }
 	];
 
+	// ── Búsqueda mientras se escribe ────────────────────────────────────────
+	//
+	// Sin botón: se busca al dejar de teclear. Dos cuidados que esto siempre
+	// exige, y que no son opcionales aquí:
+	//
+	//   1. Un retardo. Una consulta por pulsación son ocho peticiones para una
+	//      cédula, y cada una recorre la tabla de personas del censo entero.
+	//   2. Un número de orden. Las respuestas NO llegan en el orden en que se
+	//      piden: la de «1684» puede llegar después de la de «16844290» y
+	//      dejar en pantalla el resultado de lo que ya no está escrito. Es el
+	//      fallo clásico del buscador en vivo y no se ve al probarlo con buena
+	//      conexión — aparece justo en la conexión mala de un municipio.
+
+	/** Lo que se espera desde la última tecla. Bastante para no disparar por letra. */
+	const ESPERA_MS = 350;
+
+	/**
+	 * Desde cuántos caracteres se busca solo.
+	 *
+	 * Con uno o dos, el LIKE de dirección y barrio recorre la bandeja entera
+	 * para devolver casi todo: mucho trabajo al servidor para una lista que no
+	 * ayuda a nadie. Con Enter o el botón se busca igual lo que sea que haya.
+	 */
+	const MINIMO_PARA_BUSCAR_SOLO = 3;
+
+	let temporizador: ReturnType<typeof setTimeout> | null = null;
+	let ultima = 0;
+
 	onMount(cargar);
+	onDestroy(() => {
+		if (temporizador) clearTimeout(temporizador);
+	});
 
 	async function cargar() {
-		cargando = true;
+		const mia = ++ultima;
+
+		// La primera vez no hay nada que enseñar y toca la pantalla de carga.
+		// Después se conserva la lista anterior atenuada: vaciar la tabla en cada
+		// pulsación la haría parpadear y perdería el sitio quien está leyendo.
+		if (reportes.length === 0) cargando = true;
+		else buscando = true;
+
 		error = null;
 
 		try {
 			const datos = await rufeApi.listar(filtros);
+
+			// Llegó tarde: ya se pidió algo más nuevo. Pintarla dejaría en pantalla
+			// el resultado de un texto que la persona ya cambió.
+			if (mia !== ultima) return;
+
 			reportes = datos.reportes;
 			paginacion = datos.paginacion;
 		} catch (e) {
+			if (mia !== ultima) return;
+
 			error = e instanceof ApiError ? e.message : 'No se pudieron cargar los reportes.';
 		} finally {
-			cargando = false;
+			if (mia === ultima) {
+				cargando = false;
+				buscando = false;
+			}
 		}
 	}
 
+	/** Al escribir: se espera a que pare y entonces se busca. */
+	function alEscribir() {
+		if (temporizador) clearTimeout(temporizador);
+
+		const texto = (filtros.q ?? '').trim();
+		if (texto !== '' && texto.length < MINIMO_PARA_BUSCAR_SOLO) return;
+
+		temporizador = setTimeout(() => {
+			filtros.pagina = 1;
+			void cargar();
+		}, ESPERA_MS);
+	}
+
+	/** Enter o el botón: ya no hay nada que esperar. */
 	function aplicar() {
+		if (temporizador) clearTimeout(temporizador);
 		filtros.pagina = 1;
 		void cargar();
 	}
 
 	function limpiar() {
+		if (temporizador) clearTimeout(temporizador);
 		filtros = { estado: '', zona: '', q: '', pagina: 1 };
 		void cargar();
 	}
 
 	function irAPagina(n: number) {
+		if (temporizador) clearTimeout(temporizador);
 		filtros.pagina = n;
 		void cargar();
 	}
@@ -176,31 +243,39 @@
 	>
 		<div class="campo filtros__buscar">
 			<label class="campo__etiqueta" for="filtro-q">Buscar</label>
-			<input
-				id="filtro-q"
-				class="campo__control"
-				type="search"
-				placeholder="Cédula, nombre completo o número de ficha"
-				bind:value={filtros.q}
-				aria-describedby="filtro-q-ayuda"
-			/>
+			<div class="buscador">
+				<input
+					id="filtro-q"
+					class="campo__control"
+					type="search"
+					placeholder="Cédula, nombre completo o número de ficha"
+					bind:value={filtros.q}
+					oninput={alEscribir}
+					aria-describedby="filtro-q-ayuda"
+				/>
+				{#if buscando}
+					<span class="buscador__señal" aria-hidden="true">
+						<LoaderCircle size={16} class="girando" />
+					</span>
+				{/if}
+			</div>
 		</div>
 
 		<p class="campo__ayuda filtros__ayuda" id="filtro-q-ayuda">
-			También encuentra por dirección, barrio o evento. El nombre puede ir en cualquier orden y
-			sin tildes.
+			Busca mientras escribe. También encuentra por dirección, barrio o evento; el nombre puede ir
+			en cualquier orden y sin tildes.
 		</p>
 
 		<div class="campo filtros__estado">
 			<label class="campo__etiqueta" for="filtro-estado">Estado</label>
-			<select id="filtro-estado" class="campo__control" bind:value={filtros.estado}>
+			<select id="filtro-estado" class="campo__control" bind:value={filtros.estado} onchange={aplicar}>
 				{#each ESTADOS as e (e.codigo)}<option value={e.codigo}>{e.etiqueta}</option>{/each}
 			</select>
 		</div>
 
 		<div class="campo filtros__zona">
 			<label class="campo__etiqueta" for="filtro-zona">Zona</label>
-			<select id="filtro-zona" class="campo__control" bind:value={filtros.zona}>
+			<select id="filtro-zona" class="campo__control" bind:value={filtros.zona} onchange={aplicar}>
 				{#each ZONAS as z (z.codigo)}<option value={z.codigo}>{z.etiqueta}</option>{/each}
 			</select>
 		</div>
@@ -268,7 +343,7 @@
 			</p>
 		{/if}
 
-		<div class="tabla-envoltura">
+		<div class="tabla-envoltura" class:tabla-envoltura--buscando={buscando} aria-busy={buscando}>
 			<table class="tabla">
 				<caption class="visualmente-oculto">
 					Fichas RUFE registradas, ordenadas por fecha
@@ -505,6 +580,35 @@
 		font-family: ui-monospace, 'SFMono-Regular', monospace;
 		font-size: 0.78rem;
 		color: var(--color-primary-dark);
+	}
+
+	/* El campo y su señal de actividad. La señal va DENTRO del campo, sobre el
+	   borde derecho: fuera empujaría el formulario y la fila de filtros daría un
+	   salto cada vez que alguien teclea. */
+	.buscador {
+		position: relative;
+	}
+
+	.buscador .campo__control {
+		width: 100%;
+		padding-right: 2.4rem;
+	}
+
+	.buscador__señal {
+		position: absolute;
+		top: 50%;
+		right: 0.7rem;
+		transform: translateY(-50%);
+		display: flex;
+		color: var(--color-muted);
+		pointer-events: none;
+	}
+
+	/* Mientras llega el resultado nuevo se conserva el anterior atenuado. Vaciar
+	   la tabla en cada pulsación la haría parpadear. */
+	.tabla-envoltura--buscando {
+		opacity: 0.55;
+		transition: opacity 120ms ease;
 	}
 
 	/* La persona que coincidió con la búsqueda. Debajo del radicado y no en una
