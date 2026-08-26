@@ -117,8 +117,12 @@ $router->post('/auth/login', [$auth, 'login']);
 // superficie que cualquiera en internet puede tocar. Van con límite por IP,
 // trampa antirrobot e idempotencia por envio_id, y NO existe ninguna ruta
 // pública que devuelva pre-inscripciones: consultar por radicado sería un
-// buscador de damnificados para quien probara combinaciones.
+// buscador de damnificados para quien probara combinaciones. La verificación de
+// cédula es la excepción y devuelve un booleano y nada más (ver Censo).
 $router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
+// Por POST y no por GET: una cédula en la barra de direcciones acaba en el
+// registro de accesos de Apache y en el historial del navegador.
+$router->post('/preinscripcion/verificacion', [$preinscripcion, 'verificar']);
 $router->post('/preinscripcion/cargas', [$preinscripcion, 'abrirCarga']);
 $router->post('/preinscripcion/cargas/{carga}/archivos', [$preinscripcion, 'subirArchivo']);
 $router->delete('/preinscripcion/cargas/{carga}/archivos/{id}', [$preinscripcion, 'eliminarArchivo']);

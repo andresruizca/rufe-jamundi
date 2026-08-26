@@ -12,6 +12,7 @@ use App\Core\HttpError;
 use App\Core\Limite;
 use App\Core\Request;
 use App\Core\Response;
+use App\Preinscripcion\Censo;
 use App\Preinscripcion\Radicado;
 use App\Preinscripcion\Senales;
 use App\Preinscripcion\Validador;
@@ -38,6 +39,12 @@ use Throwable;
  * Y una ausencia deliberada: NO hay ninguna ruta pública que devuelva
  * pre-inscripciones. Consultar por radicado sería un buscador de damnificados
  * para cualquiera que probara combinaciones.
+ *
+ * La única grieta en esa regla es `verificar()`, que responde sí o no sobre una
+ * cédula porque el flujo lo exige: la pre-inscripción es la continuación del
+ * censo y no un formulario abierto. Está acotada hasta donde se puede sin
+ * romperla — solo un booleano, por POST, con doble límite de tasa— y el
+ * razonamiento completo está en `Preinscripcion\Censo`.
  */
 final class PreinscripcionController
 {
@@ -52,6 +59,26 @@ final class PreinscripcionController
     private const MAX_BORRADO_LOTE = 50;
 
     private const MAX_ENVIOS_HORA = 5;
+
+    /**
+     * Cuántas cédulas se pueden consultar desde una conexión.
+     *
+     * Dos ventanas a propósito. La de la hora deja margen para el celular
+     * compartido de una vereda —varias familias, un solo teléfono— y para quien
+     * se equivoca al teclear. La del día es la que de verdad cierra la puerta a
+     * recorrer cédulas: sin ella, un límite por hora se sortea esperando.
+     */
+    private const MAX_VERIFICACIONES_HORA = 15;
+
+    private const MAX_VERIFICACIONES_DIA = 40;
+
+    /**
+     * A dónde llamar cuando la cédula no aparece.
+     *
+     * Escrito una sola vez: este número es lo ÚNICO que se lleva quien no puede
+     * continuar, y una errata aquí deja a una familia damnificada sin salida.
+     */
+    private const LINEA_ATENCION = 'Comuníquese con la línea de atención de Gestión del Riesgo de Jamundí: PBX 602 519 0969, extensión 2070.';
 
     /** Tope amplio de peticiones, incluidos los reintentos que no crean nada. */
     private const MAX_INTENTOS_HORA = 60;
@@ -112,6 +139,49 @@ final class PreinscripcionController
                 'objetivo_bytes_foto' => Rufe::OBJETIVO_BYTES_FOTO,
                 'extensiones'      => array_keys(Rufe::EXTENSIONES),
             ],
+        ]);
+    }
+
+    /**
+     * ¿Esta cédula está en el censo? Es la primera pantalla del formulario.
+     *
+     * Responde `{habilitado: bool}` y nada más. Ver `Censo` para por qué eso es
+     * todo lo que puede responder y qué se hace para que no sea un buscador de
+     * damnificados.
+     *
+     * Devuelve 200 en los dos casos: que la cédula no esté no es un error de la
+     * persona, y un 404 aquí solo serviría para que un robot distinguiera los
+     * casos por el código en vez de por el cuerpo.
+     */
+    public function verificar(Request $req): void
+    {
+        Limite::consumir(
+            'preinscripcion.verificar.hora',
+            $req->ip(),
+            self::MAX_VERIFICACIONES_HORA,
+            3600,
+            'Ha consultado demasiadas veces desde esta conexión. Espere unos minutos.'
+        );
+
+        Limite::consumir(
+            'preinscripcion.verificar.dia',
+            $req->ip(),
+            self::MAX_VERIFICACIONES_DIA,
+            86400,
+            'Ha consultado demasiadas veces desde esta conexión. '.self::LINEA_ATENCION
+        );
+
+        $documento = Censo::normalizar($req->texto('documento'));
+
+        if (! Censo::pareceCedula($documento)) {
+            throw HttpError::validacion([
+                'documento' => 'Escriba su número de cédula, sin puntos ni espacios.',
+            ]);
+        }
+
+        Response::ok([
+            'habilitado' => Censo::estaInscrito($documento),
+            'linea_atencion' => self::LINEA_ATENCION,
         ]);
     }
 
@@ -311,6 +381,18 @@ final class PreinscripcionController
         }
 
         $datos = $revision['datos'];
+
+        // La misma puerta que la primera pantalla, otra vez y aquí de verdad.
+        //
+        // Lo de allí es comodidad: avisa antes de que la persona llene cuatro
+        // pasos para nada. Quien decide es esto, porque la ruta es pública y
+        // saltarse el navegador es trivial.
+        if (! Censo::estaInscrito($datos['documento'])) {
+            throw HttpError::validacion([
+                'documento' => 'Esta cédula no aparece en el censo (RUFE). '.self::LINEA_ATENCION,
+            ]);
+        }
+
         $huella = Radicado::huella($datos['direccion'], $datos['documento']);
 
         // Ya existe una solicitud de esta misma vivienda: se devuelve la suya en

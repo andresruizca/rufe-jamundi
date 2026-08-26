@@ -1002,6 +1002,15 @@ color: var(--color-muted);
    los tonos de alerta —no de error—: quedarse sin señal en una vereda es lo
    esperado, no una avería. Lo que tiene que transmitir es que se puede seguir
    trabajando. */
+/* De cuándo son los datos que se están viendo, cuando vienen de la copia
+   guardada. En su propia línea y en negrita: es lo que decide si alguien puede
+   fiarse de lo que tiene delante. */
+.aviso-sin-red__fecha {
+	display: block;
+	margin-top: 0.15rem;
+	font-weight: 600;
+}
+
 .aviso-sin-red {
 	display: flex;
 	align-items: center;

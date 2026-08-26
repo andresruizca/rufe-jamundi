@@ -318,6 +318,21 @@ export const preinscripcionApi = {
 			video: { bytes_trozo: number; max_bytes: number; max_videos: number };
 		}>('/preinscripcion/catalogos', false),
 
+	/**
+	 * ¿Esta cédula está en el censo? La primera pantalla del formulario.
+	 *
+	 * Por POST y no por GET a propósito: una cédula en la barra de direcciones
+	 * acaba en el registro de accesos del servidor y en el historial del
+	 * teléfono. La respuesta es un booleano y nada más — ver
+	 * `backend/src/Preinscripcion/Censo.php`.
+	 */
+	verificar: (documento: string) =>
+		api.post<{ habilitado: boolean; linea_atencion: string }>(
+			'/preinscripcion/verificacion',
+			{ documento },
+			false
+		),
+
 	/** Abre una carga para las fotos, sin sesión. */
 	abrirCarga: () =>
 		api.post<{ carga: string; maximo_archivos: number; maximo_bytes: number }>(

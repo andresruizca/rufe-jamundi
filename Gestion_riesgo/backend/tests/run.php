@@ -2522,7 +2522,39 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         // y uno de 30 segundos pesa unos 3 MB, así que no cabe de una vez.
         'POST /preinscripcion/cargas/{carga}/videos',
         'POST /preinscripcion/cargas/{carga}/videos/{id}/trozos',
+        // La puerta del formulario: responde sí o no sobre una cédula, porque
+        // la pre-inscripción continúa el censo y no es un formulario abierto.
+        // Es la más delicada de la lista —mirada de cerca, dice si alguien está
+        // en la lista de damnificados—, y por eso devuelve un booleano y nada
+        // más, va por POST y lleva doble límite de tasa. Ver Preinscripcion\Censo.
+        'POST /preinscripcion/verificacion',
     ], rutasPublicas($raiz));
+});
+
+prueba('la puerta del censo acepta la cédula como la escribe la gente', function (): void {
+    afirmarIgual('1144062345', App\Preinscripcion\Censo::normalizar('1.144.062.345'));
+    afirmarIgual('16285943', App\Preinscripcion\Censo::normalizar(' 16 285 943 '));
+});
+
+prueba('la puerta del censo exige una cédula plausible', function (): void {
+    // Los mismos límites que el validador de la pre-inscripción. Si discreparan,
+    // la puerta dejaría pasar cédulas que el paso 1 rechaza un momento después.
+    afirmar(App\Preinscripcion\Censo::pareceCedula('1144062345'), 'una cédula normal debería pasar');
+    afirmar(! App\Preinscripcion\Censo::pareceCedula('1234'), 'cuatro dígitos no son una cédula');
+    afirmar(! App\Preinscripcion\Censo::pareceCedula('1234567890123456'), 'dieciséis dígitos tampoco');
+    afirmar(! App\Preinscripcion\Censo::pareceCedula(''), 'la cadena vacía tampoco');
+});
+
+prueba('el envío ciudadano vuelve a comprobar el censo, no se fía de la pantalla', function () use ($raiz): void {
+    // La ruta es pública: saltarse el navegador y hacer el POST a mano es
+    // trivial. Si esta comprobación desapareciera del controlador, la puerta se
+    // quedaría en decoración y cualquiera podría pre-inscribirse.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+
+    afirmar(
+        str_contains($php, 'Censo::estaInscrito($datos[\'documento\'])'),
+        'crear() ya no comprueba la cédula contra el censo'
+    );
 });
 
 prueba('el cupo de fotos de una solicitud ciudadana es acotado', function (): void {

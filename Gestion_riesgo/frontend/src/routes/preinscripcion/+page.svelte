@@ -36,6 +36,7 @@
 	import GrabadorVideo from '$lib/preinscripcion/GrabadorVideo.svelte';
 	import SelectorSenales from '$lib/preinscripcion/SelectorSenales.svelte';
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
+	import PuertaCedula from '$lib/preinscripcion/PuertaCedula.svelte';
 	import {
 		bloqueoDeAvance,
 		datosVacios,
@@ -99,6 +100,33 @@
 	const envioId = crypto.randomUUID();
 
 	let datos = $state(datosVacios());
+
+	/**
+	 * Si el censo ya reconoció la cédula.
+	 *
+	 * Mientras sea `false` no se dibuja el formulario: la pre-inscripción es la
+	 * continuación del proceso de quien ya fue censado en campo, y preguntarle
+	 * nombre, dirección y fotos a alguien que no está en el RUFE es hacerle
+	 * llenar cuatro pasos para nada.
+	 *
+	 * Quien decide de verdad es PHP, que vuelve a comprobarlo al recibir el
+	 * envío. Esto es la cortesía de avisar antes.
+	 */
+	let habilitado = $state(false);
+
+	function entrarConCedula(documento: string) {
+		datos.documento = documento;
+		habilitado = true;
+	}
+
+	/** Volver a la puerta: la cédula se cambia allí, no en el paso 1. */
+	function cambiarCedula() {
+		habilitado = false;
+		datos.documento = '';
+		errores = {};
+		errorEnvio = '';
+		indice = 0;
+	}
 
 	let indice = $state(0);
 
@@ -351,6 +379,8 @@
 				materiales</strong>: eso lo decide la inspección técnica de la vivienda.
 			</p>
 		</div>
+	{:else if !habilitado}
+		<PuertaCedula onEntrar={entrarConCedula} />
 	{:else if catalogos}
 		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
 
@@ -376,16 +406,21 @@
 					{/if}
 				</label>
 
-				<label class="campo">
+				<!--
+					La cédula ya no se escribe aquí: se verificó contra el censo en la
+					primera pantalla y es la que abrió el formulario. Editable, un
+					descuido la cambiaría por una que el servidor rechazaría al final,
+					después de las fotos y los videos.
+				-->
+				<div class="campo">
 					<span class="campo__etiqueta">Cédula *</span>
-					<input
-						class="campo__control"
-						inputmode="numeric"
-						bind:value={datos.documento}
-						placeholder="Sin puntos ni espacios"
-					/>
+					<p class="cedula">
+						<span class="cedula__numero">{datos.documento}</span>
+						<button type="button" class="volver" onclick={cambiarCedula}>Cambiar</button>
+					</p>
+					<span class="campo__ayuda">Verificada en el censo de afectados.</span>
 					{#if errores.documento}<span class="campo__error">{errores.documento}</span>{/if}
-				</label>
+				</div>
 
 				<label class="campo">
 					<span class="campo__etiqueta">Teléfono *</span>
@@ -857,6 +892,24 @@
 
 	/* Fuera de la pantalla, no `display:none`: algunos robots ignoran lo que no
 	   se dibuja, y así el campo sigue existiendo para ellos. */
+	.cedula {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+		margin: 0;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		background: var(--color-surface-alt);
+	}
+
+	.cedula__numero {
+		font-size: 1.05rem;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.02em;
+	}
+
 	.trampa {
 		position: absolute;
 		left: -9999px;
