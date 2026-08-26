@@ -56,10 +56,9 @@ final class Busqueda
 
         // Cédula. Se compara exacta, no por trozos: un documento parcial
         // devolvería decenas de hogares ajenos y convertiría el buscador en una
-        // forma de pasear por el censo. Se limpian puntos, comas y espacios
-        // porque la gente escribe «1.113.456.789».
-        $documento = preg_replace('/[.,\s-]/', '', $texto) ?? '';
-        if ($documento !== '' && preg_match('/^\d{4,20}$/', $documento) === 1) {
+        // forma de pasear por el censo.
+        $documento = self::documento($texto);
+        if ($documento !== '') {
             $partes[] = 'EXISTS (SELECT 1 FROM rufe_personas pd
                                   WHERE pd.reporte_id = r.id AND pd.numero_documento = :doc)';
             $params['doc'] = $documento;
@@ -85,6 +84,76 @@ final class Busqueda
         }
 
         return ['('.implode(' OR ', $partes).')', $params];
+    }
+
+    /**
+     * La misma búsqueda, pero apuntando a una persona y no a un hogar.
+     *
+     * Sirve para poder decir A QUIÉN corresponde cada resultado. La bandeja no
+     * lleva nombres a propósito —para revisar basta el evento, el lugar y la
+     * fecha—, pero cuando alguien busca por cédula esa regla se vuelve en su
+     * contra: encuentra una ficha y no puede confirmar que sea la persona que
+     * tiene delante en la ventanilla.
+     *
+     * Solo se devuelve la persona QUE COINCIDIÓ, no el hogar entero: quien
+     * escribió la cédula ya la conocía, y el resto de la familia no tiene por
+     * qué aparecer en una lista para llegar hasta ella.
+     *
+     * Los marcadores llevan prefijo propio (`pdoc`, `pn0`…) porque esta
+     * condición viaja en la MISMA consulta que la de arriba, y con preparadas
+     * nativas dos marcadores con el mismo nombre son un error de MySQL, no un
+     * detalle de estilo. Es exactamente el fallo que dejó este buscador roto
+     * antes de que existiera esta clase.
+     *
+     * @return array{0: string, 1: array<string, string>}
+     */
+    public static function condicionPersona(string $texto): array
+    {
+        $texto = trim($texto);
+        if ($texto === '') {
+            return ['', []];
+        }
+
+        $partes = [];
+        $params = [];
+
+        $documento = self::documento($texto);
+        if ($documento !== '') {
+            $partes[] = 'p.numero_documento = :pdoc';
+            $params['pdoc'] = $documento;
+        }
+
+        $palabras = self::palabras($texto);
+        if ($palabras !== []) {
+            $porNombre = [];
+
+            foreach ($palabras as $i => $palabra) {
+                $clave = 'pn'.$i;
+                $porNombre[] = "CONCAT(p.nombres, ' ', p.apellidos) LIKE :{$clave}";
+                $params[$clave] = '%'.self::escaparLike($palabra).'%';
+            }
+
+            $partes[] = '('.implode(' AND ', $porNombre).')';
+        }
+
+        if ($partes === []) {
+            return ['', []];
+        }
+
+        return ['('.implode(' OR ', $partes).')', $params];
+    }
+
+    /**
+     * La cédula que hay en el texto, o cadena vacía.
+     *
+     * Se limpian puntos, comas, guiones y espacios porque la gente la escribe
+     * como la lee en el documento: «1.113.456.789».
+     */
+    private static function documento(string $texto): string
+    {
+        $limpio = preg_replace('/[.,\s-]/', '', trim($texto)) ?? '';
+
+        return preg_match('/^\d{4,20}$/', $limpio) === 1 ? $limpio : '';
     }
 
     /**

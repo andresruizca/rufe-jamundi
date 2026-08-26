@@ -196,6 +196,15 @@ export type ReporteResumen = {
 	revision_prioritaria: boolean;
 	anonimizado: boolean;
 	creado_en: string;
+	/**
+	 * Quién coincidió con la búsqueda.
+	 *
+	 * Solo viene cuando se buscó por cédula o por nombre, y solo trae a la
+	 * persona que coincidió: la bandeja no lleva nombres a propósito, pero un
+	 * resultado sin nombre no le sirve a quien tiene al ciudadano delante en la
+	 * ventanilla y necesita confirmar que encontró su ficha.
+	 */
+	persona?: { nombre: string; documento: string | null } | null;
 };
 
 export type ReporteDetalle = ReporteResumen & {

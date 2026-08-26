@@ -1131,6 +1131,37 @@ prueba('sin texto no hay condición', function (): void {
     afirmarIgual(['', []], Busqueda::condicion('   '));
 });
 
+prueba('la condición de persona no choca con la del hogar', function (): void {
+    // Las dos viajan en la MISMA petición. Si compartieran un nombre de
+    // marcador, MySQL respondería «Invalid parameter number» al preparar — que
+    // es exactamente cómo estuvo roto este buscador antes.
+    foreach (['Juan Pérez', '1113456789', 'calle 10 juan 123'] as $texto) {
+        $delHogar = array_keys(Busqueda::condicion($texto)[1]);
+        $deLaPersona = array_keys(Busqueda::condicionPersona($texto)[1]);
+
+        afirmarIgual([], array_intersect($delHogar, $deLaPersona), "chocan con «{$texto}»");
+    }
+});
+
+prueba('la condición de persona tiene un parámetro por marcador', function (): void {
+    foreach (['Juan Pérez García Lopez Ruiz', '1.113.456.789', 'la playa'] as $texto) {
+        [$sql, $params] = Busqueda::condicionPersona($texto);
+        $enSql = array_keys(marcadores($sql));
+        $enParams = array_keys($params);
+        sort($enSql);
+        sort($enParams);
+        afirmarIgual($enSql, $enParams, "descuadre con «{$texto}»");
+    }
+});
+
+prueba('la persona se busca por la misma cédula que el hogar', function (): void {
+    // Si discreparan, la ficha aparecería en la lista y debajo no saldría nadie:
+    // quien atiende en ventanilla no podría confirmar que encontró a su persona.
+    afirmarIgual('1113456789', Busqueda::condicionPersona('1.113.456.789')[1]['pdoc']);
+    afirmar(Busqueda::condicionPersona('')[0] === '', 'sin texto no hay condición de persona');
+    afirmar(Busqueda::condicionPersona('123')[0] === '', 'un número corto no identifica a nadie');
+});
+
 prueba('busca por cédula exacta, no por trozos', function (): void {
     // Un documento parcial devolvería hogares ajenos y convertiría el buscador
     // en una forma de pasear por el censo.

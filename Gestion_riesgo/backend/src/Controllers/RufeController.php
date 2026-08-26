@@ -64,6 +64,8 @@ final class RufeController
             $params + ['limite' => $porPagina, 'salto' => ($pagina - 1) * $porPagina]
         );
 
+        $resumenes = array_map([$this, 'presentarResumen'], $filas);
+
         // Buscar por cédula o por nombre es ir a por una persona concreta, no
         // hojear la bandeja. Queda constancia de quién lo hizo y de cuántas
         // fichas encontró, pero NUNCA del texto buscado: guardarlo metería la
@@ -72,7 +74,20 @@ final class RufeController
         // sabe igual, porque abrir una ficha se audita con su radicado.
         // El texto se vuelve a leer de la petición: `filtros()` lo tiene en una
         // variable suya, no compartida con este método.
-        if (Busqueda::buscaPersona((string) ($req->query('q') ?? ''))) {
+        $q = (string) ($req->query('q') ?? '');
+
+        if (Busqueda::buscaPersona($q)) {
+            // Y se dice a QUIÉN corresponde cada ficha encontrada. Sin esto, el
+            // buscador por cédula funciona pero no sirve: devuelve un radicado y
+            // un barrio, y quien atiende en ventanilla no puede confirmar que
+            // sea la persona que tiene delante. Solo la persona que coincidió,
+            // nunca el hogar entero.
+            $encontradas = $this->personasQueCoinciden($q, $filas);
+
+            foreach ($resumenes as $i => $resumen) {
+                $resumenes[$i]['persona'] = $encontradas[$resumen['id']] ?? null;
+            }
+
             Auditoria::registrar(
                 $req,
                 'rufe.busqueda_de_persona',
@@ -84,7 +99,7 @@ final class RufeController
         }
 
         Response::ok([
-            'reportes' => array_map([$this, 'presentarResumen'], $filas),
+            'reportes' => $resumenes,
             'paginacion' => [
                 'pagina' => $pagina,
                 'por_pagina' => $porPagina,
@@ -660,6 +675,63 @@ final class RufeController
             $condiciones === [] ? '' : 'WHERE '.implode(' AND ', $condiciones),
             $params,
         ];
+    }
+
+    /**
+     * Quién coincidió con la búsqueda, por ficha.
+     *
+     * Va en su propia consulta y no en la de la lista porque un JOIN
+     * multiplicaría filas: un hogar puede tener dos personas que coincidan con
+     * «maría», y entonces la ficha saldría dos veces. Es el mismo fallo que
+     * congeló el call center, y aquí además rompería la paginación.
+     *
+     * @param  list<array<string,mixed>>  $filas
+     * @return array<int, array{nombre: string, documento: string|null}>
+     */
+    private function personasQueCoinciden(string $texto, array $filas): array
+    {
+        [$condicion, $params] = Busqueda::condicionPersona($texto);
+
+        if ($condicion === '' || $filas === []) {
+            return [];
+        }
+
+        $marcadores = [];
+
+        foreach ($filas as $i => $fila) {
+            $clave = 'r'.$i;
+            $marcadores[] = ':'.$clave;
+            $params[$clave] = (int) $fila['id'];
+        }
+
+        $personas = Db::all(
+            'SELECT p.reporte_id, p.nombres, p.apellidos, p.numero_documento
+               FROM rufe_personas p
+              WHERE p.reporte_id IN ('.implode(', ', $marcadores).')
+                AND '.$condicion.'
+              ORDER BY p.reporte_id ASC, p.orden ASC',
+            $params
+        );
+
+        $porReporte = [];
+
+        foreach ($personas as $persona) {
+            $id = (int) $persona['reporte_id'];
+
+            // La primera basta: es la de menor orden, y en un hogar el orden 1
+            // es el jefe. Si coincidieran dos, enseñar las dos convertiría el
+            // resultado en una lista de la familia.
+            if (isset($porReporte[$id])) {
+                continue;
+            }
+
+            $porReporte[$id] = [
+                'nombre' => trim($persona['nombres'].' '.$persona['apellidos']),
+                'documento' => $persona['numero_documento'],
+            ];
+        }
+
+        return $porReporte;
     }
 
     /**

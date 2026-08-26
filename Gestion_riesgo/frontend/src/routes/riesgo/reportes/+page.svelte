@@ -324,6 +324,20 @@
 								{#if reporte.anonimizado}
 									<span class="etiqueta etiqueta--inactivo">Anonimizado</span>
 								{/if}
+								<!--
+									A quién corresponde la ficha, solo cuando se buscó por cédula o
+									por nombre. Sin esto el filtro por cédula funciona pero no sirve:
+									devuelve un radicado y un barrio, y quien atiende en ventanilla no
+									puede confirmar que sea la persona que tiene delante.
+								-->
+								{#if reporte.persona}
+									<span class="coincidencia">
+										<span class="coincidencia__nombre">{reporte.persona.nombre}</span>
+										{#if reporte.persona.documento}
+											<span class="coincidencia__cedula">C.C. {reporte.persona.documento}</span>
+										{/if}
+									</span>
+								{/if}
 							</td>
 							<td>{reporte.evento}</td>
 							<td>
@@ -491,6 +505,27 @@
 		font-family: ui-monospace, 'SFMono-Regular', monospace;
 		font-size: 0.78rem;
 		color: var(--color-primary-dark);
+	}
+
+	/* La persona que coincidió con la búsqueda. Debajo del radicado y no en una
+	   columna propia: solo existe cuando se buscó por cédula o por nombre, y una
+	   columna que aparece y desaparece descuadra la tabla entera. */
+	.coincidencia {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.82rem;
+		line-height: 1.35;
+	}
+
+	.coincidencia__nombre {
+		display: block;
+		font-weight: 600;
+	}
+
+	.coincidencia__cedula {
+		display: block;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.sub {
