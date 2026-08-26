@@ -4,6 +4,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // La imagen es node:20-alpine (musl), no glibc. Sin este target Prisma
+  // descarga el motor equivocado y falla en tiempo de ejecución.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

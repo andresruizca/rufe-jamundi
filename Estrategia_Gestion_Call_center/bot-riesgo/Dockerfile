@@ -1,5 +1,11 @@
 FROM node:20-alpine
 
+# Prisma 5 sobre Alpine (musl) necesita openssl presente: sin él, el motor de
+# esquema arranca y devuelve un error en texto plano donde Prisma espera JSON
+# («Could not parse schema engine response»), y el contenedor entra en bucle de
+# reinicio. libc6-compat cubre las dependencias glibc del binario.
+RUN apk add --no-cache openssl libc6-compat
+
 WORKDIR /app
 
 # Las dependencias se instalan antes de copiar el código: así un cambio en
