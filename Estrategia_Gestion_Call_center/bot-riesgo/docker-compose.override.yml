@@ -1,0 +1,58 @@
+# Copia de /opt/wasphere/docker-compose.override.yml en el LXC 10.214.80.12.
+#
+# Se guarda acá para que el despliegue sea reproducible. En el servidor vive
+# JUNTO al docker-compose.yml de WaSphere —no en esta carpeta— porque compose
+# solo fusiona el override que encuentra en su propio directorio. El contexto
+# de build `../bot-riesgo` apunta a /opt/bot-riesgo.
+#
+# Ajustes locales para un contenedor de 1 GB de RAM.
+#
+# Este archivo NO se toca al actualizar WaSphere desde upstream: docker compose
+# lo fusiona sobre docker-compose.yml automáticamente.
+
+services:
+  # La sesión de WhatsApp es lo único IRRECUPERABLE de este stack: si el kernel
+  # mata wa-server, hay que volver a escanear el QR con el teléfono en la mano.
+  # oom_score_adj negativo lo pone al final de la lista de candidatos del OOM
+  # killer — que se lleve antes el dashboard, que se reinicia solo y no pierde
+  # nada.
+  wa-server:
+    oom_score_adj: -800
+
+  # La UI es lo más prescindible: es la primera que debe caer si hay presión.
+  # Nadie pierde datos porque el navegador muestre un error 15 segundos.
+  dashboard-ui:
+    oom_score_adj: 500
+
+  # ── Bot de Gestión del Riesgo ─────────────────────────────────────────
+  # Quinto servicio. NO modifica WaSphere: recibe sus webhooks y responde por
+  # su API REST. Vive en el mismo compose para compartir red y .env.
+  bot-riesgo:
+    build:
+      context: ../bot-riesgo
+    restart: unless-stopped
+    environment:
+      # Base propia dentro de la MISMA instancia de Postgres.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/bot_riesgo
+      PORT: "3010"
+      WASPHERE_BASE_URL: http://wa-server:3001
+      WASPHERE_API_TOKEN: ${WA_TOKEN}
+      # PENDIENTE: sin sesión vinculada. El bot recibe y registra, pero no
+      # puede responder hasta que se escanee el QR desde el Dashboard.
+      WASPHERE_SESSION_ID: ""
+      # El MISMO valor con el que WaSphere firma. Si difiere, el bot rechaza
+      # todos los eventos y no se entera nadie.
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET}
+      WASPHERE_TIMEOUT_MS: "30000"
+    ports:
+      - "3010:3010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3010/health || exit 1']
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
