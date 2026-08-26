@@ -31,11 +31,12 @@
 </script>
 
 <fieldset class="grupo" aria-describedby="senales-ayuda">
-	<legend class="grupo__titulo">¿Qué le ve a su vivienda?</legend>
+	<legend class="grupo__titulo">¿Qué daños presenta su vivienda?</legend>
 
 	<p class="grupo__ayuda" id="senales-ayuda">
-		Marque <strong>todo lo que reconozca</strong>. Puede marcar varias cosas, y también puede
-		continuar sin marcar ninguna si no está seguro: un profesional lo revisará en la visita.
+		Marque <strong>todo lo que reconozca</strong> de los cambios que quedaron después del
+		terremoto. Puede marcar varias cosas, y también puede continuar sin marcar ninguna si no está
+		seguro: un profesional lo revisará en la visita.
 	</p>
 
 	<div class="rejilla">

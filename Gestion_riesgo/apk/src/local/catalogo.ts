@@ -8,7 +8,7 @@
 // Cuando hay señal se refresca y se guarda en SQLite, así que un APK que lleva
 // meses instalado se pone al día solo la primera vez que alcanza cobertura.
 //
-// ⚠ Este archivo es una FOTO de `/preinscripcion/catalogos` del 22 de agosto de 2026. Si el
+// ⚠ Este archivo es una FOTO de `/preinscripcion/catalogos` del 26 de agosto de 2026. Si el
 // servidor cambia y el APK no, un teléfono viejo puede mandar códigos que ya no
 // existan — y el validador rechaza el envío ENTERO, no el campo. Por eso
 // `docs/servidor-requerido.md` pide que de `Senales::CATALOGO` solo se añada y
@@ -70,19 +70,19 @@ export const CATALOGO_EMBEBIDO: Catalogo = {
 		{
 			"codigo": "PARED_CAIDA",
 			"etiqueta": "Paredes caídas o inclinadas",
-			"ayuda": "Un muro se vino abajo, se abombó o quedó torcido.",
+			"ayuda": "Un muro se vino abajo, se desaplomó o quedó torcido.",
 			"icono": "pared-caida"
 		},
 		{
 			"codigo": "COLUMNA_DANADA",
 			"etiqueta": "Columnas o vigas partidas",
-			"ayuda": "Las columnas o vigas que sostienen la casa están rotas, peladas o torcidas.",
+			"ayuda": "Las columnas o vigas que sostienen la casa están rotas, dobladas o con los fierros a la vista.",
 			"icono": "columna-danada"
 		},
 		{
 			"codigo": "TECHO_TEJAS",
 			"etiqueta": "Tejas rotas o corridas",
-			"ayuda": "Faltan tejas, se rompieron o se movieron de su sitio.",
+			"ayuda": "Se perdieron tejas, se rompieron o se movieron de su sitio después del terremoto.",
 			"icono": "techo-tejas"
 		},
 		{
