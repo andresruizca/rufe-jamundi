@@ -34,6 +34,7 @@ use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
 use App\Rufe\Geocodificador;
 use App\Rufe\Radicado;
+use App\Rufe\Rud;
 use App\Rufe\Validador;
 use App\Inspeccion\BancoMateriales;
 use App\Inspeccion\Catalogos as CatalogosInspeccion;
@@ -390,8 +391,14 @@ prueba('un género fuera de 1..3 se rechaza', function (): void {
     afirmarError(base(['personas' => [persona(['genero' => 0])]]), 'personas.0.genero');
 });
 
-prueba('una etnia fuera de 1..6 se rechaza', function (): void {
-    afirmarError(base(['personas' => [persona(['pertenencia_etnica' => 7])]]), 'personas.0.pertenencia_etnica');
+prueba('una etnia fuera del catálogo se rechaza', function (): void {
+    // El límite se lee del catálogo y no se escribe a mano: al entrar «No
+    // informa» con el censo en papel, un 7 pasó a ser válido y esta prueba
+    // habría fallado por estar mirando un número, no una regla.
+    afirmarError(
+        base(['personas' => [persona(['pertenencia_etnica' => count(Catalogos::ETNIAS) + 1])]]),
+        'personas.0.pertenencia_etnica'
+    );
 });
 
 prueba('la fecha de nacimiento es opcional', function (): void {
@@ -639,13 +646,133 @@ prueba('otro jefe de hogar da otra huella', function (): void {
     );
 });
 
+grupo('Censo RUD (carga desde Excel)');
+
+prueba('el texto del inmueble se desarma en sus seis partes', function (): void {
+    // El RUD no trae columnas: mete todo el inmueble en un solo texto corrido.
+    // Si este patrón deja de casar, los hogares entran sin dirección y sin
+    // estado, que es la clase de fallo que solo se ve cuando alguien busca una
+    // casa y no la encuentra.
+    $b = Rud::desarmarBien(
+        'Bien: Vivienda.  Tenencia: Propietario. Estado: No Habitable. '
+        .'Vereda/sector: Bellavista Finca La Piscina. Corregimiento: Ampudia Direccion: Casa 9'
+    );
+
+    afirmarIgual('Vivienda', $b['bien']);
+    afirmarIgual('Propietario', $b['tenencia']);
+    afirmarIgual('No Habitable', $b['estado']);
+    afirmarIgual('Bellavista Finca La Piscina', $b['vereda']);
+    afirmarIgual('Ampudia', $b['corregimiento']);
+    afirmarIgual('Casa 9', $b['direccion']);
+});
+
+prueba('un texto de inmueble que no casa no se importa a medias', function (): void {
+    $b = Rud::desarmarBien('cualquier cosa');
+
+    afirmarIgual('', $b['bien']);
+    afirmarIgual('', $b['direccion']);
+});
+
+prueba('las etiquetas del RUD encuentran su código', function (): void {
+    // Se traduce por ETIQUETA y no por código: el RUD trae la numeración
+    // oficial de la UNGRD y el sistema usa la suya. Copiar el número sería
+    // silenciosamente incorrecto — un «41» del RUD es «Hijo(a)» y aquí no
+    // existe.
+    afirmarIgual(1, Rud::codigoPorEtiqueta(Catalogos::PARENTESCOS, 'Jefe(a) o cabeza del hogar'));
+    afirmarIgual(3, Rud::codigoPorEtiqueta(Catalogos::PARENTESCOS, 'Hijo(a), hijastro(a)'));
+    // Mayúsculas distintas: «Pareja, Esposo(a)» en el RUD.
+    afirmarIgual(2, Rud::codigoPorEtiqueta(Catalogos::PARENTESCOS, 'Pareja, Esposo(a)'));
+    // Espacio de más antes del paréntesis.
+    afirmarIgual(5, Rud::codigoPorEtiqueta(Catalogos::PARENTESCOS, 'Sobrino (a)'));
+    // Con sigla delante.
+    afirmarIgual(3, Rud::codigoPorEtiqueta(Catalogos::TIPOS_DOCUMENTO, 'CC - Cédula de ciudadanía'));
+    afirmarIgual(11, Rud::codigoPorEtiqueta(Catalogos::TIPOS_DOCUMENTO, 'PPT'));
+    // El RUD escribe la etnia sin la «(a)» final de afrodescendiente.
+    afirmarIgual(
+        5,
+        Rud::codigoPorEtiqueta(Catalogos::ETNIAS, 'Negro(a), Mulato(a), Afrodescendiente, Afrocolombiano(a)')
+    );
+    afirmarIgual('VIVIENDA', Rud::codigoPorEtiqueta(Catalogos::TIPOS_BIEN, 'Vivienda'));
+    afirmarIgual('NO_HABITABLE', Rud::codigoPorEtiqueta(Catalogos::ESTADOS_BIEN, 'No Habitable'));
+    afirmarIgual(null, Rud::codigoPorEtiqueta(Catalogos::GENEROS, ''));
+});
+
+prueba('la zona sale del corregimiento, que es la única marca de ruralidad', function (): void {
+    // El RUD no trae la columna urbano/rural. Lo que trae es un campo que mezcla
+    // los corregimientos oficiales con los barrios de la cabecera.
+    afirmarIgual('RURAL', Rud::zonaPorCorregimiento('San Antonio'));
+    afirmarIgual('RURAL', Rud::zonaPorCorregimiento('paso de la bolsa'));
+    afirmarIgual('URBANO', Rud::zonaPorCorregimiento('Jamundí'));
+    afirmarIgual('URBANO', Rud::zonaPorCorregimiento('Terranova'));
+    afirmarIgual('URBANO', Rud::zonaPorCorregimiento(''));
+});
+
+prueba('un barrio no se guarda como corregimiento', function (): void {
+    // La columna solo admite uno de los diecisiete; meter barrios ahí rompería
+    // los filtros del tablero. El nombre no se pierde: va al campo de barrio.
+    afirmarIgual('San Antonio', Rud::corregimientoOficial('SAN ANTONIO'));
+    afirmarIgual(null, Rud::corregimientoOficial('Terranova'));
+});
+
+prueba('la ubicación baja por lo que el censo sí levantó', function (): void {
+    // Un tercio de las fichas trae la dirección vacía y la vereda llena, que es
+    // como se ubica una casa en zona rural. Exigir nomenclatura urbana dejaría
+    // fuera del censo a cientos de familias bien ubicadas.
+    $sinDireccion = ['direccion' => '', 'vereda' => 'Bellavista', 'corregimiento' => 'Ampudia'];
+    afirmarIgual('Bellavista', Rud::direccionDe($sinDireccion));
+
+    $soloCorregimiento = ['direccion' => '', 'vereda' => '', 'corregimiento' => 'Robles'];
+    afirmarIgual('Robles', Rud::direccionDe($soloCorregimiento));
+    afirmarIgual('Robles', Rud::veredaDe($soloCorregimiento));
+
+    afirmarIgual('', Rud::direccionDe(['direccion' => '', 'vereda' => '', 'corregimiento' => '']));
+});
+
+prueba('nunca se inventa un teléfono', function (): void {
+    afirmarIgual('3157576420', Rud::telefonoDe([['telefono' => ''], ['telefono' => '3157576420']]));
+    afirmarIgual('', Rud::telefonoDe([['telefono' => ''], ['telefono' => '123']]));
+    afirmarIgual('', Rud::telefonoDe([]));
+});
+
+prueba('el jefe solo se deduce cuando el hogar es de una persona', function (): void {
+    // Con una sola persona, es cabeza de su hogar por aritmética. Con dos o
+    // más habría que decidir quién encabeza una familia, y eso no se hace desde
+    // un script.
+    afirmar(Rud::jefeDeducible([['parentesco' => 'No informa']]), 'una persona sola es su propio jefe');
+    afirmar(
+        ! Rud::jefeDeducible([['parentesco' => 'No informa'], ['parentesco' => 'Hijo(a), hijastro(a)']]),
+        'con dos personas no se asciende a nadie'
+    );
+    afirmar(
+        ! Rud::jefeDeducible([['parentesco' => 'Jefe(a) o cabeza del hogar']]),
+        'si ya hay jefe no hay nada que deducir'
+    );
+});
+
+prueba('un documento sin número no se guarda como cédula', function (): void {
+    // Guardar «CC» con la casilla vacía afirmaría que esa persona tiene cédula
+    // y que el sistema perdió el número. Lo que pasó es que el papel se llenó
+    // sin ese dato, y el formato tiene un código para eso.
+    afirmarIgual(8, Rud::tipoDocumentoCoherente(3, ''));
+    afirmarIgual(3, Rud::tipoDocumentoCoherente(3, '19124025'));
+    // Los que por definición no llevan número se respetan tal cual.
+    afirmarIgual(6, Rud::tipoDocumentoCoherente(6, ''));
+    afirmarIgual(8, Rud::tipoDocumentoCoherente(null, '123'));
+});
+
+prueba('la fecha de nacimiento del RUD se recorta a la fecha', function (): void {
+    afirmarIgual('1951-02-02', Rud::fechaNacimiento('1951-02-02 00:00:00'));
+    afirmarIgual(null, Rud::fechaNacimiento(''));
+    afirmarIgual(null, Rud::fechaNacimiento('sin dato'));
+});
+
 grupo('Catálogos');
 
 prueba('los códigos del formato están completos', function (): void {
-    afirmarIgual(10, count(Catalogos::TIPOS_DOCUMENTO));
+    afirmarIgual(11, count(Catalogos::TIPOS_DOCUMENTO));
     afirmarIgual(15, count(Catalogos::PARENTESCOS));
-    afirmarIgual(3, count(Catalogos::GENEROS));
-    afirmarIgual(6, count(Catalogos::ETNIAS));
+    afirmarIgual(4, count(Catalogos::GENEROS));
+    afirmarIgual(7, count(Catalogos::ETNIAS));
     afirmarIgual(14, count(Catalogos::TIPOS_BIEN));
     afirmarIgual(5, count(Catalogos::FORMAS_TENENCIA));
     afirmarIgual(5, count(Catalogos::ESTADOS_BIEN));
@@ -662,7 +789,7 @@ prueba('solo tres códigos describen ausencia de documento', function (): void {
     foreach ([6, 7, 8] as $codigo) {
         afirmar(! Catalogos::exigeNumeroDocumento($codigo), "el código {$codigo} no debería exigir número");
     }
-    foreach ([1, 2, 3, 4, 5, 9, 10] as $codigo) {
+    foreach ([1, 2, 3, 4, 5, 9, 10, 11] as $codigo) {
         afirmar(Catalogos::exigeNumeroDocumento($codigo), "el código {$codigo} debería exigir número");
     }
 });

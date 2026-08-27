@@ -44,3 +44,12 @@ VIVE-HELP-MANAGER/
 # Caché de herramientas locales: 52 MB de índice que no es código y que GitHub
 # rechaza por tamaño.
 .codetree/
+
+# Datos personales del censo. NUNCA al repositorio.
+#
+# El archivo del RUD trae 3.184 nombres, cédulas y teléfonos de familias
+# damnificadas, y el CSV de revisión es un extracto de los mismos datos. Este
+# repositorio vive en GitHub: un commit con esto dentro no se borra del
+# historial de nadie que ya lo haya clonado.
+*.xlsx
+Gestion_riesgo/backend/scripts/revision-rud.csv

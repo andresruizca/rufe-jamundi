@@ -33,7 +33,18 @@ final class Catalogos
      * el vigente, el registro afirma que aceptó un texto que nunca vio, y ese
      * registro es justo la prueba exigible ante la SIC.
      */
-    public const AVISOS_CONOCIDOS = ['habeas-data-v1', 'habeas-data-v2'];
+    public const AVISOS_CONOCIDOS = ['habeas-data-v1', 'habeas-data-v2', 'rud-fisico-v1'];
+
+    /**
+     * El consentimiento del censo en papel.
+     *
+     * Las fichas que vienen del RUD no aceptaron el aviso de la pantalla: la
+     * familia firmó el formato físico de la UNGRD delante de un funcionario.
+     * Guardar «habeas-data-v2» en esas fichas afirmaría que leyeron un texto
+     * que nunca vieron, y ese registro es justo lo que habría que mostrar ante
+     * un reclamo. Con su propio código, la diferencia queda escrita.
+     */
+    public const AVISO_RUD = 'rud-fisico-v1';
 
     public const DEPARTAMENTO = 'Valle del Cauca';
 
@@ -177,6 +188,12 @@ final class Catalogos
         8 => 'No informa',
         9 => 'NIT',
         10 => 'Otro',
+        // Permiso por Protección Temporal: el documento con el que se
+        // identifica la población venezolana con estatuto de protección. No es
+        // un caso teórico — entró con el censo del sismo, y clasificarlo como
+        // «Otro» borraría justo el dato que hace falta para saber a quién se
+        // está atendiendo. Lleva número, como cualquier documento real.
+        11 => 'PPT — Permiso por Protección Temporal',
     ];
 
     /**
@@ -224,6 +241,12 @@ final class Catalogos
         1 => 'Masculino',
         2 => 'Femenino',
         3 => 'Transgénero',
+        // Que el censo no lo haya preguntado no es lo mismo que no tener
+        // identidad de género. Sin este valor, una ficha del RUD a la que le
+        // falta el dato no se puede guardar entera: o se inventa un género o
+        // se deja al hogar fuera del censo. Las dos salidas son peores que
+        // decir que no se sabe.
+        4 => 'No informa',
     ];
 
     /** @var array<int,string> */
@@ -234,7 +257,13 @@ final class Catalogos
         4 => 'Palenquero(a)',
         5 => 'Negro(a), mulato(a), afrodescendiente(a), afrocolombiano(a)',
         6 => 'No aplica',
-    ];
+        // Mismo caso que el género: 553 personas del censo en papel vienen sin
+        // este dato, y «No aplica» significa otra cosa —que la persona declaró
+        // no pertenecer a ningún grupo étnico—. En un municipio con la
+        // población afro de Jamundí, dar por «no aplica» lo que nadie preguntó
+        // deforma una cifra que se usa para priorizar ayuda.
+        7 => 'No informa',
+];
 
     // ── Catálogos de opción única del formato ────────────────────────────────
 
