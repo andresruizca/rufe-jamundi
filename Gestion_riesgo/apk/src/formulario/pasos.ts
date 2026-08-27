@@ -44,7 +44,7 @@ export const PASOS_PRE: PasoPre[] = [
 	{
 		id: 'video',
 		titulo: 'Videos de la vivienda',
-		ayuda: 'Grabe lo que se le pide en cada punto. Si no puede, continúe igual.'
+		ayuda: 'Un video por cada daño que marcó. Máximo dos minutos cada uno.'
 	},
 	{
 		id: 'envio',
@@ -173,6 +173,49 @@ export function validarPaso(paso: IdPasoPre, d: DatosPre): Errores {
 	return e;
 }
 
+// ── Los videos que se le piden a cada persona ────────────────────────────────
+
+/** Una categoría de video como la manda el servidor. */
+export type CategoriaVideo = {
+	id: number;
+	nombre: string;
+	instruccion: string | null;
+	/** El daño al que responde. Sin él, la categoría no se le pide a nadie. */
+	senal: string | null;
+	obligatoria: boolean;
+	segundos_min: number;
+	segundos_max: number;
+};
+
+/**
+ * Qué videos se le piden a quien marcó estos daños.
+ *
+ * Antes se pedían todos a todo el mundo, y salía mal por dos lados a la vez:
+ * un video largo de la casa entera que la conexión de una vereda no sube, y
+ * alguien grabando un baño intacto porque el formulario se lo pidió.
+ *
+ * Ahora cada video responde a un daño concreto. Quien marcó dos graba dos.
+ *
+ * Vive aquí y no en el componente para poder probarlo: de esta función depende
+ * que a alguien no se le pida un video que no tiene cómo grabar, y que no se le
+ * deje de pedir el del daño que importaba.
+ */
+export function videosQueSePiden(
+	categorias: CategoriaVideo[],
+	senales: string[]
+): CategoriaVideo[] {
+	return categorias.filter((c) => c.senal !== null && senales.includes(c.senal));
+}
+
+/**
+ * Cuáles de esos videos siguen sin grabarse.
+ *
+ * @param  listos  los identificadores de categoría que ya subieron su video
+ */
+export function videosQueFaltan(pedidos: CategoriaVideo[], listos: number[]): CategoriaVideo[] {
+	return pedidos.filter((c) => !listos.includes(c.id));
+}
+
 /**
  * Lo que se manda al servidor.
  *
@@ -213,6 +256,17 @@ export function paraEnviar(d: DatosPre): Record<string, unknown> {
 export function bloqueoDeAvance(estado: {
 	optimizandoFotos: boolean;
 	videosSubiendo: number;
+	/** Cuántos de los videos pedidos siguen sin grabarse. */
+	videosFaltantes?: number;
+	/**
+	 * Si este aparato sabe grabar video.
+	 *
+	 * Cuando no sabe, los videos NO bloquean. La diferencia entre «obligatorio»
+	 * e «imposible» es la que separa exigir evidencia de dejar a una familia sin
+	 * turno por el teléfono que le tocó: un celular viejo sin MediaRecorder no
+	 * puede grabar por mucho que el formulario insista.
+	 */
+	puedeGrabar?: boolean;
 }): string {
 	if (estado.optimizandoFotos) {
 		return 'Espere a que terminen de prepararse las fotos.';
@@ -220,6 +274,14 @@ export function bloqueoDeAvance(estado: {
 
 	if (estado.videosSubiendo > 0) {
 		return 'Espere unos segundos: todavía se está subiendo un video. Si sale ahora, ese video se perderá.';
+	}
+
+	const faltan = estado.videosFaltantes ?? 0;
+
+	if (faltan > 0 && estado.puedeGrabar !== false) {
+		return faltan === 1
+			? 'Falta grabar un video. Le pedimos uno por cada daño que marcó en su vivienda.'
+			: `Faltan ${faltan} videos. Le pedimos uno por cada daño que marcó en su vivienda.`;
 	}
 
 	return '';

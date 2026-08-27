@@ -32,6 +32,7 @@
 	import SubidaEvidencias from '$formulario/SubidaEvidencias.svelte';
 	import { GestorFotos } from '$formulario/evidencias.svelte';
 	import GrabadorVideo from '$formulario/GrabadorVideo.svelte';
+	import { formatoSoportado } from '$formulario/video';
 	import SelectorSenales from '$formulario/SelectorSenales.svelte';
 	import AutorizacionDatos from '$formulario/AutorizacionDatos.svelte';
 	import PanelEnvio from '$formulario/PanelEnvio.svelte';
@@ -39,7 +40,9 @@
 		bloqueoDeAvance,
 		datosVacios,
 		pasosVigentes,
-		validarPaso
+		validarPaso,
+		videosQueFaltan,
+		videosQueSePiden
 	} from '$formulario/pasos';
 	import { catalogoVigente, refrescarCatalogo, type Catalogo } from '$local/catalogo';
 	import { leerAjuste } from '$local/base';
@@ -106,7 +109,30 @@
 
 	let indice = $state(0);
 
-	const hayVideos = $derived((catalogos?.categorias_video ?? []).length > 0);
+	/**
+	 * Los videos que se le piden a ESTA persona: uno por cada daño que marcó.
+	 *
+	 * Si no marcó ninguno, el paso de videos no existe. No es un descuido: no
+	 * hay nada que grabar de una casa de la que no se señaló ningún daño, y una
+	 * pantalla vacía con un botón de «Siguiente» solo alarga el formulario.
+	 */
+	const videosPedidos = $derived(
+		videosQueSePiden(catalogos?.categorias_video ?? [], datos.senales)
+	);
+
+	const videosFaltantes = $derived(videosQueFaltan(videosPedidos, videosListos));
+
+	/**
+	 * Si este aparato sabe grabar video.
+	 *
+	 * Los videos son obligatorios, pero «obligatorio» no puede convertirse en
+	 * «imposible»: un celular viejo sin MediaRecorder no graba por mucho que el
+	 * formulario insista, y dejar a esa familia sin turno de inspección por el
+	 * teléfono que le tocó sería el peor final de este formulario.
+	 */
+	let puedeGrabar = $state(true);
+
+	const hayVideos = $derived(videosPedidos.length > 0);
 	const pasos = $derived(pasosVigentes(hayVideos));
 	const paso = $derived(pasos[Math.min(indice, pasos.length - 1)]);
 	const esPrimero = $derived(indice === 0);
@@ -122,6 +148,8 @@
 
 				// El catálogo va embebido en el APK. Aquí NO se pide a la red: esta
 				// aplicación existe para funcionar donde no la hay.
+				puedeGrabar = formatoSoportado() !== null;
+
 				catalogos = await catalogoVigente();
 
 				// Y se pone al día al fondo, sin avisar. Si falla, el embebido
@@ -152,6 +180,10 @@
 		// Avanzar con una foto a medio optimizar o un video a medio subir dejaría
 		// a la persona creyendo que ya los mandó. La regla vive en `pasos.ts`.
 		const bloqueo = bloqueoDeAvance({
+			// Solo se exigen los videos en el paso donde se graban y al enviar.
+			// Antes de llegar ahí, la persona todavía no ha tenido ocasión.
+			videosFaltantes: indice >= pasos.findIndex((x) => x.id === 'video') ? videosFaltantes.length : 0,
+			puedeGrabar,
 			optimizandoFotos: fotos?.optimizando ?? false,
 			videosSubiendo: videosSubiendo.length
 		});
@@ -226,6 +258,10 @@
 		// La última barrera, y la que de verdad importa: el paso de video queda
 		// atrás y nada impide llegar hasta aquí con una subida todavía en curso.
 		const bloqueo = bloqueoDeAvance({
+			// Solo se exigen los videos en el paso donde se graban y al enviar.
+			// Antes de llegar ahí, la persona todavía no ha tenido ocasión.
+			videosFaltantes: indice >= pasos.findIndex((x) => x.id === 'video') ? videosFaltantes.length : 0,
+			puedeGrabar,
 			optimizandoFotos: fotos?.optimizando ?? false,
 			videosSubiendo: videosSubiendo.length
 		});
@@ -585,7 +621,7 @@
 						gestor={fotos}
 						tipo="PRE_DANO"
 						titulo="Fotos del daño"
-						ayuda="Cómo quedó la vivienda. No son obligatorias, pero ayudan a priorizar la visita. Se reducen en su celular antes de guardarse."
+						ayuda="Tome hasta diez: la fachada, cada muro afectado, el techo y el piso. Entre más se vea, mejor se prepara la visita. No son obligatorias —puede guardar con las que alcance— y se reducen en su celular antes de guardarse."
 						textoCamara="Tomar foto del daño"
 					/>
 				{/if}
@@ -595,12 +631,25 @@
 		{:else if paso.id === 'video'}
 			<section class="tarjeta">
 				<p class="tarjeta__nota">
-					Grabe cada uno siguiendo la indicación. Se cortan solos al llegar al máximo y puede
-					repetirlos antes de guardarlos. <strong>Si no puede grabar alguno, continúe igual</strong>:
-					no perderá su turno por eso.
+					Le pedimos <strong>un video por cada daño que marcó</strong>, no uno largo de toda la
+					casa: así se sube por partes y, si se cae la señal, solo se repite el que iba a medias.
+					Cada uno dura <strong>máximo dos minutos</strong> y se corta solo al llegar. Puede
+					repetirlo antes de guardarlo.
 				</p>
 
-				{#each catalogos.categorias_video as c (c.id)}
+				{#if !puedeGrabar}
+					<p class="aviso aviso--alerta" role="alert">
+						<TriangleAlert size={15} aria-hidden="true" />
+						Este teléfono no permite grabar video desde el navegador. Continúe sin los videos: no
+						perderá su turno por eso, y quien revise su caso lo verá anotado.
+					</p>
+				{:else if videosFaltantes.length > 0}
+					<p class="aviso aviso--info">
+						Faltan {videosFaltantes.length} de {videosPedidos.length}.
+					</p>
+				{/if}
+
+				{#each videosPedidos as c (c.id)}
 					<GrabadorVideo
 						categoria={c}
 						{registroId}

@@ -27,6 +27,7 @@
 		id: number;
 		nombre: string;
 		instruccion: string | null;
+		senal: string | null;
 		obligatoria: boolean;
 		segundos_min: number;
 		segundos_max: number;
@@ -273,7 +274,7 @@
 	<div class="grabador__cabecera">
 		<p class="grabador__nombre">
 			{categoria.nombre}
-			{#if categoria.obligatoria}<span class="marca">recomendado</span>{/if}
+			{#if categoria.obligatoria}<span class="marca">requerido</span>{/if}
 		</p>
 		{#if fase === 'subido'}
 			<span class="grabador__ok"><CheckCircle2 size={16} aria-hidden="true" /> Enviado</span>

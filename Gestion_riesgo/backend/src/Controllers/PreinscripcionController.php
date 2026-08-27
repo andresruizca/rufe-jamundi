@@ -85,13 +85,21 @@ final class PreinscripcionController
 
     private const MAX_CARGAS_HORA = 10;
 
-    /** Cuatro fotos por solicitud, con margen para reintentos por mala señal. */
-    private const MAX_ARCHIVOS_HORA = 30;
+    /** Once fotos por solicitud —diez del daño y la cédula—, con margen de reintento. */
+    private const MAX_ARCHIVOS_HORA = 70;
 
     private const MAX_VIDEOS_HORA = 20;
 
-    /** Ocho videos de ocho trozos, con margen de reintento por mala señal. */
-    private const MAX_TROZOS_HORA = 300;
+    /**
+     * Ocho videos de hasta veinticuatro trozos, con margen de reintento.
+     *
+     * Un video de dos minutos son 24 trozos de 1 MiB. Ocho videos son 192, y en
+     * una conexión rural cada trozo puede necesitar dos o tres intentos. Con el
+     * tope anterior —300— una familia con cinco daños marcados se quedaba sin
+     * cupo a mitad de la tercera subida, y el formulario le decía que había
+     * hecho demasiadas peticiones.
+     */
+    private const MAX_TROZOS_HORA = 900;
 
     // ── Público ──────────────────────────────────────────────────────────────
 
@@ -113,18 +121,28 @@ final class PreinscripcionController
             // y el formulario no puedan discrepar sobre qué códigos existen.
             'senales'        => Senales::paraApi(),
             'aviso_version'  => Rufe::AVISO_VERSION,
-            // Las categorías ACTIVAS, en su orden. El formulario las cachea en
-            // el teléfono para que el checklist funcione también sin señal.
+            // Las categorías ACTIVAS que cuelgan de un daño, en su orden. El
+            // formulario las cachea en el teléfono para que el checklist
+            // funcione también sin señal, y solo le enseña a cada persona las
+            // de los daños que marcó.
+            //
+            // `senal IS NOT NULL` deja fuera a las categorías del modelo
+            // anterior, que se le pedían a todo el mundo por igual. No se
+            // borran —pueden tener videos grabados detrás— pero ya no se le
+            // piden a nadie.
             'categorias_video' => array_map(
                 static fn (array $c): array => [
                     'id' => (int) $c['id'],
                     'nombre' => $c['nombre'],
                     'instruccion' => $c['instruccion'],
+                    'senal' => $c['senal'],
                     'obligatoria' => (bool) $c['obligatoria'],
                     'segundos_min' => (int) $c['segundos_min'],
                     'segundos_max' => (int) $c['segundos_max'],
                 ],
-                Db::all('SELECT * FROM categorias_video WHERE activa = 1 ORDER BY orden ASC, id ASC')
+                Db::all('SELECT * FROM categorias_video
+                          WHERE activa = 1 AND senal IS NOT NULL
+                          ORDER BY orden ASC, id ASC')
             ),
             'video' => [
                 'bytes_trozo' => Videos::BYTES_TROZO,

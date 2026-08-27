@@ -6,6 +6,9 @@ import {
 	paraEnviar,
 	pasosVigentes,
 	validarPaso,
+	videosQueFaltan,
+	videosQueSePiden,
+	type CategoriaVideo,
 	type DatosPre
 } from './pasos';
 
@@ -143,5 +146,90 @@ describe('lo que impide avanzar aparte de los campos', () => {
 
 		expect(aviso).not.toBe('');
 		expect(aviso).toContain('perderá');
+	});
+});
+
+describe('los videos que se le piden a cada persona', () => {
+	function categoria(id: number, senal: string | null): CategoriaVideo {
+		return {
+			id,
+			nombre: `Video ${id}`,
+			instruccion: null,
+			senal,
+			obligatoria: true,
+			segundos_min: 5,
+			segundos_max: 120
+		};
+	}
+
+	const catalogo = [
+		categoria(1, 'PARED_AGRIETADA'),
+		categoria(2, 'TECHO_TEJAS'),
+		categoria(3, 'LUZ_DANADA')
+	];
+
+	it('pide uno por cada daño marcado, y solo esos', () => {
+		const pedidos = videosQueSePiden(catalogo, ['TECHO_TEJAS', 'PARED_AGRIETADA']);
+
+		expect(pedidos.map((c) => c.id)).toEqual([1, 2]);
+	});
+
+	it('no pide nada si no se marcó ningún daño', () => {
+		// Sin daños marcados no hay nada que grabar, y el paso entero desaparece.
+		expect(videosQueSePiden(catalogo, [])).toEqual([]);
+	});
+
+	it('ignora las categorías que no cuelgan de ningún daño', () => {
+		// Son las del modelo anterior, que se le pedían a todo el mundo por
+		// igual. No se borran —pueden tener videos grabados detrás— pero ya no
+		// se le piden a nadie.
+		const conHuerfana = [...catalogo, categoria(9, null)];
+
+		expect(videosQueSePiden(conHuerfana, ['PARED_AGRIETADA']).map((c) => c.id)).toEqual([1]);
+	});
+
+	it('sabe cuáles faltan por grabar', () => {
+		const pedidos = videosQueSePiden(catalogo, ['PARED_AGRIETADA', 'LUZ_DANADA']);
+
+		expect(videosQueFaltan(pedidos, [1]).map((c) => c.id)).toEqual([3]);
+		expect(videosQueFaltan(pedidos, [1, 3])).toEqual([]);
+	});
+});
+
+describe('los videos que faltan frenan el envío', () => {
+	it('frena y dice cuántos faltan', () => {
+		const aviso = bloqueoDeAvance({
+			optimizandoFotos: false,
+			videosSubiendo: 0,
+			videosFaltantes: 2,
+			puedeGrabar: true
+		});
+
+		expect(aviso).toContain('2');
+	});
+
+	it('NO frena en un teléfono que no sabe grabar', () => {
+		// La diferencia entre «obligatorio» e «imposible». Un celular viejo sin
+		// MediaRecorder no graba por mucho que el formulario insista, y dejar a
+		// esa familia sin turno de inspección sería el peor final posible.
+		expect(
+			bloqueoDeAvance({
+				optimizandoFotos: false,
+				videosSubiendo: 0,
+				videosFaltantes: 3,
+				puedeGrabar: false
+			})
+		).toBe('');
+	});
+
+	it('deja pasar cuando ya están todos', () => {
+		expect(
+			bloqueoDeAvance({
+				optimizandoFotos: false,
+				videosSubiendo: 0,
+				videosFaltantes: 0,
+				puedeGrabar: true
+			})
+		).toBe('');
 	});
 });

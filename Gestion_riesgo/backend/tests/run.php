@@ -2588,11 +2588,56 @@ prueba('el envío ciudadano vuelve a comprobar el censo, no se fía de la pantal
     );
 });
 
+prueba('cada señal de daño tiene su video que pedir', function () use ($raiz): void {
+    // El formulario le pide a la persona un video POR CADA daño que marca. Una
+    // señal sin categoría sembrada es un daño que se puede marcar y del que
+    // nunca se pide evidencia — y nadie lo notaría hasta que quien revisa
+    // echara de menos el video justo del daño que importaba.
+    $sql = (string) file_get_contents($raiz.'/database/preinscripcion_04_video_por_dano.sql');
+
+    foreach (App\Preinscripcion\Senales::codigos() as $codigo) {
+        afirmar(
+            str_contains($sql, "'{$codigo}'"),
+            "la señal «{$codigo}» no tiene categoría de video sembrada"
+        );
+    }
+});
+
+prueba('ningún video sembrado pasa de dos minutos', function () use ($raiz): void {
+    // Dos minutos a 480p son unos 12 MB: veinte trozos de subida. El triple
+    // serían sesenta, y basta con que la señal se caiga en el cuarenta para que
+    // la persona abandone. El tope del servidor por video está calculado sobre
+    // esta duración.
+    $sql = (string) file_get_contents($raiz.'/database/preinscripcion_04_video_por_dano.sql');
+
+    preg_match_all('/,\s*(\d+),\s*(\d+),\s*1\)/', $sql, $m, PREG_SET_ORDER);
+    afirmar($m !== [], 'no se encontró ninguna fila sembrada');
+
+    foreach ($m as $fila) {
+        afirmar((int) $fila[2] <= 120, "un video sembrado dura {$fila[2]} s");
+        afirmar((int) $fila[1] <= (int) $fila[2], 'el mínimo supera al máximo');
+    }
+});
+
 prueba('el cupo de fotos de una solicitud ciudadana es acotado', function (): void {
     // Es una ruta de subida SIN sesión: cada foto de más es almacenamiento que
-    // cualquiera en internet puede consumir.
+    // cualquiera en internet puede consumir. Diez del daño desde el sismo —eran
+    // cuatro—, y la cédula sigue siendo UNA.
     afirmarIgual(1, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA']['maximo']);
-    afirmarIgual(4, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']);
+    afirmarIgual(10, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']);
+});
+
+prueba('las once fotos de una pre-inscripción caben en el cupo de la carga', function (): void {
+    // Once archivos en el límite de 1 MiB cada uno no cabían en los 12 MiB
+    // anteriores: la última se habría rechazado con un mensaje que habla de
+    // megabytes, después de que la persona tomara las diez fotos.
+    $fotos = App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']
+           + App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA']['maximo'];
+
+    afirmar(
+        $fotos * App\Rufe\Catalogos::MAX_BYTES_ARCHIVO <= App\Rufe\Catalogos::MAX_BYTES_CARGA,
+        "{$fotos} fotos en el límite no caben en el cupo de la carga"
+    );
 });
 
 prueba('sin sesión solo se pueden subir los dos tipos de la pre-inscripción', function (): void {
@@ -2631,12 +2676,20 @@ prueba('los topes del video están acotados', function (): void {
     // alojamiento gratuito para cualquiera, y el disco lo comparten todos los
     // sitios de la Alcaldía.
     afirmarIgual(1048576, App\Preinscripcion\Videos::BYTES_TROZO, 'el trozo debe caber en una petición');
-    afirmar(App\Preinscripcion\Videos::MAX_BYTES_VIDEO <= 8 * 1048576, 'el tope por video se pasó');
+
+    // Veinte MiB por video: dos minutos a 480p y 800 kbps son unos 12 MB, y el
+    // resto es margen para el teléfono que grabe más gordo. Antes eran 8 MiB
+    // con un techo de 30 segundos de grabación.
+    afirmar(App\Preinscripcion\Videos::MAX_BYTES_VIDEO <= 20 * 1048576, 'el tope por video se pasó');
     afirmar(App\Preinscripcion\Videos::MAX_VIDEOS_POR_CARGA <= 10, 'demasiados videos por solicitud');
 
-    // El caso que importa: lo peor que puede subir una sola solicitud.
+    // El caso que importa: lo peor que puede subir una sola solicitud, que es
+    // alguien que marca los ocho daños y graba los ocho videos en el límite.
+    // El caso normal son dos o tres daños, unos 12 MB cada uno. El disco lo
+    // comparten todos los sitios de la Alcaldía, así que este número no puede
+    // crecer sin que alguien lo mire.
     $peor = App\Preinscripcion\Videos::MAX_BYTES_VIDEO * App\Preinscripcion\Videos::MAX_VIDEOS_POR_CARGA;
-    afirmar($peor <= 80 * 1048576, 'una sola solicitud podría subir '.round($peor / 1048576).' MiB');
+    afirmar($peor <= 160 * 1048576, 'una sola solicitud podría subir '.round($peor / 1048576).' MiB');
 });
 
 prueba('el trozo cabe en el tope por archivo del hosting', function (): void {

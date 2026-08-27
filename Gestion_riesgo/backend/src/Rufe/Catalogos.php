@@ -98,12 +98,25 @@ final class Catalogos
     /**
      * Cuántas fotos puede adjuntar un ciudadano a su solicitud.
      *
-     * Cuatro, como las del daño en el censo. Es una solicitud de turno, no un
-     * expediente: la evidencia que sustenta la decisión la levanta el
-     * profesional en la visita. Y cada foto de más en una ruta pública es
-     * almacenamiento que cualquiera puede consumir.
+     * Diez. Eran cuatro, con el argumento de que esto es una solicitud de turno
+     * y no un expediente: la evidencia que sustenta la decisión la levanta el
+     * profesional en la visita.
+     *
+     * El argumento se cae con el tamaño del sismo. Cuatro fotos alcanzan para
+     * una casa con una grieta; no para una con la fachada, dos muros, el techo
+     * y el patio afectados, que es lo que se está recibiendo. Y la visita
+     * técnica llega días después: cuanto mejor se pueda priorizar antes de
+     * salir, menos viajes en falso a una vereda.
+     *
+     * Se PIDEN diez, no se exigen. Quien tiene un teléfono viejo, poca memoria
+     * o está sin señal no puede quedarse sin turno de inspección por eso; lo que
+     * falte se marca en la bandeja para quien revisa.
+     *
+     * Cada foto de más en una ruta pública sigue siendo almacenamiento que
+     * cualquiera puede consumir: por eso el tope por foto y el de la carga
+     * entera no se relajan, y el navegador sigue optimizando antes de subir.
      */
-    public const MAX_FOTOS_PREINSCRIPCION = 4;
+    public const MAX_FOTOS_PREINSCRIPCION = 10;
 
     /**
      * Tope por evidencia. Baja de 8 MiB a 1 MiB porque el navegador ahora
@@ -122,13 +135,19 @@ final class Catalogos
     /**
      * Cupo total de una carga, contando todas sus fotos.
      *
-     * Sube de 5 a 12 MiB al entrar el registro fotográfico de la inspección:
+     * Subió de 5 a 12 MiB al entrar el registro fotográfico de la inspección:
      * son DIEZ fotos, el doble de lo que sube un RUFE, y con el tope anterior la
      * séptima habría sido rechazada al final de una visita ya terminada, con un
      * mensaje que hablaba de megabytes y no de fotos. Una prueba comprueba que
      * este número siga alcanzando para el formato más grande.
+     *
+     * Sube a 16 MiB al pasar la pre-inscripción de cuatro fotos a diez: son once
+     * archivos con la cédula, y once en el límite de 1 MiB cada uno no cabían en
+     * doce. El caso normal ronda los 10 MB —el navegador deja cada foto en unos
+     * 900 KB—, así que el margen es para la foto que sale gruesa, no un permiso
+     * para subir más.
      */
-    public const MAX_BYTES_CARGA = 12582912;       // 12 MiB
+    public const MAX_BYTES_CARGA = 16777216;       // 16 MiB
 
     /**
      * Dimensión máxima admitida, en píxeles por lado.

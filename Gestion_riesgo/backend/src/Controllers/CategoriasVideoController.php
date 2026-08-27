@@ -10,6 +10,7 @@ use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Request;
 use App\Core\Response;
+use App\Preinscripcion\Senales;
 
 /**
  * El catálogo de categorías de video de la pre-inscripción ciudadana.
@@ -18,6 +19,14 @@ use App\Core\Response;
  * administrador desde su panel. Cambia entre una emergencia y la siguiente —un
  * sismo pide ver muros y cubierta; una inundación, alturas de agua y pisos— y
  * esperar a un despliegue para ajustarlo sería llegar tarde siempre.
+ *
+ * Desde el sismo, cada categoría cuelga de una SEÑAL DE DAÑO: solo se le pide a
+ * quien marcó ese daño en su casa. Antes se le pedían todas a todo el mundo, y
+ * eso producía dos cosas malas a la vez — un video larguísimo que la conexión
+ * de una vereda no sube, y a alguien grabando un baño intacto porque el
+ * formulario se lo pidió. Las categorías sin señal quedan inertes: no se
+ * borran, porque pueden tener videos grabados detrás, pero ya no se le piden a
+ * nadie.
  *
  * Dos reglas que no se negocian:
  *
@@ -29,7 +38,15 @@ use App\Core\Response;
  */
 final class CategoriasVideoController
 {
-    private const MAX_OBLIGATORIAS = 6;
+    /**
+     * Cuántas categorías obligatorias puede haber activas.
+     *
+     * Ocho: una por señal de daño. Antes eran seis y el límite protegía de un
+     * formulario interminable, porque TODAS se le pedían a todo el mundo. Ahora
+     * cada una solo se le pide a quien marcó ese daño: quien marcó dos graba
+     * dos videos, y solo quien marcó los ocho graba los ocho.
+     */
+    private const MAX_OBLIGATORIAS = 8;
 
     /** Lo que ve el administrador: todas, activas o no. */
     public function listar(Request $req): void
@@ -53,11 +70,12 @@ final class CategoriasVideoController
 
         Db::exec(
             'INSERT INTO categorias_video
-                (nombre, instruccion, orden, obligatoria, segundos_min, segundos_max, activa, creada_por)
-             VALUES (:n, :i, :o, :ob, :smin, :smax, 1, :u)',
+                (nombre, instruccion, senal, orden, obligatoria, segundos_min, segundos_max, activa, creada_por)
+             VALUES (:n, :i, :se, :o, :ob, :smin, :smax, 1, :u)',
             [
                 'n' => $datos['nombre'],
                 'i' => $datos['instruccion'],
+                'se' => $datos['senal'],
                 'o' => $ultimo + 1,
                 'ob' => $datos['obligatoria'],
                 'smin' => $datos['segundos_min'],
@@ -82,12 +100,13 @@ final class CategoriasVideoController
 
         Db::exec(
             'UPDATE categorias_video
-                SET nombre = :n, instruccion = :i, obligatoria = :ob,
+                SET nombre = :n, instruccion = :i, senal = :se, obligatoria = :ob,
                     segundos_min = :smin, segundos_max = :smax
               WHERE id = :id',
             [
                 'n' => $datos['nombre'],
                 'i' => $datos['instruccion'],
+                'se' => $datos['senal'],
                 'ob' => $datos['obligatoria'],
                 'smin' => $datos['segundos_min'],
                 'smax' => $datos['segundos_max'],
@@ -212,16 +231,26 @@ final class CategoriasVideoController
             $errores['instruccion'] = 'La instrucción no puede pasar de 300 caracteres.';
         }
 
-        $min = (int) $req->input('segundos_min', $previo['segundos_min'] ?? 5);
-        $max = (int) $req->input('segundos_max', $previo['segundos_max'] ?? 30);
+        // A qué daño responde este video. Sin señal, la categoría queda inerte:
+        // no se le pide a nadie. Se admite vacío para no romper las que ya
+        // existían, pero lo normal es que traiga una.
+        $senal = trim($req->texto('senal', (string) ($previo['senal'] ?? '')));
+        if ($senal !== '' && ! in_array($senal, Senales::codigos(), true)) {
+            $errores['senal'] = 'Ese daño no existe en el catálogo de señales.';
+        }
 
-        // El techo de 60 s no es capricho: a 480p son unos 6 MB, y cinco
-        // categorías así son media hora de subida en una conexión rural.
+        $min = (int) $req->input('segundos_min', $previo['segundos_min'] ?? 5);
+        $max = (int) $req->input('segundos_max', $previo['segundos_max'] ?? 120);
+
+        // El techo sube de 60 a 120 segundos. Antes protegía de un video largo
+        // de la casa entera; ahora cada video cubre UN daño y dos minutos son lo
+        // que toma recorrer un techo caído explicando lo que se ve. A 480p y
+        // 800 kbps son unos 12 MB: veinte trozos de subida, no sesenta.
         if ($min < 3 || $min > 60) {
             $errores['segundos_min'] = 'La duración mínima debe estar entre 3 y 60 segundos.';
         }
-        if ($max < 5 || $max > 60) {
-            $errores['segundos_max'] = 'La duración máxima no puede pasar de 60 segundos.';
+        if ($max < 5 || $max > 120) {
+            $errores['segundos_max'] = 'La duración máxima no puede pasar de 120 segundos.';
         }
         if ($errores === [] && $min > $max) {
             $errores['segundos_min'] = 'La duración mínima no puede ser mayor que la máxima.';
@@ -246,6 +275,7 @@ final class CategoriasVideoController
         return [
             'nombre' => $nombre,
             'instruccion' => $instruccion === '' ? null : $instruccion,
+            'senal' => $senal === '' ? null : $senal,
             'obligatoria' => $obligatoria ? 1 : 0,
             'segundos_min' => $min,
             'segundos_max' => $max,
@@ -304,6 +334,7 @@ final class CategoriasVideoController
             'id' => (int) $c['id'],
             'nombre' => $c['nombre'],
             'instruccion' => $c['instruccion'],
+            'senal' => $c['senal'] ?? null,
             'orden' => (int) $c['orden'],
             'obligatoria' => (bool) $c['obligatoria'],
             'segundos_min' => (int) $c['segundos_min'],

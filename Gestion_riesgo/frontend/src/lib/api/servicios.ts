@@ -311,6 +311,8 @@ export const preinscripcionApi = {
 				id: number;
 				nombre: string;
 				instruccion: string | null;
+				/** El daño al que responde: solo se le pide a quien lo marcó. */
+				senal: string | null;
 				obligatoria: boolean;
 				segundos_min: number;
 				segundos_max: number;

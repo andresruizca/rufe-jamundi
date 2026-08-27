@@ -39,14 +39,30 @@ final class Videos
     public const BYTES_TROZO = 1048576;   // 1 MiB
 
     /**
-     * Tope por video: 8 MiB.
+     * Tope por video: 20 MiB.
      *
-     * A 480p y 30 segundos un video pesa unos 3 MB. El margen deja pasar un
-     * teléfono que comprima mal sin abrir la puerta a subir una película.
+     * Sube de 8 MiB al pasar el máximo de grabación de 30 segundos a dos
+     * minutos. La cuenta: el grabador pide 800 kbps de video a 480p, así que
+     * dos minutos son unos 12 MB con el audio dentro. Lo que sobra es margen
+     * para el teléfono que ignora esa preferencia — no permiso para subir una
+     * película.
+     *
+     * El rechazo por tamaño ocurre en `iniciar()`, ANTES de mandar un solo
+     * trozo. Es deliberado: descubrir que el video no cabe después de veinte
+     * minutos de subida en una 3G rural sería la peor forma posible de decirlo.
+     *
+     * Dos minutos son veinte trozos de 1 MiB. Por eso el tope de trozos por
+     * hora del controlador subió a la vez: con el anterior, una familia con
+     * cinco daños marcados se quedaba sin cupo a mitad de la tercera subida.
      */
-    public const MAX_BYTES_VIDEO = 8388608;
+    public const MAX_BYTES_VIDEO = 20971520;
 
-    /** Cuántos videos puede llevar una solicitud. Uno por categoría, con holgura. */
+    /**
+     * Cuántos videos puede llevar una solicitud.
+     *
+     * Ocho: uno por cada señal de daño del catálogo, que es el máximo de videos
+     * que se le pueden pedir a alguien que marcó todo.
+     */
     public const MAX_VIDEOS_POR_CARGA = 8;
 
     /**

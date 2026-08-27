@@ -22,6 +22,8 @@ export type CategoriaVideo = {
 	id: number;
 	nombre: string;
 	instruccion: string | null;
+	/** El daño al que responde: solo se le pide a quien lo marcó. */
+	senal: string | null;
 	obligatoria: boolean;
 	segundos_min: number;
 	segundos_max: number;
@@ -113,11 +115,75 @@ export const CATALOGO_EMBEBIDO: Catalogo = {
 	categorias_video: [
 		{
 			"id": 1,
-			"nombre": "Baño",
-			"instruccion": "Tome un video de su baño que evidencie los datos",
+			"nombre": "Paredes agrietadas",
+			"instruccion": "Grabe la grieta de cerca y después aléjese para que se vea la pared entera. Pase despacio, de un extremo de la grieta al otro.",
+			"senal": "PARED_AGRIETADA",
 			"obligatoria": true,
 			"segundos_min": 5,
-			"segundos_max": 60
+			"segundos_max": 120
+		},
+		{
+			"id": 2,
+			"nombre": "Paredes caídas o inclinadas",
+			"instruccion": "Grabe el muro caído o torcido desde donde sea seguro pararse. No se acerque si puede venirse abajo más.",
+			"senal": "PARED_CAIDA",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 3,
+			"nombre": "Columnas o vigas partidas",
+			"instruccion": "Grabe la columna o la viga dañada de arriba abajo. Si se ven los fierros, deténgase unos segundos en ese punto.",
+			"senal": "COLUMNA_DANADA",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 4,
+			"nombre": "Tejas rotas o corridas",
+			"instruccion": "Grabe el techo desde el patio y, si se puede entrar sin riesgo, también desde adentro. No se suba al techo.",
+			"senal": "TECHO_TEJAS",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 5,
+			"nombre": "Techo caído",
+			"instruccion": "Grabe la parte del techo que se vino abajo, desde afuera. Entre a grabar solo si es seguro hacerlo.",
+			"senal": "TECHO_CAIDO",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 6,
+			"nombre": "Piso agrietado o hundido",
+			"instruccion": "Grabe el piso caminando despacio por encima de la parte rajada o hundida, para que se note el desnivel.",
+			"senal": "PISO_DANADO",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 7,
+			"nombre": "Tubería rota o fugas de agua",
+			"instruccion": "Grabe por dónde sale el agua o dónde se rompió la tubería. Si el daño es del tanque o del pozo, grabe ese punto.",
+			"senal": "AGUA_DANADA",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
+		},
+		{
+			"id": 8,
+			"nombre": "Instalación eléctrica dañada",
+			"instruccion": "Grabe los cables sueltos o rotos desde lejos. No los toque ni se acerque, aunque parezcan apagados.",
+			"senal": "LUZ_DANADA",
+			"obligatoria": true,
+			"segundos_min": 5,
+			"segundos_max": 120
 		}
 	],
 	aviso_version: "habeas-data-v2"
