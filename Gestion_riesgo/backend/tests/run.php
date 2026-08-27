@@ -648,6 +648,48 @@ prueba('otro jefe de hogar da otra huella', function (): void {
     );
 });
 
+prueba('la dirección se pregunta con su barrio antes que sola', function (): void {
+    // Es la mejora que de verdad ubica este censo: «Casa 9, Jamundí» no existe
+    // para el servicio, «Casa 9, Colinas de Miravalle, Jamundí» sí. Y si ni con
+    // eso, se pregunta por el barrio solo — un punto en el centro del barrio
+    // correcto dice a qué sector mandar la brigada; el centroide del municipio
+    // no dice nada.
+    $intentos = Geocodificador::intentosPara('Casa 9', 'Colinas de Miravalle');
+
+    afirmarIgual(3, count($intentos));
+    afirmarIgual('Casa 9, Colinas de Miravalle', $intentos[0]['texto']);
+    afirmarIgual('Casa 9', $intentos[1]['texto']);
+    afirmarIgual('Colinas de Miravalle', $intentos[2]['texto']);
+});
+
+prueba('preguntar por el barrio no puede devolver precisión de casa', function (): void {
+    // El servicio puede llamar «exacto» al resultado de buscar un barrio: exacto
+    // DEL BARRIO, no de la casa. Sin ese tope el mapa dibujaría un predio con
+    // una precisión que no tiene, y de ahí salen las decisiones de a dónde va
+    // una brigada.
+    $intentos = Geocodificador::intentosPara('Casa 9', 'Robles');
+
+    afirmarIgual(null, $intentos[0]['techo']);
+    afirmarIgual(null, $intentos[1]['techo']);
+    afirmarIgual('BARRIO', $intentos[2]['techo']);
+});
+
+prueba('sin barrio se pregunta una sola vez', function (): void {
+    $intentos = Geocodificador::intentosPara('Carrera 11 # 8-26');
+
+    afirmarIgual(1, count($intentos));
+    afirmarIgual('Carrera 11 # 8-26', $intentos[0]['texto']);
+});
+
+prueba('una dirección que ES su barrio no se pregunta dos veces igual', function (): void {
+    // Pasa en la mitad del censo rural: la «dirección» que trae la ficha es el
+    // nombre de la vereda. Sin esto se gastarían tres consultas —y tres
+    // segundos— en preguntar tres veces lo mismo.
+    $intentos = Geocodificador::intentosPara('Bocas del Palo', 'BOCAS DEL PALO');
+
+    afirmarIgual(1, count($intentos));
+});
+
 grupo('Tablero sobre datos oficiales');
 
 prueba('el mismo barrio escrito distinto se agrupa igual', function (): void {

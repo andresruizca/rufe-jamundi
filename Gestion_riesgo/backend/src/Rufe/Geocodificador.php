@@ -47,6 +47,16 @@ final class Geocodificador
     /** Nominatim exige una petición por segundo como máximo. */
     public const PAUSA_SEGUNDOS = 1;
 
+    /**
+     * Cuándo se hizo la última consulta, para respetar ese segundo.
+     *
+     * La pausa vive AQUÍ y no en quien llama desde que una dirección puede
+     * costar hasta tres consultas —con barrio, sin barrio y solo el barrio—.
+     * Quien llamaba pausaba entre direcciones, así que las tres de una misma
+     * salían seguidas y Nominatim las habría rechazado por exceso de ritmo.
+     */
+    private static float $ultimaConsulta = 0.0;
+
     /** Cuántas veces se reintenta una dirección que no se pudo resolver. */
     public const MAX_INTENTOS = 3;
 
@@ -252,34 +262,150 @@ final class Geocodificador
      *
      * @return array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}|null
      */
-    public static function resolver(string $direccion): ?array
+    public static function resolver(string $direccion, string $contexto = '', string $respaldo = ''): ?array
     {
         if (! self::utilizable($direccion)) {
             return null;
         }
 
-        $consulta = self::consulta($direccion);
+        $mejor = null;
 
-        $resultado = self::enOpenStreetMap($consulta);
-        if ($resultado !== null && self::pintable($resultado['precision'])) {
-            return $resultado;
-        }
+        foreach (self::intentosPara($direccion, $contexto, $respaldo) as $intento) {
+            $resultado = self::enOpenStreetMap(self::consulta($intento['texto']));
 
-        // A Google solo va lo que OpenStreetMap no supo ubicar bien: es lo que
-        // cuesta dinero.
-        if (self::hayGoogle()) {
-            $deGoogle = self::enGoogle($consulta);
-            if ($deGoogle !== null && self::pintable($deGoogle['precision'])) {
-                return $deGoogle;
+            if ($resultado !== null && self::pintable($resultado['precision'])) {
+                return self::conTecho($resultado, $intento['techo']);
             }
+
+            // A Google solo va lo que OpenStreetMap no supo ubicar bien: es lo
+            // que cuesta dinero.
+            if (self::hayGoogle()) {
+                $deGoogle = self::enGoogle(self::consulta($intento['texto']));
+
+                if ($deGoogle !== null && self::pintable($deGoogle['precision'])) {
+                    return self::conTecho($deGoogle, $intento['techo']);
+                }
+
+                $resultado ??= $deGoogle;
+            }
+
+            // Se guarda lo menos malo por si ningún intento acierta: un punto
+            // del municipio dice poco, pero decir «no se pudo» cuando sí se
+            // supo el municipio sería perder información.
+            $mejor ??= $resultado;
         }
 
-        return $resultado;
+        return $mejor;
+    }
+
+    /**
+     * Los intentos que se hacen por una dirección, del más preciso al menos.
+     *
+     * Aquí está la mejora que de verdad ubica el censo. Antes se consultaba
+     * SOLO «dirección + Jamundí, Valle del Cauca», y en un municipio donde la
+     * mitad de las fichas dicen «Casa 9» o «Finca La Piscina» eso no ubica
+     * nada: esa dirección no existe para el servicio si no se dice en qué
+     * vereda o en qué barrio está.
+     *
+     * Con el barrio o la vereda delante, «Casa 9» pasa a ser «Casa 9, Colinas
+     * de Miravalle, Jamundí», que sí es un sitio.
+     *
+     * Y si ni con eso, se pregunta por el barrio solo: un punto en el centro
+     * del barrio correcto es una respuesta útil —dice a qué sector mandar la
+     * brigada—, mientras que el centroide del municipio no dice nada.
+     *
+     * El `techo` es lo mejor que puede afirmar cada intento. Preguntar por un
+     * barrio puede devolver un resultado que el servicio llama «exacto», pero
+     * exacto DEL BARRIO, no de la casa: sin ese tope, el mapa dibujaría un
+     * predio con precisión que no tiene.
+     *
+     * @return list<array{texto: string, techo: string|null}>
+     */
+    public static function intentosPara(
+        string $direccion,
+        string $contexto = '',
+        string $respaldo = ''
+    ): array {
+        $direccion = trim($direccion);
+        $contexto = trim($contexto);
+        $respaldo = trim($respaldo);
+
+        // El mismo texto en los dos sitios —pasa cuando la «dirección» del censo
+        // ES el nombre de la vereda— no merece dos consultas idénticas.
+        $repetido = $contexto !== '' && self::normalizar($contexto) === self::normalizar($direccion);
+
+        $intentos = [];
+
+        if ($contexto !== '' && ! $repetido) {
+            $intentos[] = ['texto' => $direccion.', '.$contexto, 'techo' => null];
+        }
+
+        $intentos[] = ['texto' => $direccion, 'techo' => null];
+
+        if ($contexto !== '' && ! $repetido) {
+            $intentos[] = ['texto' => $contexto, 'techo' => 'BARRIO'];
+        }
+
+        // El corregimiento, como último recurso. Los diecisiete son sitios que
+        // el servicio conoce; una vereda pequeña, muchas veces no. Para una
+        // ficha rural cuya vereda no existe en el mapa, el corregimiento es la
+        // diferencia entre saber a qué zona ir y no saber nada.
+        $yaPreguntado = array_map(
+            static fn (array $i): string => self::normalizar($i['texto']),
+            $intentos
+        );
+
+        if ($respaldo !== '' && ! in_array(self::normalizar($respaldo), $yaPreguntado, true)) {
+            $intentos[] = ['texto' => $respaldo, 'techo' => 'BARRIO'];
+        }
+
+        return $intentos;
+    }
+
+    /**
+     * Rebaja la precisión declarada cuando el intento no puede prometer tanto.
+     *
+     * @param  array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}  $r
+     * @return array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}
+     */
+    private static function conTecho(array $r, ?string $techo): array
+    {
+        if ($techo === null) {
+            return $r;
+        }
+
+        $orden = ['EXACTA' => 3, 'CALLE' => 2, 'BARRIO' => 1, 'MUNICIPIO' => 0, 'FALLIDA' => -1];
+
+        if (($orden[$r['precision']] ?? 0) > ($orden[$techo] ?? 0)) {
+            $r['precision'] = $techo;
+        }
+
+        return $r;
+    }
+
+    /**
+     * Deja pasar el segundo que exige la política de uso de Nominatim.
+     *
+     * Es un servicio donado: pasarse del ritmo hace que corten el acceso a todo
+     * el municipio, no que respondan más lento.
+     */
+    private static function esperarTurno(): void
+    {
+        $desde = microtime(true) - self::$ultimaConsulta;
+        $falta = self::PAUSA_SEGUNDOS - $desde;
+
+        if ($falta > 0) {
+            usleep((int) ($falta * 1_000_000));
+        }
+
+        self::$ultimaConsulta = microtime(true);
     }
 
     /** @return array{lat: float, lon: float, precision: string, fuente: string, etiqueta: string}|null */
     private static function enOpenStreetMap(string $consulta): ?array
     {
+        self::esperarTurno();
+
         // Tres cosas que hacen la diferencia entre ubicar bien y ubicar en otro
         // municipio:
         //

@@ -206,21 +206,62 @@ final class MapaController
      */
     private function clavesEnUso(): array
     {
-        $claves = [];
+        return array_map(static fn (): bool => true, $this->contextoPorClave());
+    }
+
+    /**
+     * Con qué barrio o vereda hay que preguntar por cada dirección.
+     *
+     * Es la mejora que de verdad ubica este censo. Preguntar «Casa 9, Jamundí»
+     * no ubica nada —esa dirección no existe para el servicio—, pero «Casa 9,
+     * Colinas de Miravalle, Jamundí» sí es un sitio.
+     *
+     * La cola guarda solo el texto de la dirección, así que el barrio se
+     * recupera de la ficha a la que pertenece. Un mismo texto puede estar en
+     * dos veredas distintas —«Casa 9» pasa— y entonces se usa el barrio más
+     * repetido: son 12 de 938 direcciones, y una consulta compartida no puede
+     * servir a dos sitios a la vez.
+     *
+     * @return array<string,string> clave de la dirección => barrio o vereda
+     */
+    private function contextoPorClave(): array
+    {
+        $cuentas = [];
 
         foreach (Db::all('SELECT direccion, corregimiento, vereda_sector_barrio FROM rufe_reportes') as $r) {
+            $barrio = trim((string) ($r['vereda_sector_barrio'] ?? ''));
+            $corregimiento = trim((string) ($r['corregimiento'] ?? ''));
+            $contexto = $barrio !== '' ? $barrio : $corregimiento;
+
             // La dirección, y el sector como respaldo: es lo que pide el mapa
             // cuando la dirección no se puede resolver.
-            foreach ([$r['direccion'], $r['corregimiento'], $r['vereda_sector_barrio']] as $texto) {
+            foreach ([$r['direccion'], $corregimiento, $barrio] as $texto) {
                 $texto = (string) ($texto ?? '');
 
-                if ($texto !== '' && Geocodificador::utilizable($texto)) {
-                    $claves[Geocodificador::clave($texto)] = true;
+                if ($texto === '' || ! Geocodificador::utilizable($texto)) {
+                    continue;
                 }
+
+                $clave = Geocodificador::clave($texto);
+                // El barrio preguntado como dirección no necesita contexto: ya
+                // ES el contexto, y repetirlo no añade nada a la consulta.
+                $suyo = $texto === $contexto ? '' : $contexto;
+                // Se guardan los dos juntos: el barrio para preguntar con él, y
+                // el corregimiento como último recurso cuando la vereda no
+                // existe en el mapa.
+                $par = $suyo.'|'.$corregimiento;
+                $cuentas[$clave][$par] = ($cuentas[$clave][$par] ?? 0) + 1;
             }
         }
 
-        return $claves;
+        $contextos = [];
+
+        foreach ($cuentas as $clave => $opciones) {
+            arsort($opciones);
+            $contextos[$clave] = (string) array_key_first($opciones);
+        }
+
+        return $contextos;
     }
 
     /** Cuántas direcciones hay resueltas, pendientes y fallidas. */
@@ -274,6 +315,12 @@ final class MapaController
             'lote' => self::LOTE,
             'google_activo' => Geocodificador::hayGoogle(),
             'segundos_por_direccion' => Geocodificador::PAUSA_SEGUNDOS,
+            // Cuántas consultas cuesta una dirección, en promedio. Desde que se
+            // pregunta con el barrio delante son hasta tres —con barrio, sin
+            // barrio y solo el barrio—, y la mayoría acierta en la primera o la
+            // segunda. Sin este dato la pantalla anunciaba la mitad del tiempo
+            // real, que es peor que no anunciar ninguno.
+            'consultas_por_direccion' => 2,
         ]);
     }
 
@@ -290,11 +337,17 @@ final class MapaController
     {
         $usuario = Auth::exigirUsuario($req);
 
+        // Un lote puede costar hasta tres consultas por dirección, cada una con
+        // su segundo de pausa. Con el límite por omisión de PHP el proceso se
+        // cortaría a la mitad y la pantalla no sabría por dónde iba.
+        @set_time_limit(180);
+
         // Se piden más de las que caben en un lote y se filtran aquí: solo se
         // gastan consultas en direcciones que el censo de hoy va a dibujar. Las
         // que quedaron de la fuente anterior se saltan — geocodificarlas serían
         // treinta minutos de espera para un punto que nadie va a ver.
-        $enUso = $this->clavesEnUso();
+        $contextos = $this->contextoPorClave();
+        $enUso = $contextos;
 
         $candidatas = Db::all(
             'SELECT clave, direccion FROM rufe_geocodificacion
@@ -321,14 +374,18 @@ final class MapaController
         $resueltas = 0;
         $fallidas = 0;
 
-        foreach ($pendientes as $i => $fila) {
-            // La política de OpenStreetMap exige no pasar de una petición por
-            // segundo. La pausa va antes de cada consulta menos la primera.
-            if ($i > 0) {
-                sleep(Geocodificador::PAUSA_SEGUNDOS);
-            }
+        foreach ($pendientes as $fila) {
+            // La pausa que exige OpenStreetMap la lleva ahora el propio
+            // geocodificador: una dirección puede costar hasta tres consultas
+            // —con barrio, sin barrio y solo el barrio— y pausar aquí las
+            // habría dejado salir seguidas.
+            [$barrio, $corregimiento] = array_pad(
+                explode('|', $contextos[(string) $fila['clave']] ?? ''),
+                2,
+                ''
+            );
 
-            $punto = Geocodificador::resolver((string) $fila['direccion']);
+            $punto = Geocodificador::resolver((string) $fila['direccion'], $barrio, $corregimiento);
 
             if ($punto === null) {
                 Db::exec(

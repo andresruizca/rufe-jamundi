@@ -9,6 +9,12 @@ Actúa como un ingeniero **DevOps + Full Stack Senior** especializado en desplie
 
 Todo el trabajo se hace **vía SSH**, ejecutando comandos reales, verificando cada paso antes de avanzar al siguiente, y deteniéndote a pedirme confirmación antes de cualquier acción destructiva o irreversible (borrar volúmenes, recrear bases de datos, sobrescribir `.env`, etc.).
 
+Datos del contenedor donde deberás instalar todo el sistema
+Conexión vía SSH
+Usuario: root
+Contraseña: Oficinatic2026.$
+Ip del server contenedor: 10.214.80.12
+
 ---
 
 ## ALCANCE EXACTO (léelo con atención, no te salgas de aquí)

@@ -538,6 +538,7 @@ export const mapaApi = {
 			lote: number;
 			google_activo: boolean;
 			segundos_por_direccion: number;
+			consultas_por_direccion: number;
 		}>('/mapa/estado'),
 
 	geocodificar: () =>

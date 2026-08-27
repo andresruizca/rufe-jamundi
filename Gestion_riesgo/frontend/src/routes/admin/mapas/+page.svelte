@@ -21,6 +21,7 @@
 		lote: number;
 		google_activo: boolean;
 		segundos_por_direccion: number;
+		consultas_por_direccion: number;
 	};
 
 	let estado = $state<Estado | null>(null);
@@ -29,6 +30,40 @@
 	let corriendo = $state(false);
 	let procesadas = $state(0);
 	let ubicadas = $state(0);
+
+	/**
+	 * Cuántas había que hacer cuando se pulsó el botón.
+	 *
+	 * Se congela al arrancar y no se recalcula: si el denominador se leyera del
+	 * estado en cada vuelta, la barra avanzaría y retrocedería —el total cambia
+	 * cuando una dirección falla y sale de la cola—, y una barra que retrocede
+	 * hace pensar que el proceso se rompió.
+	 */
+	let alArrancar = $state(0);
+
+	/** Cuándo empezó, para poder decir cuánto falta con lo que ya se sabe. */
+	let comienzo = 0;
+	let transcurrido = $state(0);
+
+	const avance = $derived(
+		alArrancar > 0 ? Math.min(100, Math.round((procesadas / alArrancar) * 100)) : 0
+	);
+
+	/**
+	 * Lo que falta, medido con el ritmo REAL de esta corrida.
+	 *
+	 * La estimación de antes de arrancar sale de un segundo por dirección. La de
+	 * aquí sale de lo que está tardando de verdad, que con el barrio delante
+	 * puede ser el triple: una dirección cuesta hasta tres consultas.
+	 */
+	const minutosFaltan = $derived.by(() => {
+		if (procesadas === 0 || transcurrido === 0) return null;
+
+		const porDireccion = transcurrido / procesadas;
+		const quedan = Math.max(0, alArrancar - procesadas);
+
+		return Math.ceil((quedan * porDireccion) / 60);
+	});
 
 	let detener = false;
 	let confirmandoRehacer = $state(false);
@@ -52,7 +87,14 @@
 	);
 
 	const minutosRestantes = $derived(
-		estado ? Math.ceil((estado.pendientes_en_uso * estado.segundos_por_direccion) / 60) : 0
+		estado
+			? Math.ceil(
+					(estado.pendientes_en_uso *
+						estado.segundos_por_direccion *
+						estado.consultas_por_direccion) /
+						60
+				)
+			: 0
 	);
 
 	onMount(() => void refrescar());
@@ -102,6 +144,13 @@
 		procesadas = 0;
 		ubicadas = 0;
 		error = null;
+		alArrancar = estado?.pendientes_en_uso ?? 0;
+		comienzo = Date.now();
+		transcurrido = 0;
+
+		// El reloj corre aparte del bucle: un lote puede tardar medio minuto, y
+		// sin esto el tiempo restante se quedaría congelado todo ese rato.
+		const reloj = setInterval(() => (transcurrido = (Date.now() - comienzo) / 1000), 1000);
 
 		// Se encadenan lotes hasta que no queden pendientes o el administrador
 		// pare. Si cierra la pantalla, lo hecho queda guardado: cada lote se
@@ -120,6 +169,7 @@
 			}
 		}
 
+		clearInterval(reloj);
 		corriendo = false;
 	}
 </script>
@@ -177,6 +227,25 @@
 				consultas.
 			{/if}
 		</p>
+
+		{#if corriendo}
+			<!--
+				La barra va con `role="progressbar"` y sus valores: quien use lector
+				de pantalla tiene que poder saber por dónde va un proceso de veinte
+				minutos sin mirar el dibujo.
+			-->
+			<div
+				class="barra"
+				role="progressbar"
+				aria-valuemin="0"
+				aria-valuemax={alArrancar}
+				aria-valuenow={procesadas}
+				aria-label="Direcciones procesadas"
+			>
+				<span class="barra__hecho" style="width:{avance}%"></span>
+				<span class="barra__cifra">{avance}%</span>
+			</div>
+		{/if}
 
 		{#if confirmandoRehacer}
 			<div class="aviso aviso--alerta">
@@ -247,7 +316,10 @@
 				</button>
 				<span class="progreso">
 					<LoaderCircle size={15} class="girando" aria-hidden="true" />
-					{procesadas} procesadas, {ubicadas} ubicadas…
+					{procesadas} de {alArrancar} · {ubicadas} ubicadas
+					{#if minutosFaltan !== null}
+						· faltan unos {minutosFaltan} min
+					{/if}
 				</span>
 			{:else}
 				<button
@@ -360,6 +432,42 @@
 		font-size: 0.86rem;
 		line-height: 1.5;
 		color: var(--color-muted);
+	}
+
+	/* La barra de avance. Va después de los botones y a todo lo ancho porque es
+	   lo que se mira durante veinte minutos: si fuera un detalle al lado del
+	   botón, habría que buscarla cada vez. */
+	.barra {
+		position: relative;
+		height: 1.35rem;
+		margin: 0.2rem 0 1rem;
+		border-radius: 999px;
+		background: var(--color-surface-alt);
+		border: 1px solid var(--color-border);
+		overflow: hidden;
+	}
+
+	.barra__hecho {
+		display: block;
+		height: 100%;
+		background: var(--color-primary);
+		/* La transición es lo que hace que se lea como avance y no como saltos:
+		   los lotes llegan de golpe, de diez en diez. */
+		transition: width 400ms ease;
+	}
+
+	.barra__cifra {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		font-size: 0.75rem;
+		font-weight: 700;
+		/* Mezcla para que se lea sobre las dos mitades de la barra, la llena y la
+		   vacía, sin tener que moverla de sitio. */
+		color: var(--color-text);
+		mix-blend-mode: difference;
+		filter: invert(1) grayscale(1) contrast(3);
 	}
 
 </style>
