@@ -78,7 +78,37 @@
 		DESCARTADA: 'Descartada'
 	};
 
-	const faltaMotivo = $derived(nuevoEstado === 'DESCARTADA' && nota.trim() === '');
+	/**
+	 * Por qué se descarta, en un código que el sistema entiende.
+	 *
+	 * De esto depende algo que pasa solo: si el call center vuelve a llamar a
+	 * esa familia o la saca de la campaña. Por eso es una decisión aparte de la
+	 * nota — con solo el texto libre, alguien tendría que leer mil trescientas
+	 * notas para saber a quién hay que volver a llamar.
+	 */
+	let motivo = $state('');
+
+	const MOTIVOS = [
+		{
+			codigo: 'DATOS_INCOMPLETOS',
+			etiqueta: 'Le faltaron datos',
+			nota: 'Vuelve a la cola de llamadas para que complete el formulario.'
+		},
+		{
+			codigo: 'FALTA_EVIDENCIA',
+			etiqueta: 'Le faltó evidencia',
+			nota: 'Vuelve a la cola de llamadas para que suba fotos o videos.'
+		},
+		{
+			codigo: 'NO_APLICA',
+			etiqueta: 'No aplica',
+			nota: 'Sale de la campaña. Nadie del call center la volverá a llamar.'
+		}
+	];
+
+	const faltaMotivo = $derived(
+		nuevoEstado === 'DESCARTADA' && (nota.trim() === '' || motivo === '')
+	);
 	const yaConvertida = $derived(p?.estado === 'CONVERTIDA');
 
 	/**
@@ -193,10 +223,14 @@
 		erroresCampo = {};
 
 		try {
-			await preinscripcionApi.cambiarEstado(id, nuevoEstado, nota);
-			exito = 'El estado de la solicitud se actualizó.';
+			await preinscripcionApi.cambiarEstado(id, nuevoEstado, nota, motivo);
+			exito =
+				nuevoEstado === 'DESCARTADA' && motivo !== 'NO_APLICA'
+					? 'Solicitud descartada. Vuelve a la cola del call center para que la llamen y la completen.'
+					: 'El estado de la solicitud se actualizó.';
 			nuevoEstado = '';
 			nota = '';
+			motivo = '';
 			await cargar();
 		} catch (e) {
 			if (e instanceof ApiError) {
@@ -397,6 +431,37 @@
 					</div>
 				</fieldset>
 
+				{#if nuevoEstado === 'DESCARTADA'}
+					<!--
+						Descartar no es una sola cosa. «Le faltó una foto» y «esta
+						vivienda no está en zona afectada» acaban las dos en
+						«descartada», y para la familia son opuestas: en la primera se
+						la vuelve a llamar para que la complete, en la segunda no se la
+						vuelve a marcar nunca.
+
+						Sin esta pregunta, el sistema no podía distinguirlas y volvía a
+						poner a todo el mundo en la cola de llamadas como si nunca se
+						hubiera preinscrito.
+					-->
+					<fieldset class="campo decision" class:campo--invalido={!!erroresCampo.motivo}>
+						<legend class="campo__etiqueta">¿Por qué se descarta?</legend>
+						<div class="opciones">
+							{#each MOTIVOS as m (m.codigo)}
+								<label class="opcion" class:opcion--activa={motivo === m.codigo}>
+									<input type="radio" name="motivo" value={m.codigo} bind:group={motivo} />
+									<span class="opcion__texto">
+										{m.etiqueta}
+										<span class="opcion__nota">{m.nota}</span>
+									</span>
+								</label>
+							{/each}
+						</div>
+						{#if erroresCampo.motivo}
+							<span class="campo__error">{erroresCampo.motivo}</span>
+						{/if}
+					</fieldset>
+				{/if}
+
 				<div class="campo" class:campo--invalido={!!erroresCampo.nota}>
 					<label class="campo__etiqueta" for="nota">
 						Nota {nuevoEstado === 'DESCARTADA' ? '(obligatoria)' : '(opcional)'}
@@ -405,10 +470,10 @@
 					></textarea>
 					{#if erroresCampo.nota}
 						<span class="campo__error">{erroresCampo.nota}</span>
-					{:else if faltaMotivo}
+					{:else if nuevoEstado === 'DESCARTADA' && nota.trim() === ''}
 						<span class="campo__ayuda">
-							Explique por qué se descarta: es lo que se le responderá a la familia si llama a
-							preguntar.
+							Explique qué falta, con palabras que la operadora pueda leerle por teléfono. Es lo
+							que se le va a decir a la familia cuando la llamen.
 						</span>
 					{/if}
 				</div>

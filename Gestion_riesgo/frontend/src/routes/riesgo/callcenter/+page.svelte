@@ -12,26 +12,32 @@
 	// quién llamar ahora, y en cada fila las tres cosas que se hacen con esa
 	// persona —marcar, mandarle el enlace, anotar qué pasó.
 
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		Check,
 		CircleDot,
+		ClipboardCopy,
 		Clock,
+		Headphones,
 		LoaderCircle,
-		PhoneCall,
+		PhoneForwarded,
 		PhoneOff,
 		Search,
 		TriangleAlert,
+		UserCheck,
 		Users
 	} from '@lucide/svelte';
 	import { callCenterApi } from '$lib/api/servicios';
+	import { sesion } from '$lib/stores/sesion.svelte';
 	import KpiTile from '$lib/components/KpiTile.svelte';
 	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
 	import CompartirFormulario from '$lib/components/CompartirFormulario.svelte';
+	import PanelGuion from '$lib/callcenter/PanelGuion.svelte';
 	import {
 		PESTANAS,
 		estadoDe,
 		porcentaje,
+		type AtencionEnCurso,
 		type FiltroEstado,
 		type HogarParaLlamar,
 		type ResumenCallCenter
@@ -55,13 +61,116 @@
 	let guardando = $state(false);
 	let errorForm = $state<Record<string, string>>({});
 
+	/**
+	 * Quién está llamando a quién, entre las tres operadoras.
+	 *
+	 * Se pide aparte de la lista y se refresca sola. Recargar la lista entera
+	 * para esto borraría lo que la operadora esté escribiendo en su anotación —y
+	 * eso ocurre justo mientras habla con alguien.
+	 */
+	let atenciones = $state<Map<number, AtencionEnCurso>>(new Map());
+	let copiado = $state<number | null>(null);
+
+	let latidoAviso: ReturnType<typeof setInterval> | null = null;
+	let latidoLista: ReturnType<typeof setInterval> | null = null;
+
 	const hoy = new Date().toISOString().slice(0, 10);
+	const puedeEditarGuion = $derived(sesion.rol === 'ADMINISTRADOR');
 
 	onMount(() => {
 		void cargar();
+		void refrescarAtenciones();
+
+		// Cada 25 segundos: lo suficiente para que una operadora vea que otra
+		// tomó un hogar antes de marcarlo, sin convertir la pantalla en una
+		// consulta continua contra la base durante ocho horas.
+		latidoLista = setInterval(() => void refrescarAtenciones(), 25_000);
 	});
 
+	onDestroy(() => {
+		if (latidoLista) clearInterval(latidoLista);
+		soltarAviso();
+	});
+
+	async function refrescarAtenciones() {
+		try {
+			const r = await callCenterApi.atenciones();
+			atenciones = new Map(r.atenciones.map((a) => [a.reporte_id, a]));
+		} catch {
+			// Sin señal o con la sesión caída, el aviso simplemente no se
+			// actualiza. No se le pone un error en pantalla a quien está
+			// llamando por una cosa accesoria: la lista sigue sirviendo.
+		}
+	}
+
+	/**
+	 * Quién tiene abierto este hogar, si no soy yo.
+	 *
+	 * Verse a uno mismo en el aviso no informa de nada y hace dudar de si se
+	 * está pisando a alguien.
+	 */
+	function otraOperadora(h: HogarParaLlamar): string | null {
+		const a = atenciones.get(h.id) ?? null;
+		const quien = a?.usuario_nombre ?? h.atendida?.quien ?? null;
+		const quienId = a?.usuario_id ?? h.atendida?.usuario_id ?? null;
+
+		if (quien === null) return null;
+		if (quienId !== null && quienId === (sesion.usuario?.id ?? null)) return null;
+
+		return quien;
+	}
+
+	/** «Estoy en este hogar», y lo sigue diciendo mientras el panel esté abierto. */
+	function avisarQueLoAtiendo(id: number) {
+		void callCenterApi.atender(id).catch(() => {});
+
+		if (latidoAviso) clearInterval(latidoAviso);
+		latidoAviso = setInterval(() => void callCenterApi.atender(id).catch(() => {}), 60_000);
+	}
+
+	function soltarAviso() {
+		if (latidoAviso) {
+			clearInterval(latidoAviso);
+			latidoAviso = null;
+		}
+
+		if (anotando !== null) {
+			void callCenterApi.atender(anotando, true).catch(() => {});
+		}
+	}
+
+	/**
+	 * Copiar el número.
+	 *
+	 * Las llamadas NO salen del computador: cada operadora tiene un teléfono IP
+	 * sobre la mesa. Un enlace `tel:` aquí no marca nada —abre un programa que
+	 * no existe o no hace nada—, y lo que de verdad hace falta es leer el número
+	 * bien y tenerlo en el portapapeles.
+	 */
+	async function copiarTelefono(h: HogarParaLlamar) {
+		if (!h.telefono) return;
+
+		try {
+			await navigator.clipboard.writeText(h.telefono);
+			copiado = h.id;
+			setTimeout(() => (copiado = copiado === h.id ? null : copiado), 1800);
+		} catch {
+			// Sin permiso de portapapeles no pasa nada: el número está en
+			// pantalla, grande y separado en grupos, para marcarlo a mano.
+		}
+	}
+
+	/** 3117657814 → 311 765 7814. Un número de diez cifras seguidas se marca mal. */
+	function agrupar(telefono: string): string {
+		const d = telefono.replace(/\D+/g, '');
+
+		return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : telefono;
+	}
+
+	let ultimaPeticion = 0;
+
 	async function cargar() {
+		const mia = ++ultimaPeticion;
 		cargando = true;
 		error = '';
 
@@ -74,35 +183,72 @@
 				callCenterApi.hogares({ estado, q: busqueda, pagina })
 			]);
 
+			// Llegó tarde: entre tanto la operadora siguió escribiendo y ya se
+			// pidió otra cosa. Se descarta entera.
+			if (mia !== ultimaPeticion) return;
+
 			resumen = r.resumen;
 			hogares = l.hogares;
 			resultados = l.resultados;
 			total = l.paginacion.total;
 			paginas = l.paginacion.paginas;
 		} catch (e) {
+			if (mia !== ultimaPeticion) return;
 			error = e instanceof Error ? e.message : 'No se pudo cargar la lista de llamadas.';
 		} finally {
-			cargando = false;
+			if (mia === ultimaPeticion) cargando = false;
 		}
 	}
 
 	function cambiarPestana(v: FiltroEstado) {
 		estado = v;
 		pagina = 1;
+		soltarAviso();
 		anotando = null;
 		void cargar();
 	}
 
 	function buscar(e: Event) {
 		e.preventDefault();
+		if (esperaTecleo) clearTimeout(esperaTecleo);
 		pagina = 1;
 		void cargar();
 	}
 
+	/**
+	 * Buscar mientras se escribe.
+	 *
+	 * Quien opera está al teléfono: «soy fulana, me llamaron ayer». Obligarla a
+	 * escribir y además oprimir un botón le cuesta un segundo de silencio en
+	 * cada llamada, trescientas veces al día.
+	 *
+	 * Los 300 ms son para no mandar una consulta por tecla, y el número de orden
+	 * es para que una respuesta lenta de «312» no pise a la de «3127» —que llega
+	 * después pero se pidió más tarde—. Sin él, la lista muestra el resultado de
+	 * lo que la operadora escribió hace dos teclas.
+	 */
+	let esperaTecleo: ReturnType<typeof setTimeout> | null = null;
+
+	function alTeclear() {
+		if (esperaTecleo) clearTimeout(esperaTecleo);
+
+		esperaTecleo = setTimeout(() => {
+			pagina = 1;
+			void cargar();
+		}, 300);
+	}
+
 	function abrirAnotacion(h: HogarParaLlamar) {
-		anotando = anotando === h.id ? null : h.id;
+		const abriendo = anotando !== h.id;
+
+		// Abrir la anotación es lo que en la práctica significa «voy a llamar a
+		// este»: es el momento exacto en que la operadora toma el hogar.
+		soltarAviso();
+		anotando = abriendo ? h.id : null;
 		errorForm = {};
 		formulario = { resultado: '', nota: '', proxima_llamada: '', enlace_enviado: false };
+
+		if (abriendo) avisarQueLoAtiendo(h.id);
 	}
 
 	async function anotar(h: HogarParaLlamar) {
@@ -111,8 +257,10 @@
 
 		try {
 			await callCenterApi.registrar(h.id, formulario);
+			soltarAviso();
 			anotando = null;
 			await cargar();
+			await refrescarAtenciones();
 		} catch (e) {
 			const err = e as { errors?: Record<string, string>; message?: string };
 			errorForm = err.errors ?? {};
@@ -176,8 +324,17 @@
 				label="Faltan por llamar"
 				value={resumen.sin_llamar}
 				color="var(--color-highlight-dark)"
-				icon={PhoneCall}
+				icon={PhoneForwarded}
 				sub="Nadie los ha contactado"
+			/>
+			<!-- La cifra más accionable del tablero: familias que ya llenaron el
+			     formulario entero y se quedaron a una foto de entrar. -->
+			<KpiTile
+				label="Les faltó algo"
+				value={resumen.por_subsanar}
+				color="var(--color-warning)"
+				icon={TriangleAlert}
+				sub="Hay que llamarlas y explicarles"
 			/>
 			<KpiTile
 				label="Llamados, sin registrarse"
@@ -200,11 +357,23 @@
 				icon={PhoneOff}
 				sub="Por teléfono no se les llega"
 			/>
+			<KpiTile
+				label="No aplica"
+				value={resumen.no_aplica}
+				color="var(--color-muted)"
+				icon={UserCheck}
+				sub="El ingeniero las sacó de la campaña"
+			/>
 		</div>
 	{/if}
 </div>
 
-<div class="tarjeta" style="margin-top:1.25rem">
+<!--
+	El trabajo del turno: a la izquierda a quién llamar, a la derecha qué decirle.
+	Las dos cosas a la vez, porque una llamada necesita las dos a la vez.
+-->
+<div class="trabajo">
+<div class="tarjeta">
 	<h2 class="tarjeta__titulo">A quién llamar</h2>
 
 	<!--
@@ -218,6 +387,7 @@
 				type="button"
 				role="tab"
 				class="pestana"
+				class:pestana--urgente={p.urgente}
 				class:pestana--activa={estado === p.valor}
 				aria-selected={estado === p.valor}
 				onclick={() => cambiarPestana(p.valor)}
@@ -229,17 +399,18 @@
 
 	<form class="buscador" onsubmit={buscar}>
 		<label class="visualmente-oculto" for="cc-buscar">Buscar</label>
+		<Search class="buscador__lupa" size={16} aria-hidden="true" />
 		<input
 			id="cc-buscar"
 			class="campo__control"
 			type="search"
 			placeholder="Nombre, teléfono o radicado"
 			bind:value={busqueda}
+			oninput={alTeclear}
 		/>
-		<button type="submit" class="boton boton--suave">
-			<Search size={15} aria-hidden="true" />
-			Buscar
-		</button>
+		{#if cargando && busqueda !== ''}
+			<LoaderCircle class="girando" size={16} aria-hidden="true" />
+		{/if}
 	</form>
 
 	{#if error}
@@ -269,7 +440,8 @@
 		<ul class="hogares">
 			{#each hogares as h (h.id)}
 				{@const st = estadoDe(h)}
-				<li class="hogar">
+				{@const otra = otraOperadora(h)}
+				<li class="hogar" class:hogar--nollamar={h.no_llamar}>
 					<div class="hogar__cabeza">
 						<div class="hogar__quien">
 							<span class="hogar__nombre" class:hogar__nombre--sin={!h.nombre}>
@@ -296,15 +468,76 @@
 						<span class="pastilla pastilla--{st.clase}">{st.texto}</span>
 					</div>
 
+					{#if otra}
+						<!-- Entre tres personas trabajando la misma cola, esto es lo que
+						     evita que una familia reciba tres llamadas seguidas de la
+						     Alcaldía diciéndole lo mismo. Es un aviso, no un candado: la
+						     fila se puede tomar igual si hace falta. -->
+						<p class="hogar__ocupado">
+							<Headphones size={14} aria-hidden="true" />
+							Lo está atendiendo <strong>{otra}</strong> ahora mismo.
+						</p>
+					{/if}
+
+					{#if h.descarte}
+						<!-- Lo que decidió el ingeniero, con lo que hay que decirle a la
+						     persona. Va antes del teléfono a propósito: es lo primero que
+						     la operadora tiene que leer, no algo que descubra a mitad de
+						     la llamada. -->
+						<p class="decidido" class:decidido--fin={!h.descarte.llamar}>
+							{#if h.descarte.llamar}
+								<TriangleAlert size={15} aria-hidden="true" />
+							{:else}
+								<PhoneOff size={15} aria-hidden="true" />
+							{/if}
+							<span>
+								<strong>{h.descarte.etiqueta}.</strong>
+								{h.descarte.decirle}
+								{#if h.preinscripcion}
+									<em>Solicitud {h.preinscripcion.radicado}.</em>
+								{/if}
+							</span>
+						</p>
+					{/if}
+
 					{#if h.telefono}
 						<div class="hogar__acciones">
-							<!-- `tel:` abre el marcador del teléfono o el softphone del
-							     equipo. Es la acción principal: esto es un call center. -->
-							<a class="boton boton--principal" href="tel:{h.telefono}">
-								<PhoneCall size={15} aria-hidden="true" />
-								Llamar al {h.telefono}
-							</a>
-							<button type="button" class="boton boton--suave" onclick={() => abrirAnotacion(h)}>
+							<!--
+								El número, grande y separado en grupos, NO un enlace `tel:`.
+
+								Las llamadas no salen del computador: cada operadora tiene un
+								teléfono IP sobre la mesa. Un botón azul que dice «Llamar
+								al…» y no marca nada es peor que no tenerlo — se toca, no
+								pasa nada, y se pierde el turno averiguando por qué.
+
+								Lo que hace falta es leerlo sin equivocarse de dígito y
+								poder copiarlo. Eso es lo que hay aquí.
+							-->
+							<div class="telefono">
+								<span class="telefono__numero">{agrupar(h.telefono)}</span>
+								<button
+									type="button"
+									class="telefono__copiar"
+									onclick={() => copiarTelefono(h)}
+									title="Copiar el número"
+								>
+									{#if copiado === h.id}
+										<Check size={14} aria-hidden="true" />
+										Copiado
+									{:else}
+										<ClipboardCopy size={14} aria-hidden="true" />
+										Copiar
+									{/if}
+								</button>
+							</div>
+
+							<button
+								type="button"
+								class="boton"
+								class:boton--principal={!h.no_llamar}
+								class:boton--suave={h.no_llamar}
+								onclick={() => abrirAnotacion(h)}
+							>
 								{anotando === h.id ? 'Cerrar' : 'Anotar la llamada'}
 							</button>
 						</div>
@@ -442,7 +675,136 @@
 	</p>
 </div>
 
+<PanelGuion puedeEditar={puedeEditarGuion} />
+</div>
+
 <style>
+	/* ── Las dos columnas del turno ──────────────────────────────────────────
+	   A quién llamar y qué decirle, a la vez. El guión se queda a la vista al
+	   bajar por la lista: si se fuera con el desplazamiento, la operadora
+	   tendría que subir a leerlo en mitad de la llamada.
+
+	   Por debajo de 1100 px no caben dos columnas y el guión pasa a ser una hoja
+	   que sube desde abajo, con su propio botón fijo (ver PanelGuion). */
+	.trabajo {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1.25rem;
+		margin-top: 1.25rem;
+	}
+
+	@media (min-width: 1101px) {
+		.trabajo {
+			grid-template-columns: minmax(0, 1fr) 24rem;
+			align-items: start;
+		}
+
+		.trabajo :global(aside.guion) {
+			position: sticky;
+			/* Justo debajo de la barra superior, que es inamovible. */
+			top: calc(var(--alto-barra, 3.8rem) + 1rem);
+			max-height: calc(100vh - var(--alto-barra, 3.8rem) - 2rem);
+		}
+	}
+
+	/* ── El teléfono ─────────────────────────────────────────────────────────
+	   Grande y en cifra tabular: la operadora lo lee de la pantalla y lo marca
+	   en un aparato aparte, y un dígito mal leído es una llamada perdida y una
+	   familia que no se entera. */
+	.telefono {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.35rem 0.4rem 0.35rem 0.85rem;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 10px;
+		background: var(--color-surface-alt);
+	}
+
+	.telefono__numero {
+		font-size: 1.35rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text);
+		user-select: all;
+	}
+
+	.telefono__copiar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: var(--color-muted);
+		border-radius: 7px;
+		padding: 0.3rem 0.55rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+	}
+
+	.telefono__copiar:hover {
+		color: var(--color-text);
+		border-color: var(--color-border-strong);
+	}
+
+	/* ── Lo que decidió el ingeniero ─────────────────────────────────────────
+	   Va antes del teléfono y ocupa toda la fila: es lo primero que hay que
+	   leer, no un detalle que se descubra a mitad de la llamada. */
+	.decidido {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.45rem;
+		margin: 0.6rem 0 0;
+		padding: 0.55rem 0.7rem;
+		border-radius: 8px;
+		background: var(--color-warning-bg);
+		color: var(--color-text);
+		font-size: 0.84rem;
+		line-height: 1.45;
+	}
+
+	.decidido--fin {
+		background: var(--color-danger-bg);
+		color: var(--color-danger);
+	}
+
+	.decidido em {
+		opacity: 0.75;
+		font-size: 0.78rem;
+	}
+
+	/* Un hogar que NO hay que llamar se apaga entero. Que siga en la lista es
+	   deliberado —hace falta cuando la persona llama preguntando— pero no debe
+	   competir por la atención con los que sí hay que marcar. */
+	.hogar--nollamar {
+		opacity: 0.62;
+	}
+
+	.hogar__ocupado {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0.5rem 0 0;
+		padding: 0.35rem 0.6rem;
+		border-radius: 999px;
+		background: var(--color-info-bg);
+		color: var(--color-info);
+		font-size: 0.78rem;
+		width: fit-content;
+	}
+
+	/* La pestaña de lo que se quedó a un paso: se ve distinta sin gritar. */
+	.pestana--urgente:not(.pestana--activa) {
+		border-color: var(--color-warning);
+		color: var(--color-warning);
+	}
+
+	.buscador :global(.buscador__lupa) {
+		color: var(--color-muted);
+		flex: none;
+	}
+
 	/* El título y el botón de compartir en la misma línea cuando cabe. El botón
 	   no se estira: es una herramienta a mano, no el asunto de la pantalla. */
 	.encabezado {

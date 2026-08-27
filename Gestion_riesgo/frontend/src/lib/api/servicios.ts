@@ -7,6 +7,8 @@ import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
 import type {
 	GestionLlamada,
+	AtencionEnCurso,
+	GuionVigente,
 	HogarParaLlamar,
 	ResumenCallCenter
 } from '$lib/callcenter/tipos';
@@ -214,7 +216,26 @@ export const callCenterApi = {
 		api.post<{ gestion: { id: number; resultado: string } }>(
 			`/callcenter/hogares/${id}/gestiones`,
 			cuerpo
-		)
+		),
+
+	/**
+	 * Quién está llamando a quién, ahora mismo.
+	 *
+	 * Va aparte de la lista y se pide cada pocos segundos. Recargar la lista
+	 * entera para refrescar un aviso borraría lo que la operadora esté
+	 * escribiendo en su anotación —y eso pasa justo mientras habla.
+	 */
+	atenciones: () =>
+		api.get<{ atenciones: AtencionEnCurso[]; minutos: number }>('/callcenter/atenciones'),
+
+	/** «Estoy llamando a este hogar», o «ya lo solté». */
+	atender: (id: number, soltar = false) =>
+		api.post<{ atendiendo: boolean }>(`/callcenter/hogares/${id}/atencion`, { soltar }),
+
+	guion: () => api.get<{ guion: GuionVigente; predeterminado: string }>('/callcenter/guion'),
+
+	guardarGuion: (cuerpo: string) =>
+		api.put<{ guion: GuionVigente }>('/callcenter/guion', { cuerpo })
 };
 
 export const inspeccionApi = {
@@ -430,8 +451,20 @@ export const preinscripcionApi = {
 		URL.revokeObjectURL(url);
 	},
 
-	cambiarEstado: (id: number, estado: string, nota: string) =>
-		api.put<{ estado: string }>(`/preinscripcion/fichas/${id}/estado`, { estado, nota }),
+	/**
+	 * `motivo` solo viaja al descartar, y entonces es obligatorio.
+	 *
+	 * Es lo que decide si la familia vuelve o no a la cola del call center. La
+	 * nota es texto libre para que la operadora sepa qué decirle; el motivo es
+	 * lo que el sistema puede leer sin que nadie tenga que abrir mil trescientas
+	 * solicitudes a mano.
+	 */
+	cambiarEstado: (id: number, estado: string, nota: string, motivo = '') =>
+		api.put<{ estado: string; motivo: string | null }>(`/preinscripcion/fichas/${id}/estado`, {
+			estado,
+			nota,
+			motivo
+		}),
 
 	/** Irreversible: borra la ficha, sus fotos y sus videos. Solo Administrador. */
 	eliminar: (id: number, motivo: string) =>

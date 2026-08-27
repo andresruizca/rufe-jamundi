@@ -248,6 +248,14 @@ $router->get('/callcenter/resumen', [$callCenter, 'resumen'], Auth::CALL_CENTER)
 $router->get('/callcenter/hogares', [$callCenter, 'listar'], Auth::CALL_CENTER);
 $router->get('/callcenter/hogares/{id}/gestiones', [$callCenter, 'historial'], Auth::CALL_CENTER);
 $router->post('/callcenter/hogares/{id}/gestiones', [$callCenter, 'registrar'], Auth::CALL_CENTER);
+// Quién está llamando a quién, entre las tres operadoras. Va aparte de la lista
+// porque se refresca cada pocos segundos y recargar la lista entera borraría lo
+// que otra persona esté escribiendo en su anotación.
+$router->get('/callcenter/atenciones', [$callCenter, 'atenciones'], Auth::CALL_CENTER);
+$router->post('/callcenter/hogares/{id}/atencion', [$callCenter, 'atender'], Auth::CALL_CENTER);
+// El guión: lo lee cualquiera que llame, lo reescribe solo el administrador.
+$router->get('/callcenter/guion', [$callCenter, 'guion'], Auth::CALL_CENTER);
+$router->put('/callcenter/guion', [$callCenter, 'guardarGuion'], $soloAdmin);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);

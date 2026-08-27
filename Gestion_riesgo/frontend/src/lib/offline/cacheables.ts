@@ -75,6 +75,16 @@ export const API_CACHEABLE = [
 	// Call center.
 	'/api/callcenter/hogares',
 	'/api/callcenter/resumen',
+	// El guión de la llamada. Se guarda porque es lo único de esta pantalla que
+	// no caduca: una lista de hogares de ayer confunde, pero el guión de ayer se
+	// lee igual de bien. Sin él, un corte de internet deja a tres personas
+	// improvisando lo que le dicen a familias damnificadas.
+	//
+	// `/api/callcenter/atenciones` NO está aquí a propósito: dice quién está
+	// llamando AHORA MISMO, y servir eso de una copia de hace un rato es peor
+	// que no decir nada — haría creer que un hogar está ocupado cuando no lo
+	// está, o al revés.
+	'/api/callcenter/guion',
 
 	// Quién soy: sin esto, abrir la aplicación sin señal no sabe ni qué rol
 	// tiene quien entra, y le enseñaría un menú vacío.

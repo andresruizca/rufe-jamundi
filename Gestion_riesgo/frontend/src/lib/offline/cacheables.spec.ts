@@ -22,12 +22,27 @@ describe('lo que SÍ se guarda', () => {
 		expect(seGuardaDeLaApi('/api/callcenter/hogares')).toBe(true);
 	});
 
+	it('el guión del call center, que sin señal se lee igual de bien', () => {
+		// Un corte de internet no puede dejar a tres personas improvisando lo
+		// que le dicen por teléfono a familias damnificadas.
+		expect(seGuardaDeLaApi('/api/callcenter/guion')).toBe(true);
+	});
+
 	it('quién soy: sin eso, abrir sin señal no sabe ni qué menú dibujar', () => {
 		expect(seGuardaDeLaApi('/api/auth/me')).toBe(true);
 	});
 });
 
 describe('lo que NUNCA se guarda', () => {
+	it('quién está llamando ahora mismo: guardado, miente', () => {
+		// Es el único dato de la pantalla cuyo valor entero está en ser de este
+		// segundo. Servirlo de una copia haría creer que un hogar está ocupado
+		// cuando no lo está —o al revés, que es peor: dos llamadas a la misma
+		// familia.
+		expect(seGuardaDeLaApi('/api/callcenter/atenciones')).toBe(false);
+	});
+
+
 	it('las evidencias: la foto de una cédula no se queda en un teléfono', () => {
 		// Es el dato más sensible del sistema y pesa megabytes. Que la ficha se
 		// guarde no autoriza a guardar sus archivos.

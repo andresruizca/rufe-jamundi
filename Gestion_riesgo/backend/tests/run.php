@@ -2525,6 +2525,63 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
     afirmarIgual($esperadas, $alcanza);
 });
 
+grupo('Call center: qué hacer con una solicitud rechazada');
+
+prueba('solo «no aplica» saca a una familia de la campaña', function (): void {
+    // Es la decisión de fondo del módulo: qué familias vuelven al teléfono.
+    // Si «faltaron datos» dejara de llamarse, una familia que ya hizo el
+    // esfuerzo de llenar el formulario se quedaría fuera de la ayuda por una
+    // foto — y nadie se enteraría, porque no volvería a aparecer en ninguna
+    // lista.
+    $motivos = App\Controllers\CallCenterController::MOTIVOS_DESCARTE;
+
+    afirmar($motivos['DATOS_INCOMPLETOS']['llamar'], 'si le faltaron datos, hay que volver a llamarla');
+    afirmar($motivos['FALTA_EVIDENCIA']['llamar'], 'si le faltó evidencia, hay que volver a llamarla');
+    afirmar(! $motivos['NO_APLICA']['llamar'], '«no aplica» es el único que saca de la campaña');
+});
+
+prueba('cada motivo trae qué decirle a la persona', function (): void {
+    // La operadora no puede improvisar el motivo de un rechazo por teléfono.
+    foreach (App\Controllers\CallCenterController::MOTIVOS_DESCARTE as $codigo => $m) {
+        afirmar(trim($m['etiqueta']) !== '', "{$codigo} sin etiqueta");
+        afirmar(mb_strlen($m['decirle']) > 30, "{$codigo} no dice qué hacer con esa familia");
+    }
+});
+
+grupo('El guión de la llamada');
+
+prueba('el guión original nunca se puede perder', function (): void {
+    // Vive en el código, no como una fila sembrada: la tabla puede quedar
+    // vacía —alguien borra, una base nueva, una restauración a medias— y las
+    // tres operadoras seguirían teniendo guión.
+    afirmar(mb_strlen(App\CallCenter\Guion::PREDETERMINADO) > 1000, 'el guión original está vacío o truncado');
+    afirmar(
+        mb_strlen(App\CallCenter\Guion::PREDETERMINADO) <= App\CallCenter\Guion::MAX_LARGO,
+        'el guión original no pasaría su propia validación de largo'
+    );
+});
+
+prueba('el guión trae las salvaguardas que protegen a la ciudadanía', function (): void {
+    // Tres personas hablan en nombre de la Alcaldía con familias damnificadas.
+    // Estas tres frases no son adorno: son lo que separa una campaña de
+    // información de una estafa telefónica indistinguible de ella.
+    $g = App\CallCenter\Guion::PREDETERMINADO;
+
+    afirmar(str_contains($g, '6025190969'), 'el guión no trae la línea de atención');
+    afirmar(
+        str_contains($g, 'Nunca prometa ayuda'),
+        'el guión no prohíbe prometer ayudas que nadie aprobó'
+    );
+    afirmar(
+        str_contains($g, 'Nunca pida claves'),
+        'el guión no prohíbe pedir claves ni datos bancarios'
+    );
+    afirmar(
+        str_contains($g, 'no está negada') || str_contains($g, 'no está negada: está esperando'),
+        'el guión no explica que una solicitud incompleta no es una negada'
+    );
+});
+
 grupo('Hasta dónde llega el operador de call center');
 
 prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function () use ($raiz): void {
@@ -2548,6 +2605,13 @@ prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function 
         'GET /callcenter/hogares',
         'GET /callcenter/hogares/{id}/gestiones',
         'POST /callcenter/hogares/{id}/gestiones',
+        // Que las tres operadoras no llamen a la misma familia. Solo mueve
+        // nombres de operadora, nada del censo.
+        'GET /callcenter/atenciones',
+        'POST /callcenter/hogares/{id}/atencion',
+        // Su guión. Lo LEE —lo tiene delante todo el turno—; reescribirlo es
+        // `PUT /callcenter/guion`, que es del administrador y no está aquí.
+        'GET /callcenter/guion',
     ];
 
     $alcanza = [];

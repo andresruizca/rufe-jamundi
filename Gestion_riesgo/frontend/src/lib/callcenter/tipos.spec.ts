@@ -14,6 +14,9 @@ function hogar(extra: Partial<HogarParaLlamar> = {}): HogarParaLlamar {
 		fecha_evento: '2026-08-01',
 		preinscrita: false,
 		preinscripcion: null,
+		descarte: null,
+		no_llamar: false,
+		atendida: null,
 		intentos: 0,
 		agotado: false,
 		ultima: null,
@@ -33,6 +36,46 @@ describe('el estado de un hogar', () => {
 		const h = hogar({ preinscrita: true, ultima: ultima('NO_CONTESTA') });
 
 		expect(estadoDe(h).texto).toBe('Ya se preinscribió');
+		expect(estadoDe(h).clase).toBe('ok');
+	});
+
+	it('un rechazo subsanable manda sobre el historial de llamadas', () => {
+		// Diez llamadas anotadas dan igual: lo que la operadora tiene que ver
+		// primero es qué decidió el ingeniero y qué le falta a esa familia.
+		const h = hogar({
+			ultima: ultima('NO_CONTESTA'),
+			descarte: {
+				motivo: 'FALTA_EVIDENCIA',
+				etiqueta: 'Faltó evidencia',
+				llamar: true,
+				decirle: 'Le faltaron fotos o videos de la vivienda.'
+			}
+		});
+
+		expect(estadoDe(h)).toEqual({ texto: 'Faltó evidencia', clase: 'espera' });
+	});
+
+	it('«no aplica» se ve como lo que es: no hay que marcar ese número', () => {
+		const h = hogar({
+			no_llamar: true,
+			descarte: {
+				motivo: 'NO_APLICA',
+				etiqueta: 'No aplica',
+				llamar: false,
+				decirle: 'El ingeniero determinó que el caso no aplica.'
+			}
+		});
+
+		expect(estadoDe(h)).toEqual({ texto: 'No aplica · no llamar', clase: 'problema' });
+	});
+
+	it('una solicitud viva sigue ganándole al descarte de otra anterior', () => {
+		// `preinscrita` solo es true cuando la solicitud NO está descartada, así
+		// que las dos condiciones no pueden darse a la vez. Esta prueba fija ese
+		// orden: si algún día se invirtiera, una familia ya inscrita aparecería
+		// como rechazada y la volverían a llamar.
+		const h = hogar({ preinscrita: true, descarte: null });
+
 		expect(estadoDe(h).clase).toBe('ok');
 	});
 

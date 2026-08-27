@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\CallCenter\Guion;
 use App\Core\Auditoria;
 use App\Core\Auth;
 use App\Core\Db;
@@ -35,6 +36,68 @@ final class CallCenterController
 
     /** Cuántos días se dejan de margen antes de dar por perdido un teléfono. */
     private const MAX_INTENTOS_UTILES = 5;
+
+    /**
+     * Cuánto dura el aviso de «la está atendiendo Marcela».
+     *
+     * La pantalla lo refresca cada minuto mientras la operadora tenga el hogar
+     * abierto, así que este número es el margen para que un aviso no se quede
+     * pegado cuando alguien cierra el navegador de golpe o se le va la luz.
+     * Corto de más, el aviso parpadea durante una llamada larga; largo de más,
+     * un hogar parece ocupado media hora después de que nadie lo mire.
+     */
+    private const MINUTOS_ATENCION = 6;
+
+    /**
+     * Por qué el ingeniero descartó una solicitud, y qué hace el call center.
+     *
+     * Los dos primeros motivos son subsanables: la familia SÍ tiene que volver
+     * a recibir una llamada, y con algo concreto que decirle. El tercero no: es
+     * la única forma de sacar a alguien de la campaña sin que el sistema vuelva
+     * a ponerlo en la cola al día siguiente.
+     *
+     * @var array<string,array{etiqueta:string,llamar:bool,decirle:string}>
+     */
+    public const MOTIVOS_DESCARTE = [
+        'DATOS_INCOMPLETOS' => [
+            'etiqueta' => 'Faltaron datos',
+            'llamar' => true,
+            'decirle' => 'Le faltaron datos en el formulario. Hay que pedirle que vuelva a entrar y los complete.',
+        ],
+        'FALTA_EVIDENCIA' => [
+            'etiqueta' => 'Faltó evidencia',
+            'llamar' => true,
+            'decirle' => 'Le faltaron fotos o videos de la vivienda. Hay que pedirle que vuelva a entrar y los suba.',
+        ],
+        'NO_APLICA' => [
+            'etiqueta' => 'No aplica',
+            'llamar' => false,
+            'decirle' => 'El ingeniero determinó que el caso no aplica. No hay que volver a llamar.',
+        ],
+    ];
+
+    /**
+     * En qué situación está cada hogar frente a la preinscripción, en SQL.
+     *
+     * Se escriben una vez y se usan en la lista y en el resumen. Cuando estaban
+     * copiadas en los dos sitios, la cifra de avance y la lista podían discrepar
+     * —y es la cifra la que se le reporta a la Alcaldía—.
+     *
+     * `motivo_descarte IS NULL` cuenta como subsanable a propósito: son las
+     * solicitudes descartadas antes de que existiera la columna, y no se les
+     * puede inventar un motivo. Volver a llamar a quien no hacía falta cuesta
+     * una llamada; dejar de llamar a quien sí, lo deja fuera de la ayuda.
+     */
+    private const PRE_ACTIVA = "pre.id IS NOT NULL AND pre.estado <> 'DESCARTADA'";
+
+    private const PRE_SUBSANABLE = "pre.id IS NOT NULL AND pre.estado = 'DESCARTADA'
+                                    AND (pre.motivo_descarte IS NULL OR pre.motivo_descarte <> 'NO_APLICA')";
+
+    private const PRE_NO_APLICA = "pre.id IS NOT NULL AND pre.estado = 'DESCARTADA'
+                                   AND pre.motivo_descarte = 'NO_APLICA'";
+
+    /** Ni se preinscribió, ni tiene una solicitud descartada esperando. */
+    private const SIN_PRE = 'pre.id IS NULL';
 
     /**
      * Cómo se responde una llamada, y qué significa cada respuesta.
@@ -92,12 +155,14 @@ final class CallCenterController
                ON pre.id = (SELECT p2.id FROM preinscripciones p2
                              WHERE p2.documento = jefe.numero_documento
                                AND jefe.numero_documento IS NOT NULL
-                               AND p2.estado <> \'DESCARTADA\'
                              ORDER BY p2.creado_en DESC, p2.id DESC LIMIT 1)
         LEFT JOIN rufe_gestiones g
                ON g.id = (SELECT g2.id FROM rufe_gestiones g2
                            WHERE g2.reporte_id = r.id
                            ORDER BY g2.creado_en DESC, g2.id DESC LIMIT 1)
+        LEFT JOIN rufe_atenciones aten
+               ON aten.reporte_id = r.id
+              AND aten.actualizado_en > (NOW() - INTERVAL '.self::MINUTOS_ATENCION.' MINUTE)
     ';
 
     public function listar(Request $req): void
@@ -123,6 +188,11 @@ final class CallCenterController
                     jefe.telefono AS jefe_telefono,
                     pre.radicado AS preinscripcion_radicado,
                     pre.creado_en AS preinscripcion_en,
+                    pre.estado AS preinscripcion_estado,
+                    pre.motivo_descarte AS preinscripcion_motivo,
+                    aten.usuario_nombre AS atendida_por,
+                    aten.usuario_id AS atendida_por_id,
+                    aten.actualizado_en AS atendida_en,
                     g.resultado AS ultimo_resultado, g.creado_en AS ultimo_en,
                     g.proxima_llamada, g.nota AS ultima_nota, g.usuario_email AS ultimo_por,
                     (SELECT COUNT(*) FROM rufe_gestiones gc WHERE gc.reporte_id = r.id) AS intentos
@@ -167,12 +237,15 @@ final class CallCenterController
         $fila = Db::first(
             'SELECT
                 COUNT(*) AS total,
-                SUM(pre.id IS NOT NULL) AS preinscritos,
-                SUM(pre.id IS NULL AND g.id IS NOT NULL) AS contactados_sin_preinscribir,
-                SUM(pre.id IS NULL AND g.id IS NULL) AS sin_llamar,
-                SUM(pre.id IS NULL AND g.proxima_llamada IS NOT NULL
+                SUM('.self::PRE_ACTIVA.') AS preinscritos,
+                SUM('.self::PRE_SUBSANABLE.') AS por_subsanar,
+                SUM('.self::PRE_NO_APLICA.') AS no_aplica,
+                SUM('.self::SIN_PRE.' AND g.id IS NOT NULL) AS contactados_sin_preinscribir,
+                SUM('.self::SIN_PRE.' AND g.id IS NULL) AS sin_llamar,
+                SUM('.self::SIN_PRE.' AND g.proxima_llamada IS NOT NULL
                     AND g.proxima_llamada <= CURDATE()) AS para_hoy,
-                SUM(r.contacto_telefono IS NULL OR r.contacto_telefono = \'\') AS sin_telefono
+                SUM((r.contacto_telefono IS NULL OR r.contacto_telefono = \'\')
+                    AND (jefe.telefono IS NULL OR jefe.telefono = \'\')) AS sin_telefono
                FROM rufe_reportes r '.self::CRUCE,
             ['jefe' => Catalogos::PARENTESCO_JEFE]
         ) ?? [];
@@ -181,6 +254,8 @@ final class CallCenterController
             'resumen' => [
                 'total'                        => (int) ($fila['total'] ?? 0),
                 'preinscritos'                 => (int) ($fila['preinscritos'] ?? 0),
+                'por_subsanar'                 => (int) ($fila['por_subsanar'] ?? 0),
+                'no_aplica'                    => (int) ($fila['no_aplica'] ?? 0),
                 'contactados_sin_preinscribir' => (int) ($fila['contactados_sin_preinscribir'] ?? 0),
                 'sin_llamar'                   => (int) ($fila['sin_llamar'] ?? 0),
                 'para_hoy'                     => (int) ($fila['para_hoy'] ?? 0),
@@ -264,6 +339,127 @@ final class CallCenterController
         Response::ok(['gestion' => ['id' => Db::lastId(), 'resultado' => $resultado]], 201);
     }
 
+    /**
+     * «Estoy llamando a este hogar».
+     *
+     * Tres operadoras abren la misma pestaña, ordenada igual para las tres, y
+     * las tres ven el mismo hogar de primero. Sin esto, la primera familia de
+     * la lista recibe tres llamadas seguidas de la Alcaldía diciéndole lo
+     * mismo.
+     *
+     * Es un AVISO y no una reserva. La fila sigue siendo de quien quiera
+     * tomarla; lo único que cambia es que las otras dos ven quién está en ella.
+     * Se decidió así: una reserva que alguien se olvide de soltar congela
+     * hogares que nadie puede llamar, y con un equipo de tres personas que se
+     * ven la cara, el remedio sale más caro que la enfermedad.
+     *
+     * No queda en auditoría. Abrir una ficha para llamarla ya se audita al
+     * listar, y esto se manda cada minuto mientras el panel esté abierto:
+     * registrarlo llenaría la auditoría de ruido y taparía lo que sí importa.
+     */
+    public function atender(Request $req): void
+    {
+        $actor = Auth::exigirUsuario($req);
+        $id = (int) $req->param('id');
+        $this->exigirHogar($id);
+
+        if ($req->input('soltar', false)) {
+            Db::exec('DELETE FROM rufe_atenciones WHERE reporte_id = :r AND usuario_id = :u',
+                ['r' => $id, 'u' => $actor['id']]);
+
+            Response::ok(['atendiendo' => false]);
+
+            return;
+        }
+
+        // Con la clave primaria en `reporte_id`, esto es a la vez «tomarlo» y
+        // «sigo aquí»: la segunda operadora que lo abra desplaza el aviso, que
+        // es lo correcto cuando la primera ya colgó y se fue a otra cosa.
+        Db::exec(
+            'INSERT INTO rufe_atenciones (reporte_id, usuario_id, usuario_email, usuario_nombre)
+             VALUES (:r, :u, :e, :n)
+             ON DUPLICATE KEY UPDATE
+                usuario_id = VALUES(usuario_id),
+                usuario_email = VALUES(usuario_email),
+                usuario_nombre = VALUES(usuario_nombre),
+                actualizado_en = NOW()',
+            [
+                'r' => $id,
+                'u' => $actor['id'],
+                'e' => $actor['email'],
+                'n' => $actor['nombre'] ?? $actor['email'],
+            ]
+        );
+
+        Response::ok(['atendiendo' => true, 'minutos' => self::MINUTOS_ATENCION]);
+    }
+
+    /**
+     * Quién está atendiendo qué, ahora mismo.
+     *
+     * Va aparte de la lista y devuelve solo ids y nombres de operadora: la
+     * pantalla lo pide cada pocos segundos, y recargar la lista entera para
+     * refrescar un aviso borraría lo que otra persona esté escribiendo en el
+     * formulario de anotación.
+     */
+    public function atenciones(Request $req): void
+    {
+        Auth::exigirUsuario($req);
+
+        Response::ok([
+            'atenciones' => Db::all(
+                'SELECT reporte_id, usuario_id, usuario_nombre, actualizado_en
+                   FROM rufe_atenciones
+                  WHERE actualizado_en > (NOW() - INTERVAL :m MINUTE)',
+                ['m' => self::MINUTOS_ATENCION]
+            ),
+            'minutos' => self::MINUTOS_ATENCION,
+        ]);
+    }
+
+    /** El guión que la operadora tiene delante todo el turno. */
+    public function guion(Request $req): void
+    {
+        Auth::exigirUsuario($req);
+
+        Response::ok([
+            'guion' => Guion::vigente(),
+            'predeterminado' => Guion::PREDETERMINADO,
+        ]);
+    }
+
+    /**
+     * Reescribe el guión. Solo el administrador, y guardando la versión vieja.
+     *
+     * Un guión es lo que la Alcaldía le dice por teléfono a mil trescientas
+     * familias. Cambiarlo sin dejar constancia de qué decía antes y desde
+     * cuándo hace imposible responder la única pregunta que importa cuando algo
+     * sale mal: «¿qué le dijeron exactamente a esta señora?».
+     */
+    public function guardarGuion(Request $req): void
+    {
+        $actor = Auth::exigirUsuario($req);
+        $cuerpo = trim($req->texto('cuerpo', ''));
+
+        if (mb_strlen($cuerpo) < 40) {
+            throw HttpError::validacion([
+                'cuerpo' => 'El guión no puede quedar vacío. Si quiere volver al original, use «Restaurar el guión de la Alcaldía».',
+            ]);
+        }
+
+        if (mb_strlen($cuerpo) > Guion::MAX_LARGO) {
+            throw HttpError::validacion([
+                'cuerpo' => 'El guión pasa de '.Guion::MAX_LARGO.' caracteres. Así de largo nadie lo lee durante una llamada.',
+            ]);
+        }
+
+        Guion::guardar($cuerpo, $actor);
+
+        Auditoria::registrar($req, 'callcenter.guion', $actor, 'callcenter_guion', null, 'Se reescribió el guión');
+
+        Response::ok(['guion' => Guion::vigente()]);
+    }
+
     // ── Interno ──────────────────────────────────────────────────────────────
 
     private function exigirHogar(int $id): void
@@ -283,21 +479,30 @@ final class CallCenterController
 
         switch ($estado) {
             case 'preinscrito':
-                $where[] = 'pre.id IS NOT NULL';
+                $where[] = self::PRE_ACTIVA;
+                break;
+            case 'subsanar':
+                // El ingeniero la descartó por algo que se arregla. Es la cola
+                // más urgente de todas: son familias que ya hicieron el
+                // esfuerzo de llenar el formulario y se quedaron a un paso.
+                $where[] = self::PRE_SUBSANABLE;
+                break;
+            case 'no_aplica':
+                $where[] = self::PRE_NO_APLICA;
                 break;
             case 'contactado':
-                $where[] = 'pre.id IS NULL AND g.id IS NOT NULL';
+                $where[] = self::SIN_PRE.' AND g.id IS NOT NULL';
                 break;
             case 'reintentar':
-                $where[] = 'pre.id IS NULL AND g.proxima_llamada IS NOT NULL AND g.proxima_llamada <= CURDATE()';
+                $where[] = self::SIN_PRE.' AND g.proxima_llamada IS NOT NULL AND g.proxima_llamada <= CURDATE()';
                 break;
             case 'todos':
                 break;
             case 'pendiente':
             default:
-                // Lo que falta por hacer: nadie lo ha llamado y no se ha
-                // preinscrito.
-                $where[] = 'pre.id IS NULL AND g.id IS NULL';
+                // Lo que falta por hacer: nadie lo ha llamado y no tiene
+                // ninguna solicitud, ni buena ni descartada.
+                $where[] = self::SIN_PRE.' AND g.id IS NULL';
                 break;
         }
 
@@ -338,6 +543,11 @@ final class CallCenterController
             'reintentar' => 'g.proxima_llamada ASC, r.creado_en ASC',
             'contactado' => 'g.creado_en DESC',
             'preinscrito' => 'pre.creado_en DESC',
+            // Lo que lleva más tiempo descartado va primero: una familia que
+            // espera desde hace una semana a que le digan qué le faltó es más
+            // urgente que una descartada esta mañana.
+            'subsanar' => 'pre.actualizado_en ASC',
+            'no_aplica' => 'pre.actualizado_en DESC',
             default => 'r.creado_en DESC',
         };
     }
@@ -361,6 +571,21 @@ final class CallCenterController
 
         $nombre = trim(($f['jefe_nombres'] ?? '').' '.($f['jefe_apellidos'] ?? ''));
 
+        $descarte = null;
+
+        if (($f['preinscripcion_estado'] ?? null) === 'DESCARTADA') {
+            $motivo = $f['preinscripcion_motivo'] === null ? null : (string) $f['preinscripcion_motivo'];
+
+            // Sin motivo son las descartadas anteriores a que existiera la
+            // columna. Se dice que no se sabe, y se llama: es lo prudente.
+            $descarte = self::MOTIVOS_DESCARTE[$motivo] ?? [
+                'etiqueta' => 'Descartada sin motivo anotado',
+                'llamar' => true,
+                'decirle' => 'Se descartó antes de que el sistema pidiera el motivo. Confirme con el ingeniero antes de llamar.',
+            ];
+            $descarte['motivo'] = $motivo;
+        }
+
         return [
             'id'       => (int) $f['id'],
             'radicado' => $f['radicado'],
@@ -374,10 +599,29 @@ final class CallCenterController
                 $f['vereda_sector_barrio'] ?? null,
             ]))),
             'fecha_evento' => $f['fecha_evento'],
-            'preinscrita'  => $f['preinscripcion_radicado'] !== null,
+            // «Preinscrita» significa que su solicitud sigue viva. Una
+            // descartada NO lo está, y llamarla igual que a las demás fue
+            // exactamente el problema que este módulo tenía.
+            'preinscrita'  => $f['preinscripcion_radicado'] !== null
+                              && $f['preinscripcion_estado'] !== 'DESCARTADA',
             'preinscripcion' => $f['preinscripcion_radicado'] === null ? null : [
                 'radicado'  => $f['preinscripcion_radicado'],
                 'creado_en' => $f['preinscripcion_en'],
+                'estado'    => $f['preinscripcion_estado'],
+            ],
+            // Lo que el ingeniero decidió, escrito para que la operadora lo
+            // pueda leer en voz alta sin traducirlo.
+            'descarte' => $descarte,
+            // La única razón para NO marcar este número. Va como un campo
+            // aparte y no deducido en la pantalla: si mañana se añade otro
+            // motivo, se decide aquí y no en cinco sitios.
+            'no_llamar' => $descarte !== null && $descarte['llamar'] === false,
+            // Quién lo tiene abierto ahora mismo. Es un aviso entre las tres
+            // operadoras, no una reserva: la fila sigue estando disponible.
+            'atendida' => $f['atendida_por'] === null ? null : [
+                'quien' => (string) $f['atendida_por'],
+                'usuario_id' => $f['atendida_por_id'] === null ? null : (int) $f['atendida_por_id'],
+                'desde' => $f['atendida_en'],
             ],
             'intentos' => (int) $f['intentos'],
             'agotado'  => (int) $f['intentos'] >= self::MAX_INTENTOS_UTILES,

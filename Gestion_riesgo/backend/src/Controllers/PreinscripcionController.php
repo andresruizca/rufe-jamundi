@@ -634,8 +634,8 @@ final class PreinscripcionController
 
         $filas = Db::all(
             "SELECT id, radicado, nombre_completo, documento, telefono, correo, direccion,
-                    zona, corregimiento, vereda, latitud, longitud, estado, inspeccion_id,
-                    creado_en
+                    zona, corregimiento, vereda, latitud, longitud, estado, motivo_descarte,
+                    inspeccion_id, creado_en
                FROM preinscripciones{$where}
               ORDER BY id DESC
               LIMIT {$porPagina} OFFSET {$desde}",
@@ -647,6 +647,10 @@ final class PreinscripcionController
             'total'            => $total,
             'pagina'           => $pagina,
             'por_pagina'       => $porPagina,
+            // Los motivos viven en el call center porque es allí donde
+            // cambian el trabajo de alguien: son la diferencia entre volver a
+            // llamar a una familia y no volver a marcarle nunca.
+            'motivos'          => CallCenterController::MOTIVOS_DESCARTE,
         ]);
     }
 
@@ -872,6 +876,7 @@ final class PreinscripcionController
 
         Response::ok([
             'preinscripcion' => $ficha,
+            'motivos' => CallCenterController::MOTIVOS_DESCARTE,
             'fotos' => Db::all(
                 'SELECT id, nombre_original, extension, tamano_bytes, mime
                    FROM rufe_evidencias WHERE preinscripcion_id = :i ORDER BY id',
@@ -1214,6 +1219,21 @@ final class PreinscripcionController
             throw HttpError::validacion(['nota' => 'Explique por qué se descarta.']);
         }
 
+        // El motivo, aparte de la nota, porque de él depende una decisión
+        // automática: si esta familia vuelve o no a la cola del call center.
+        //
+        // La nota es texto libre y sirve para que la operadora sepa qué
+        // decirle; el motivo es lo que el sistema puede leer. Con solo la nota,
+        // alguien tendría que leer mil trescientos textos para saber a quién
+        // hay que volver a llamar.
+        $motivo = strtoupper(trim($req->texto('motivo', '')));
+
+        if ($estado === 'DESCARTADA' && ! isset(CallCenterController::MOTIVOS_DESCARTE[$motivo])) {
+            throw HttpError::validacion([
+                'motivo' => 'Indique si le faltaron datos, le faltó evidencia, o el caso no aplica.',
+            ]);
+        }
+
         $ficha = Db::first('SELECT id, radicado FROM preinscripciones WHERE id = :i', ['i' => $id]);
         if ($ficha === null) {
             throw HttpError::noEncontrado('No existe esa pre-inscripción.');
@@ -1221,7 +1241,13 @@ final class PreinscripcionController
 
         $actor = Auth::exigirUsuario($req);
 
-        Db::exec('UPDATE preinscripciones SET estado = :e WHERE id = :i', ['e' => $estado, 'i' => $id]);
+        // El motivo se limpia al salir de DESCARTADA: si la solicitud vuelve a
+        // revisión, arrastrar el motivo viejo haría que el call center la
+        // siguiera tratando como rechazada.
+        Db::exec(
+            'UPDATE preinscripciones SET estado = :e, motivo_descarte = :mo WHERE id = :i',
+            ['e' => $estado, 'mo' => $estado === 'DESCARTADA' ? $motivo : null, 'i' => $id]
+        );
         Db::exec(
             'INSERT INTO preinscripcion_historial (preinscripcion_id, estado, nota, usuario_id, usuario_email)
              VALUES (:i, :e, :n, :u, :m)',
@@ -1239,7 +1265,7 @@ final class PreinscripcionController
             $req, 'preinscripcion.estado', $actor, 'preinscripciones', (string) $ficha['radicado'], $estado
         );
 
-        Response::ok(['estado' => $estado]);
+        Response::ok(['estado' => $estado, 'motivo' => $estado === 'DESCARTADA' ? $motivo : null]);
     }
 
     /** El `envio_id` que manda el navegador, si viene con la forma esperada. */

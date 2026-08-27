@@ -52,6 +52,10 @@ final class Migrador
         // El rol de call center y el registro de llamadas. Va al final: apunta
         // a `rufe_reportes` y a `usuarios`, que ya existen mucho antes.
         'callcenter_01.sql',
+        // El motivo del descarte, quién está llamando y el guión editable. Va
+        // después de callcenter_01.sql y de preinscripcion_01.sql: añade una
+        // columna a `preinscripciones` y apunta a `rufe_reportes`.
+        'callcenter_02.sql',
     ];
 
     /**
