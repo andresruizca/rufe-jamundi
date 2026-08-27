@@ -932,6 +932,24 @@ h3 {
 }
 
 /* Opciones grandes de selección única (radio o casilla) para dedo pulgar. */
+/* Texto que solo existe para quien navega con lector de pantalla.
+   Se usaba en dos sitios desde hace meses y NO estaba definida en ninguna hoja:
+   la etiqueta del buscador del call center se estaba dibujando entera. No se
+   usa `display:none` ni `visibility:hidden` porque eso también la esconde del
+   lector, que es justo para quien está. */
+.visualmente-oculto {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
 .opciones {
 	display: grid;
 	gap: 0.5rem;

@@ -1,0 +1,808 @@
+<script lang="ts">
+	// La pantalla de una llamada, dedicada a una sola persona.
+	//
+	// Ocupa el sitio de la lista en vez de flotar encima. Con seis bloques
+	// dentro, una ventana flotante obliga a desplazar dentro de otro
+	// desplazamiento, y la operadora acaba perdiendo de vista o el guión o el
+	// formulario justo cuando la persona está esperando al teléfono.
+	//
+	// El orden es el de la llamada, no el del formulario: primero qué decir,
+	// después con quién se habla y a qué número, y al final qué pasó.
+
+	import { onDestroy, onMount } from 'svelte';
+	import {
+		ArrowLeft,
+		Check,
+		ChevronDown,
+		ClipboardCopy,
+		Headphones,
+		LoaderCircle,
+		PhoneOff,
+		TriangleAlert
+	} from '@lucide/svelte';
+	import { callCenterApi } from '$lib/api/servicios';
+	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
+	import { almacenGuion } from './guionStore.svelte';
+	import { leerGuion } from './guion';
+	import type { GestionLlamada, HogarParaLlamar } from './tipos';
+
+	let {
+		hogar,
+		resultados,
+		atendidaPorOtra = null,
+		onCerrar,
+		onGuardado
+	}: {
+		hogar: HogarParaLlamar;
+		resultados: Record<string, string>;
+		/** Nombre de la otra operadora que ya tenía este hogar abierto, si la hay. */
+		atendidaPorOtra?: string | null;
+		onCerrar: () => void;
+		onGuardado: () => void;
+	} = $props();
+
+	const secciones = $derived(leerGuion(almacenGuion.guion?.cuerpo ?? ''));
+
+	/**
+	 * En qué paso del guión va la llamada.
+	 *
+	 * Un paso a la vez y no las nueve secciones seguidas: puestas todas, hay que
+	 * desplazar media pantalla para llegar a los campos, y eso ocurre mientras
+	 * alguien espera al otro lado. Quien necesite buscar algo abre «Ver el guión
+	 * completo», que las despliega todas sin perder por dónde iba.
+	 */
+	let paso = $state(0);
+	let guionCompleto = $state(false);
+
+	const seccion = $derived(secciones[Math.min(paso, Math.max(0, secciones.length - 1))] ?? null);
+
+	let formulario = $state({ resultado: '', nota: '', proxima_llamada: '', enlace_enviado: false });
+	let guardando = $state(false);
+	let errores = $state<Record<string, string>>({});
+	let copiado = $state(false);
+
+	let historial = $state<GestionLlamada[]>([]);
+	let historialAbierto = $state(false);
+	let historialPedido = $state(false);
+
+	let latido: ReturnType<typeof setInterval> | null = null;
+
+	const hoy = new Date().toISOString().slice(0, 10);
+
+	onMount(() => {
+		void almacenGuion.cargar();
+
+		// Abrir esta pantalla ES tomar el hogar: es lo que ven las otras dos
+		// operadoras para no marcarle a la misma familia. Se repite cada minuto
+		// mientras siga abierta, porque el aviso caduca solo a los seis.
+		avisar();
+		latido = setInterval(avisar, 60_000);
+	});
+
+	onDestroy(() => {
+		if (latido) clearInterval(latido);
+		void callCenterApi.atender(hogar.id, true).catch(() => {});
+	});
+
+	function avisar() {
+		void callCenterApi.atender(hogar.id).catch(() => {});
+	}
+
+	async function copiar() {
+		if (!hogar.telefono) return;
+
+		try {
+			await navigator.clipboard.writeText(hogar.telefono);
+			copiado = true;
+			setTimeout(() => (copiado = false), 1800);
+		} catch {
+			// Sin permiso de portapapeles el número sigue en pantalla, grande y
+			// separado en grupos, para marcarlo a mano en el teléfono IP.
+		}
+	}
+
+	/** 3183333510 → 318 333 3510. Diez cifras seguidas se marcan mal. */
+	function agrupar(telefono: string): string {
+		const d = telefono.replace(/\D+/g, '');
+
+		return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : telefono;
+	}
+
+	async function verHistorial() {
+		historialAbierto = !historialAbierto;
+
+		if (!historialAbierto || historialPedido) return;
+
+		historialPedido = true;
+
+		try {
+			const r = await callCenterApi.historial(hogar.id);
+			historial = r.gestiones;
+		} catch {
+			historialPedido = false;
+		}
+	}
+
+	async function guardar() {
+		if (guardando || formulario.resultado === '') return;
+
+		guardando = true;
+		errores = {};
+
+		try {
+			await callCenterApi.registrar(hogar.id, formulario);
+			onGuardado();
+		} catch (e) {
+			const err = e as { errors?: Record<string, string>; message?: string };
+			errores = err.errors ?? {};
+
+			if (Object.keys(errores).length === 0) {
+				errores = { resultado: err.message ?? 'No se pudo guardar la llamada.' };
+			}
+		} finally {
+			guardando = false;
+		}
+	}
+
+	function cuando(iso: string | null): string {
+		if (!iso) return '';
+
+		return new Date(iso.replace(' ', 'T')).toLocaleDateString('es-CO', {
+			day: '2-digit',
+			month: 'short'
+		});
+	}
+</script>
+
+<div class="atencion">
+	<!-- Salir siempre a la vista. Es lo que permite abandonar una llamada que no
+	     entró sin tener que anotar algo que no pasó. -->
+	<div class="atencion__barra">
+		<button type="button" class="boton boton--suave" onclick={onCerrar}>
+			<ArrowLeft size={15} aria-hidden="true" />
+			Volver a la lista
+		</button>
+
+		<span class="atencion__ficha">
+			{hogar.radicado} · {hogar.zona === 'RURAL' ? 'Rural' : 'Urbano'}
+		</span>
+	</div>
+
+	{#if atendidaPorOtra}
+		<p class="ocupado">
+			<Headphones size={15} aria-hidden="true" />
+			Lo está atendiendo <strong>{atendidaPorOtra}</strong>. Puede llamarlo igual, pero confirme
+			antes con ella para no llamar dos veces a la misma familia.
+		</p>
+	{/if}
+
+	<!-- ① El guión ─────────────────────────────────────────────────────── -->
+	<section class="bloque bloque--guion">
+		{#if almacenGuion.cargando && secciones.length === 0}
+			<p class="cargando">
+				<LoaderCircle size={16} class="girando" aria-hidden="true" />
+				Cargando el guión…
+			</p>
+		{:else if secciones.length === 0}
+			<p class="bloque__error">
+				<TriangleAlert size={15} aria-hidden="true" />
+				No se pudo cargar el guión. Puede hacer la llamada igual, pero avise al administrador.
+			</p>
+		{:else}
+			<header class="guion__cabeza">
+				<div>
+					<span class="rotulo">
+						Guión · paso {Math.min(paso, secciones.length - 1) + 1} de {secciones.length}
+					</span>
+					<h3 class="guion__titulo">{seccion?.titulo || 'Guión de la llamada'}</h3>
+				</div>
+
+				<div class="guion__mandos">
+					<button
+						type="button"
+						class="boton boton--suave"
+						disabled={paso === 0}
+						onclick={() => (paso = Math.max(0, paso - 1))}
+					>
+						Anterior
+					</button>
+					<button
+						type="button"
+						class="boton boton--principal"
+						disabled={paso >= secciones.length - 1}
+						onclick={() => (paso = Math.min(secciones.length - 1, paso + 1))}
+					>
+						Siguiente
+					</button>
+					<button
+						type="button"
+						class="enlace"
+						onclick={() => (guionCompleto = !guionCompleto)}
+					>
+						{guionCompleto ? 'Ver un paso' : 'Ver el guión completo'}
+					</button>
+				</div>
+			</header>
+
+			<!-- Los puntos no son adorno: dicen cuánto falta de la llamada, y
+			     permiten saltar a una sección concreta cuando alguien pregunta algo
+			     de otro paso. -->
+			<div class="pasos" role="tablist" aria-label="Pasos del guión">
+				{#each secciones as s, i (i)}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={i === paso}
+						class="punto"
+						class:punto--hecho={i < paso}
+						class:punto--hoy={i === paso}
+						title={s.titulo}
+						onclick={() => (paso = i)}
+					>
+						<span class="visualmente-oculto">{s.titulo}</span>
+					</button>
+				{/each}
+			</div>
+
+			<div class="guion__cuerpo">
+				{#each guionCompleto ? secciones : seccion ? [seccion] : [] as s, i (i)}
+					{#if guionCompleto && s.titulo}
+						<h4 class="guion__sub">{s.titulo}</h4>
+					{/if}
+
+					{#each s.lineas as l, j (j)}
+						{#if l.tipo === 'decir'}
+							<p class="decir">{l.texto}</p>
+						{:else if l.tipo === 'hacer'}
+							<p class="hacer">{l.texto}</p>
+						{:else if l.tipo === 'nunca'}
+							<p class="nunca">
+								<TriangleAlert size={13} aria-hidden="true" />
+								{l.texto}
+							</p>
+						{:else if l.tipo === 'pregunta'}
+							<div class="frecuente">
+								<p class="frecuente__p">{l.texto}</p>
+								{#if l.respuesta}<p class="decir decir--respuesta">{l.respuesta}</p>{/if}
+							</div>
+						{:else}
+							<p class="hacer">{l.texto}</p>
+						{/if}
+					{/each}
+				{/each}
+			</div>
+		{/if}
+	</section>
+
+	<!-- ② Con quién se habla y a qué número ───────────────────────────── -->
+	<section class="bloque identidad">
+		<span class="rotulo">Jefe de hogar según el RUFE</span>
+		<h2 class="identidad__nombre" class:identidad__nombre--sin={!hogar.nombre}>
+			{hogar.nombre ?? 'La ficha no registró jefe de hogar'}
+		</h2>
+		<p class="identidad__lugar">{hogar.lugar}</p>
+
+		{#if hogar.telefono}
+			<div class="telefono">
+				<span class="telefono__numero">{agrupar(hogar.telefono)}</span>
+				<button type="button" class="telefono__copiar" onclick={copiar}>
+					{#if copiado}
+						<Check size={14} aria-hidden="true" />
+						Copiado
+					{:else}
+						<ClipboardCopy size={14} aria-hidden="true" />
+						Copiar
+					{/if}
+				</button>
+			</div>
+		{:else}
+			<p class="sintel">
+				<PhoneOff size={15} aria-hidden="true" />
+				Esta ficha no registró teléfono. Por aquí no se le puede llegar.
+			</p>
+		{/if}
+	</section>
+
+	<!-- ③ Qué decidió el ingeniero ────────────────────────────────────── -->
+	{#if hogar.descarte}
+		<section class="bloque">
+			<p class="decidido" class:decidido--fin={!hogar.descarte.llamar}>
+				{#if hogar.descarte.llamar}
+					<TriangleAlert size={16} aria-hidden="true" />
+				{:else}
+					<PhoneOff size={16} aria-hidden="true" />
+				{/if}
+				<span>
+					<strong>{hogar.descarte.etiqueta}.</strong>
+					{hogar.descarte.decirle}
+					{#if hogar.preinscripcion}<em>Solicitud {hogar.preinscripcion.radicado}.</em>{/if}
+				</span>
+			</p>
+		</section>
+	{/if}
+
+	<!-- ④ Mandarle el enlace, mientras sigue al teléfono ──────────────── -->
+	{#if hogar.telefono}
+		<section class="bloque">
+			<CompartirPreinscripcion
+				nombre={hogar.nombre ?? ''}
+				telefono={hogar.telefono}
+				titulo="Mandarle el enlace ahora"
+			/>
+		</section>
+	{/if}
+
+	<!-- ⑤ Cómo terminó ────────────────────────────────────────────────── -->
+	<section class="bloque">
+		<h3 class="bloque__titulo">¿Cómo terminó la llamada?</h3>
+
+		<div class="opciones">
+			{#each Object.entries(resultados) as [valor, etiqueta] (valor)}
+				<label class="opcion" class:opcion--activa={formulario.resultado === valor}>
+					<input type="radio" bind:group={formulario.resultado} value={valor} />
+					<span>{etiqueta}</span>
+				</label>
+			{/each}
+		</div>
+
+		{#if errores.resultado}
+			<p class="bloque__error">{errores.resultado}</p>
+		{/if}
+
+		<div class="campos">
+			<label class="campo">
+				<span class="campo__etiqueta">Cuándo volver a llamar</span>
+				<input class="campo__control" type="date" min={hoy} bind:value={formulario.proxima_llamada} />
+				{#if errores.proxima_llamada}
+					<span class="bloque__error">{errores.proxima_llamada}</span>
+				{/if}
+			</label>
+
+			<label class="campo campo--ancho">
+				<span class="campo__etiqueta">Nota</span>
+				<input
+					class="campo__control"
+					maxlength="500"
+					placeholder="Ej.: pidió que se le llame después de las 5"
+					bind:value={formulario.nota}
+				/>
+			</label>
+		</div>
+
+		<label class="opcion opcion--suelta">
+			<input type="checkbox" bind:checked={formulario.enlace_enviado} />
+			<span>Le mandé el enlace</span>
+		</label>
+
+		<div class="acciones">
+			<button
+				type="button"
+				class="boton boton--principal"
+				onclick={guardar}
+				disabled={guardando || formulario.resultado === ''}
+			>
+				{guardando ? 'Guardando…' : 'Guardar y volver a la lista'}
+			</button>
+			<button type="button" class="boton boton--suave" onclick={onCerrar}>Cancelar</button>
+		</div>
+	</section>
+
+	<!-- ⑥ Lo que ya se intentó ────────────────────────────────────────── -->
+	{#if hogar.intentos > 0}
+		<section class="bloque">
+			<button type="button" class="historial__abrir" onclick={verHistorial}>
+				<ChevronDown size={15} class={historialAbierto ? 'girado' : ''} aria-hidden="true" />
+				Llamadas anteriores a este hogar · {hogar.intentos}
+			</button>
+
+			{#if historialAbierto}
+				<ul class="historial">
+					{#each historial as g (g.id)}
+						<li>
+							<strong>{cuando(g.creado_en)}</strong>
+							— {resultados[g.resultado] ?? g.resultado}
+							{#if g.usuario_email}· {g.usuario_email}{/if}
+							{#if g.nota}<em>«{g.nota}»</em>{/if}
+						</li>
+					{:else}
+						<li class="historial__vacio">Cargando…</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	{/if}
+</div>
+
+<style>
+	.atencion {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.atencion__barra {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+
+	.atencion__ficha {
+		font-size: 0.78rem;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.bloque {
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		padding: 1rem 1.1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.bloque--guion {
+		border-color: var(--color-primary);
+	}
+
+	.bloque__titulo {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 700;
+	}
+
+	.bloque__error {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.35rem;
+		margin: 0;
+		font-size: 0.82rem;
+		color: var(--color-danger);
+	}
+
+	.rotulo {
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.07em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
+
+	.cargando {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.ocupado {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.45rem;
+		margin: 0;
+		padding: 0.6rem 0.8rem;
+		border-radius: 8px;
+		background: var(--color-info-bg);
+		color: var(--color-info);
+		font-size: 0.85rem;
+	}
+
+	/* ── El guión ────────────────────────────────────────────────────── */
+
+	.guion__cabeza {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.8rem;
+		flex-wrap: wrap;
+	}
+
+	.guion__titulo {
+		margin: 0.15rem 0 0;
+		font-size: 1.15rem;
+		font-weight: 700;
+	}
+
+	.guion__mandos {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+
+	.enlace {
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		font-size: 0.78rem;
+		text-decoration: underline;
+		cursor: pointer;
+		padding: 0.2rem;
+	}
+
+	.enlace:hover {
+		color: var(--color-text);
+	}
+
+	.pasos {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		flex-wrap: wrap;
+	}
+
+	.punto {
+		width: 0.55rem;
+		height: 0.55rem;
+		padding: 0;
+		border: none;
+		border-radius: 999px;
+		background: var(--color-border-strong);
+		cursor: pointer;
+		transition: width 0.15s ease-out;
+	}
+
+	.punto--hecho {
+		background: var(--color-muted);
+	}
+
+	.punto--hoy {
+		width: 1.6rem;
+		background: var(--color-primary);
+	}
+
+	.guion__cuerpo {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		max-height: 26rem;
+		overflow-y: auto;
+	}
+
+	.guion__sub {
+		margin: 0.5rem 0 0;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-primary);
+	}
+
+	/* Lo que se lee en voz alta va más grande que nada en esta pantalla: es lo
+	   único que la operadora mira mientras habla. */
+	.decir {
+		margin: 0;
+		padding: 0.6rem 0.8rem;
+		border-left: 3px solid var(--color-primary);
+		background: var(--color-surface-alt);
+		border-radius: 0 8px 8px 0;
+		font-size: 1rem;
+		line-height: 1.5;
+	}
+
+	.decir::before {
+		content: '“';
+	}
+
+	.decir::after {
+		content: '”';
+	}
+
+	.decir--respuesta {
+		border-left-color: var(--color-secondary);
+		font-size: 0.92rem;
+	}
+
+	.hacer {
+		margin: 0;
+		font-size: 0.85rem;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
+	.hacer::before {
+		content: '▸ ';
+		color: var(--color-secondary);
+	}
+
+	.nunca {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0.45rem 0.6rem;
+		border-radius: 6px;
+		background: var(--color-danger-bg);
+		color: var(--color-danger);
+		font-size: 0.84rem;
+		font-weight: 600;
+		line-height: 1.4;
+	}
+
+	.frecuente {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.frecuente__p {
+		margin: 0;
+		font-size: 0.86rem;
+		font-weight: 700;
+	}
+
+	/* ── Quién es y a qué número ─────────────────────────────────────── */
+
+	/* Se queda pegada al bajar: el número hace falta antes de marcar y el
+	   nombre durante toda la llamada, para confirmar con quién se habla. */
+	.identidad {
+		position: sticky;
+		top: calc(var(--alto-barra, 3.8rem) + 0.5rem);
+		z-index: 5;
+	}
+
+	.identidad__nombre {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 700;
+		line-height: 1.15;
+	}
+
+	.identidad__nombre--sin {
+		font-size: 1.05rem;
+		font-style: italic;
+		color: var(--color-muted);
+	}
+
+	.identidad__lugar {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.telefono {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.7rem;
+		padding: 0.4rem 0.45rem 0.4rem 0.9rem;
+		border: 1px solid var(--color-border-strong);
+		border-radius: 10px;
+		background: var(--color-surface-alt);
+		width: fit-content;
+	}
+
+	.telefono__numero {
+		font-size: 1.6rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		font-variant-numeric: tabular-nums;
+		user-select: all;
+	}
+
+	.telefono__copiar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: var(--color-muted);
+		border-radius: 7px;
+		padding: 0.32rem 0.6rem;
+		font-size: 0.78rem;
+		cursor: pointer;
+	}
+
+	.telefono__copiar:hover {
+		color: var(--color-text);
+		border-color: var(--color-border-strong);
+	}
+
+	.sintel {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0;
+		font-size: 0.86rem;
+		color: var(--color-muted);
+	}
+
+	/* ── Lo que decidió el ingeniero ─────────────────────────────────── */
+
+	.decidido {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		margin: 0;
+		font-size: 0.9rem;
+		line-height: 1.45;
+		color: var(--color-text);
+	}
+
+	.decidido--fin {
+		color: var(--color-danger);
+	}
+
+	.decidido em {
+		opacity: 0.75;
+		font-size: 0.82rem;
+	}
+
+	/* ── El formulario ───────────────────────────────────────────────── */
+
+	.opciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.campos {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+		gap: 0.6rem;
+	}
+
+	.campo--ancho {
+		grid-column: span 2;
+	}
+
+	@media (max-width: 40rem) {
+		.campo--ancho {
+			grid-column: span 1;
+		}
+	}
+
+	.acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding-top: 0.2rem;
+	}
+
+	/* ── Historial ───────────────────────────────────────────────────── */
+
+	.historial__abrir {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.historial__abrir:hover {
+		color: var(--color-text);
+	}
+
+	.historial__abrir :global(.girado) {
+		transform: rotate(180deg);
+	}
+
+	.historial {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		font-size: 0.83rem;
+		color: var(--color-muted);
+	}
+
+	.historial em {
+		display: block;
+		opacity: 0.8;
+	}
+
+	.historial__vacio {
+		font-style: italic;
+	}
+</style>

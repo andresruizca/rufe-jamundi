@@ -30,9 +30,9 @@
 	import { callCenterApi } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import KpiTile from '$lib/components/KpiTile.svelte';
-	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
 	import CompartirFormulario from '$lib/components/CompartirFormulario.svelte';
 	import PanelGuion from '$lib/callcenter/PanelGuion.svelte';
+	import AtenderLlamada from '$lib/callcenter/AtenderLlamada.svelte';
 	import {
 		PESTANAS,
 		estadoDe,
@@ -55,11 +55,14 @@
 	let cargando = $state(true);
 	let error = $state('');
 
-	/** Cuál se está anotando. Solo una a la vez: se llama de a un hogar. */
-	let anotando = $state<number | null>(null);
-	let formulario = $state({ resultado: '', nota: '', proxima_llamada: '', enlace_enviado: false });
-	let guardando = $state(false);
-	let errorForm = $state<Record<string, string>>({});
+	/**
+	 * El hogar que se está atendiendo, si hay alguno.
+	 *
+	 * Cuando lo hay, la lista se aparta y en su sitio queda la pantalla de la
+	 * llamada. Solo uno a la vez: se llama de a un hogar, y tener dos abiertos
+	 * sería tener dos guiones distintos por delante.
+	 */
+	let atendiendo = $state<HogarParaLlamar | null>(null);
 
 	/**
 	 * Quién está llamando a quién, entre las tres operadoras.
@@ -71,7 +74,6 @@
 	let atenciones = $state<Map<number, AtencionEnCurso>>(new Map());
 	let copiado = $state<number | null>(null);
 
-	let latidoAviso: ReturnType<typeof setInterval> | null = null;
 	let latidoLista: ReturnType<typeof setInterval> | null = null;
 
 	const hoy = new Date().toISOString().slice(0, 10);
@@ -89,7 +91,6 @@
 
 	onDestroy(() => {
 		if (latidoLista) clearInterval(latidoLista);
-		soltarAviso();
 	});
 
 	async function refrescarAtenciones() {
@@ -118,25 +119,6 @@
 		if (quienId !== null && quienId === (sesion.usuario?.id ?? null)) return null;
 
 		return quien;
-	}
-
-	/** «Estoy en este hogar», y lo sigue diciendo mientras el panel esté abierto. */
-	function avisarQueLoAtiendo(id: number) {
-		void callCenterApi.atender(id).catch(() => {});
-
-		if (latidoAviso) clearInterval(latidoAviso);
-		latidoAviso = setInterval(() => void callCenterApi.atender(id).catch(() => {}), 60_000);
-	}
-
-	function soltarAviso() {
-		if (latidoAviso) {
-			clearInterval(latidoAviso);
-			latidoAviso = null;
-		}
-
-		if (anotando !== null) {
-			void callCenterApi.atender(anotando, true).catch(() => {});
-		}
 	}
 
 	/**
@@ -203,8 +185,6 @@
 	function cambiarPestana(v: FiltroEstado) {
 		estado = v;
 		pagina = 1;
-		soltarAviso();
-		anotando = null;
 		void cargar();
 	}
 
@@ -238,38 +218,27 @@
 		}, 300);
 	}
 
-	function abrirAnotacion(h: HogarParaLlamar) {
-		const abriendo = anotando !== h.id;
-
-		// Abrir la anotación es lo que en la práctica significa «voy a llamar a
-		// este»: es el momento exacto en que la operadora toma el hogar.
-		soltarAviso();
-		anotando = abriendo ? h.id : null;
-		errorForm = {};
-		formulario = { resultado: '', nota: '', proxima_llamada: '', enlace_enviado: false };
-
-		if (abriendo) avisarQueLoAtiendo(h.id);
+	/**
+	 * Abre la llamada de este hogar.
+	 *
+	 * Se sube la página antes de cambiar: la pantalla nueva empieza por el
+	 * guión, y aparecer a media altura haría que la operadora empezara a leer
+	 * por la mitad del saludo.
+	 */
+	function atender(h: HogarParaLlamar) {
+		atendiendo = h;
+		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	async function anotar(h: HogarParaLlamar) {
-		guardando = true;
-		errorForm = {};
+	function cerrarAtencion() {
+		atendiendo = null;
+		void refrescarAtenciones();
+	}
 
-		try {
-			await callCenterApi.registrar(h.id, formulario);
-			soltarAviso();
-			anotando = null;
-			await cargar();
-			await refrescarAtenciones();
-		} catch (e) {
-			const err = e as { errors?: Record<string, string>; message?: string };
-			errorForm = err.errors ?? {};
-			if (Object.keys(errorForm).length === 0) {
-				errorForm = { resultado: err.message ?? 'No se pudo guardar.' };
-			}
-		} finally {
-			guardando = false;
-		}
+	async function trasGuardar() {
+		atendiendo = null;
+		await cargar();
+		await refrescarAtenciones();
 	}
 
 	function cuando(iso: string | null): string {
@@ -368,6 +337,27 @@
 	{/if}
 </div>
 
+{#if atendiendo}
+	<!--
+		Atendiendo a una persona: la lista se aparta y esta pantalla ocupa su
+		sitio. No flota encima. Con seis bloques dentro, una ventana flotante
+		obliga a desplazar dentro de otro desplazamiento, y se acaba perdiendo de
+		vista o el guión o el formulario justo mientras alguien espera al
+		teléfono.
+
+		El panel del guión de la derecha tampoco aparece: el guión ya va dentro, y
+		tenerlo dos veces solo obliga a decidir cuál de los dos se lee.
+	-->
+	<div class="atendiendo">
+		<AtenderLlamada
+			hogar={atendiendo}
+			{resultados}
+			atendidaPorOtra={otraOperadora(atendiendo)}
+			onCerrar={cerrarAtencion}
+			onGuardado={trasGuardar}
+		/>
+	</div>
+{:else}
 <!--
 	El trabajo del turno: a la izquierda a quién llamar, a la derecha qué decirle.
 	Las dos cosas a la vez, porque una llamada necesita las dos a la vez.
@@ -531,14 +521,17 @@
 								</button>
 							</div>
 
+							<!-- «Atender» y no «Anotar»: es lo que de verdad hace —abre la
+							     llamada entera, con su guión— y además es lo que avisa a
+							     las otras dos operadoras de que este hogar está ocupado. -->
 							<button
 								type="button"
 								class="boton"
 								class:boton--principal={!h.no_llamar}
 								class:boton--suave={h.no_llamar}
-								onclick={() => abrirAnotacion(h)}
+								onclick={() => atender(h)}
 							>
-								{anotando === h.id ? 'Cerrar' : 'Anotar la llamada'}
+								Atender llamada
 							</button>
 						</div>
 					{:else}
@@ -555,80 +548,6 @@
 						</p>
 					{/if}
 
-					{#if anotando === h.id}
-						<div class="anotar">
-							<!--
-								Mandarle el enlace es parte de la llamada, así que va dentro
-								de ella: se le explica por teléfono y se le manda mientras
-								sigue al aparato. El componente es el mismo de siempre, con
-								el teléfono de ESTE hogar.
-							-->
-							{#if h.telefono}
-								<CompartirPreinscripcion
-									nombre={h.nombre ?? ''}
-									telefono={h.telefono}
-									titulo="Mandarle el enlace ahora"
-								/>
-							{/if}
-
-							<h4 class="anotar__titulo">¿Cómo terminó la llamada?</h4>
-
-							<div class="anotar__opciones">
-								{#each Object.entries(resultados) as [valor, etiqueta] (valor)}
-									<label class="opcion" class:opcion--activa={formulario.resultado === valor}>
-										<input type="radio" bind:group={formulario.resultado} value={valor} />
-										<span>{etiqueta}</span>
-									</label>
-								{/each}
-							</div>
-
-							{#if errorForm.resultado}
-								<p class="anotar__error">{errorForm.resultado}</p>
-							{/if}
-
-							<label class="campo">
-								<span class="campo__etiqueta">Cuándo volver a llamar</span>
-								<input
-									class="campo__control"
-									type="date"
-									min={hoy}
-									bind:value={formulario.proxima_llamada}
-								/>
-								{#if errorForm.proxima_llamada}
-									<span class="anotar__error">{errorForm.proxima_llamada}</span>
-								{/if}
-							</label>
-
-							<label class="campo">
-								<span class="campo__etiqueta">Nota</span>
-								<input
-									class="campo__control"
-									maxlength="500"
-									placeholder="Ej.: pidió que se le llame después de las 5"
-									bind:value={formulario.nota}
-								/>
-							</label>
-
-							<label class="opcion opcion--suelta">
-								<input type="checkbox" bind:checked={formulario.enlace_enviado} />
-								<span>Le mandé el enlace</span>
-							</label>
-
-							<div class="anotar__acciones">
-								<button
-									type="button"
-									class="boton boton--principal"
-									onclick={() => anotar(h)}
-									disabled={guardando || formulario.resultado === ''}
-								>
-									{guardando ? 'Guardando…' : 'Guardar la llamada'}
-								</button>
-								<button type="button" class="boton boton--suave" onclick={() => (anotando = null)}>
-									Cancelar
-								</button>
-							</div>
-						</div>
-					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -677,6 +596,7 @@
 
 <PanelGuion puedeEditar={puedeEditarGuion} />
 </div>
+{/if}
 
 <style>
 	/* ── Las dos columnas del turno ──────────────────────────────────────────
@@ -705,6 +625,14 @@
 			top: calc(var(--alto-barra, 3.8rem) + 1rem);
 			max-height: calc(100vh - var(--alto-barra, 3.8rem) - 2rem);
 		}
+	}
+
+	/* La pantalla de una llamada ocupa el sitio de la lista y se estrecha: son
+	   bloques de texto y campos, y a 1900 px de ancho una línea de guión se
+	   vuelve ilegible de lado a lado. */
+	.atendiendo {
+		max-width: 62rem;
+		margin: 1.25rem auto 0;
 	}
 
 	/* ── El teléfono ─────────────────────────────────────────────────────────
@@ -1028,41 +956,6 @@
 	.pastilla--problema {
 		background: var(--color-danger-bg);
 		color: var(--aviso-error-texto);
-	}
-
-	.anotar {
-		margin-top: 0.85rem;
-		padding-top: 0.85rem;
-		border-top: 1px solid var(--color-border);
-		display: grid;
-		gap: 0.6rem;
-	}
-
-	.anotar__titulo {
-		margin: 0.3rem 0 0;
-		font-size: 0.88rem;
-	}
-
-	.anotar__opciones {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-		gap: 0.35rem;
-	}
-
-	.opcion--suelta {
-		max-width: 16rem;
-	}
-
-	.anotar__error {
-		margin: 0;
-		font-size: 0.79rem;
-		color: var(--color-danger);
-	}
-
-	.anotar__acciones {
-		display: flex;
-		gap: 0.4rem;
-		flex-wrap: wrap;
 	}
 
 	.paginacion {

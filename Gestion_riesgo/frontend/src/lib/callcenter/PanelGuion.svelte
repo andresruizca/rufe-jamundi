@@ -23,13 +23,14 @@
 	} from '@lucide/svelte';
 	import { callCenterApi } from '$lib/api/servicios';
 	import { frasesQueSeDicen, leerGuion } from './guion';
-	import type { GuionVigente } from './tipos';
+	import { almacenGuion } from './guionStore.svelte';
 
 	let { puedeEditar = false }: { puedeEditar?: boolean } = $props();
 
-	let guion = $state<GuionVigente | null>(null);
-	let predeterminado = $state('');
-	let cargando = $state(true);
+	const guion = $derived(almacenGuion.guion);
+	const predeterminado = $derived(almacenGuion.predeterminado);
+	const cargando = $derived(almacenGuion.cargando && almacenGuion.guion === null);
+
 	let error = $state('');
 
 	/** En pantalla estrecha el panel se abre y se cierra. En ancha está siempre. */
@@ -42,23 +43,8 @@
 	const secciones = $derived(leerGuion(guion?.cuerpo ?? ''));
 
 	onMount(() => {
-		void cargar();
+		void almacenGuion.cargar();
 	});
-
-	async function cargar() {
-		cargando = true;
-		error = '';
-
-		try {
-			const r = await callCenterApi.guion();
-			guion = r.guion;
-			predeterminado = r.predeterminado;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'No se pudo cargar el guión.';
-		} finally {
-			cargando = false;
-		}
-	}
 
 	function editar() {
 		borrador = guion?.cuerpo ?? '';
@@ -71,7 +57,7 @@
 
 		try {
 			const r = await callCenterApi.guardarGuion(borrador);
-			guion = r.guion;
+			almacenGuion.fijar(r.guion);
 			editando = false;
 		} catch (e) {
 			const err = e as { errors?: Record<string, string>; message?: string };
@@ -126,10 +112,10 @@
 		{/if}
 	</div>
 
-	{#if error}
+	{#if error || almacenGuion.error}
 		<p class="guion__error" role="alert">
 			<TriangleAlert size={14} aria-hidden="true" />
-			{error}
+			{error || almacenGuion.error}
 		</p>
 	{/if}
 
