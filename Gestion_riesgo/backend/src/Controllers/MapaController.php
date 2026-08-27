@@ -186,6 +186,43 @@ final class MapaController
         Response::ok(['fichas' => $fichas]);
     }
 
+    /**
+     * Las claves de las direcciones que el censo usa HOY.
+     *
+     * La cola de geocodificación es histórica: se llena con lo que el mapa va
+     * pidiendo y nada la vacía. Cuando el tablero leía una hoja de Google,
+     * ahí entraron las direcciones de esa hoja; hoy el mapa lee la base, y esas
+     * quedaron dentro sin que nadie las use.
+     *
+     * Eso no es cosmético: la pantalla de administración anuncia «tardará unos
+     * 32 minutos» contando direcciones que no se van a dibujar. Saber cuáles
+     * están en uso convierte esa espera en la que de verdad hace falta.
+     *
+     * Se calcula en PHP y no en SQL porque la clave es un SHA-256 del texto ya
+     * normalizado —abreviaturas unificadas, «Cra» y «Carrera» son la misma
+     * calle—, y esa normalización vive en `Geocodificador`, no en MySQL.
+     *
+     * @return array<string,bool>
+     */
+    private function clavesEnUso(): array
+    {
+        $claves = [];
+
+        foreach (Db::all('SELECT direccion, corregimiento, vereda_sector_barrio FROM rufe_reportes') as $r) {
+            // La dirección, y el sector como respaldo: es lo que pide el mapa
+            // cuando la dirección no se puede resolver.
+            foreach ([$r['direccion'], $r['corregimiento'], $r['vereda_sector_barrio']] as $texto) {
+                $texto = (string) ($texto ?? '');
+
+                if ($texto !== '' && Geocodificador::utilizable($texto)) {
+                    $claves[Geocodificador::clave($texto)] = true;
+                }
+            }
+        }
+
+        return $claves;
+    }
+
     /** Cuántas direcciones hay resueltas, pendientes y fallidas. */
     public function estado(Request $req): void
     {
@@ -206,9 +243,34 @@ final class MapaController
             ['max' => Geocodificador::MAX_INTENTOS]
         )['t'] ?? 0);
 
+        // Cuánto de la cola corresponde de verdad al censo de hoy.
+        $enUso = $this->clavesEnUso();
+        $pendientesEnUso = 0;
+        $obsoletas = 0;
+
+        foreach (Db::all(
+            'SELECT clave, latitud FROM rufe_geocodificacion WHERE intentos < :max',
+            ['max' => Geocodificador::MAX_INTENTOS]
+        ) as $f) {
+            if (! isset($enUso[(string) $f['clave']])) {
+                $obsoletas++;
+
+                continue;
+            }
+
+            if ($f['latitud'] === null) {
+                $pendientesEnUso++;
+            }
+        }
+
         Response::ok([
             'por_precision' => $porPrecision,
             'pendientes' => $pendientes,
+            // Las que el censo de hoy necesita de verdad, frente a las que
+            // quedaron de cuando el mapa leía una hoja de cálculo.
+            'pendientes_en_uso' => $pendientesEnUso,
+            'obsoletas' => $obsoletas,
+            'direcciones_del_censo' => count($enUso),
             'lote' => self::LOTE,
             'google_activo' => Geocodificador::hayGoogle(),
             'segundos_por_direccion' => Geocodificador::PAUSA_SEGUNDOS,
@@ -228,13 +290,33 @@ final class MapaController
     {
         $usuario = Auth::exigirUsuario($req);
 
-        $pendientes = Db::all(
+        // Se piden más de las que caben en un lote y se filtran aquí: solo se
+        // gastan consultas en direcciones que el censo de hoy va a dibujar. Las
+        // que quedaron de la fuente anterior se saltan — geocodificarlas serían
+        // treinta minutos de espera para un punto que nadie va a ver.
+        $enUso = $this->clavesEnUso();
+
+        $candidatas = Db::all(
             'SELECT clave, direccion FROM rufe_geocodificacion
               WHERE latitud IS NULL AND intentos < :max
               ORDER BY intentos ASC, creado_en ASC
-              LIMIT '.self::LOTE,
+              LIMIT '.(self::LOTE * 40),
             ['max' => Geocodificador::MAX_INTENTOS]
         );
+
+        $pendientes = [];
+
+        foreach ($candidatas as $fila) {
+            if (! isset($enUso[(string) $fila['clave']])) {
+                continue;
+            }
+
+            $pendientes[] = $fila;
+
+            if (count($pendientes) >= self::LOTE) {
+                break;
+            }
+        }
 
         $resueltas = 0;
         $fallidas = 0;
@@ -278,11 +360,19 @@ final class MapaController
             Geocodificador::pintable($punto['precision']) ? $resueltas++ : $fallidas++;
         }
 
-        $quedan = (int) (Db::first(
-            'SELECT COUNT(*) AS t FROM rufe_geocodificacion
-              WHERE latitud IS NULL AND intentos < :max',
+        // Lo que queda se cuenta sobre lo que SE USA. Si se contara la cola
+        // entera, la pantalla seguiría pidiendo lotes eternamente por unas
+        // direcciones que este proceso ya decidió saltarse: nunca terminaría.
+        $quedan = 0;
+
+        foreach (Db::all(
+            'SELECT clave FROM rufe_geocodificacion WHERE latitud IS NULL AND intentos < :max',
             ['max' => Geocodificador::MAX_INTENTOS]
-        )['t'] ?? 0);
+        ) as $f) {
+            if (isset($enUso[(string) $f['clave']])) {
+                $quedan++;
+            }
+        }
 
         // Queda constancia de la operación y de su tamaño, nunca de las
         // direcciones: son datos de ubicación de personas damnificadas.

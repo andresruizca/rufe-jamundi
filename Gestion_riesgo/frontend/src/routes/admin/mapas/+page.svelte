@@ -15,6 +15,9 @@
 	type Estado = {
 		por_precision: Record<string, number>;
 		pendientes: number;
+		pendientes_en_uso: number;
+		obsoletas: number;
+		direcciones_del_censo: number;
 		lote: number;
 		google_activo: boolean;
 		segundos_por_direccion: number;
@@ -49,7 +52,7 @@
 	);
 
 	const minutosRestantes = $derived(
-		estado ? Math.ceil((estado.pendientes * estado.segundos_por_direccion) / 60) : 0
+		estado ? Math.ceil((estado.pendientes_en_uso * estado.segundos_por_direccion) / 60) : 0
 	);
 
 	onMount(() => void refrescar());
@@ -148,10 +151,32 @@
 				<span class="cifra__nota">ubicadas y utilizables</span>
 			</div>
 			<div class="cifra">
-				<span class="cifra__valor">{estado.pendientes}</span>
+				<span class="cifra__valor">{estado.pendientes_en_uso}</span>
 				<span class="cifra__nota">por procesar</span>
 			</div>
+			<div class="cifra">
+				<span class="cifra__valor">{estado.direcciones_del_censo}</span>
+				<span class="cifra__nota">direcciones en el censo</span>
+			</div>
 		</div>
+
+		<!--
+			De dónde salen estas cifras, dicho en la propia pantalla.
+			La cola es histórica: se llena con lo que el mapa va pidiendo y nada la
+			vacía. Cuando el tablero leía una hoja de cálculo, ahí entraron las
+			direcciones de esa hoja; hoy el mapa lee la base y aquellas quedaron
+			dentro sin que nadie las use. Anunciar «tardará 32 minutos» contándolas
+			era pedir media hora de espera por puntos que no se van a dibujar.
+		-->
+		<p class="fuente">
+			Las direcciones salen de las <strong>{estado.direcciones_del_censo} que hoy tiene el censo
+			en la base de datos</strong>, no de ninguna hoja de cálculo.
+			{#if estado.obsoletas > 0}
+				Hay <strong>{estado.obsoletas}</strong> en la cola que ya no corresponden a ninguna ficha
+				—quedaron de la fuente anterior— y <strong>se saltan</strong>: no gastan tiempo ni
+				consultas.
+			{/if}
+		</p>
 
 		{#if confirmandoRehacer}
 			<div class="aviso aviso--alerta">
@@ -229,12 +254,12 @@
 					type="button"
 					class="boton"
 					onclick={procesar}
-					disabled={estado.pendientes === 0}
+					disabled={estado.pendientes_en_uso === 0}
 				>
 					<Play size={15} aria-hidden="true" />
 					Ubicar las pendientes
 				</button>
-				{#if estado.pendientes > 0}
+				{#if estado.pendientes_en_uso > 0}
 					<span class="progreso">
 						Tardará unos {minutosRestantes}
 						{minutosRestantes === 1 ? 'minuto' : 'minutos'}. Deje esta pantalla abierta.
@@ -330,4 +355,11 @@
 		font-size: 0.87rem;
 		line-height: 1.55;
 	}
+	.fuente {
+		margin: 0 0 0.9rem;
+		font-size: 0.86rem;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
 </style>

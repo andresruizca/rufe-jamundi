@@ -530,6 +530,11 @@ export const mapaApi = {
 		api.get<{
 			por_precision: Record<string, number>;
 			pendientes: number;
+			/** Las pendientes que el censo de hoy va a dibujar de verdad. */
+			pendientes_en_uso: number;
+			/** Las que quedaron de cuando el mapa leía una hoja de cálculo. */
+			obsoletas: number;
+			direcciones_del_censo: number;
 			lote: number;
 			google_activo: boolean;
 			segundos_por_direccion: number;
