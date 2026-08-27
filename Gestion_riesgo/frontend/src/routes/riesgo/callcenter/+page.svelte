@@ -14,6 +14,8 @@
 
 	import { onDestroy, onMount } from 'svelte';
 	import {
+		ArrowLeft,
+		BookOpen,
 		Check,
 		CircleDot,
 		ClipboardCopy,
@@ -63,6 +65,17 @@
 	 * sería tener dos guiones distintos por delante.
 	 */
 	let atendiendo = $state<HogarParaLlamar | null>(null);
+
+	/**
+	 * Ver el guión entero, fuera de una llamada.
+	 *
+	 * El guión que se usa trabajando va dentro de «Atender llamada», paso a
+	 * paso. Esto es para las dos cosas que no caben ahí: leerlo de corrido antes
+	 * de empezar el turno, y que el administrador lo corrija sin tener que abrir
+	 * la llamada de una familia —abrirla la marca como ocupada para las demás
+	 * operadoras, y eso sería mentir por el camino—.
+	 */
+	let verGuion = $state(false);
 
 	/**
 	 * Quién está llamando a quién, entre las tres operadoras.
@@ -345,8 +358,9 @@
 		vista o el guión o el formulario justo mientras alguien espera al
 		teléfono.
 
-		El panel del guión de la derecha tampoco aparece: el guión ya va dentro, y
-		tenerlo dos veces solo obliga a decidir cuál de los dos se lee.
+		El guión no está en ninguna columna al lado: va dentro de esta pantalla,
+		paso a paso. Tenerlo en los dos sitios ponía el mismo texto dos veces, en
+		dos estados distintos, y obligaba a decidir cuál de los dos se lee.
 	-->
 	<div class="atendiendo">
 		<AtenderLlamada
@@ -357,14 +371,25 @@
 			onGuardado={trasGuardar}
 		/>
 	</div>
+{:else if verGuion}
+	<div class="atendiendo">
+		<div class="atencion__barra">
+			<button type="button" class="boton boton--suave" onclick={() => (verGuion = false)}>
+				<ArrowLeft size={15} aria-hidden="true" />
+				Volver a la lista
+			</button>
+		</div>
+		<PanelGuion puedeEditar={puedeEditarGuion} />
+	</div>
 {:else}
-<!--
-	El trabajo del turno: a la izquierda a quién llamar, a la derecha qué decirle.
-	Las dos cosas a la vez, porque una llamada necesita las dos a la vez.
--->
-<div class="trabajo">
-<div class="tarjeta">
-	<h2 class="tarjeta__titulo">A quién llamar</h2>
+<div class="tarjeta" style="margin-top:1.25rem">
+	<div class="titulo-fila">
+		<h2 class="tarjeta__titulo">A quién llamar</h2>
+		<button type="button" class="boton boton--suave" onclick={() => (verGuion = true)}>
+			<BookOpen size={15} aria-hidden="true" />
+			{puedeEditarGuion ? 'Ver o editar el guión' : 'Ver el guión'}
+		</button>
+	</div>
 
 	<!--
 		Las pestañas abren en «Falta llamar», que es el trabajo del día. Nada se
@@ -586,45 +611,33 @@
 		mal: una por sorpresa cuando alguien reclame, y la otra marcando de más.
 	-->
 	<p class="pie">
-		<strong>Anotar una llamada no cambia el estado de la ficha del censo.</strong> Son dos procesos
-		distintos.
+		<strong>Atender una llamada no cambia el estado de la ficha del censo.</strong> Son dos
+		procesos distintos.
 		<br />
 		«Ya se preinscribió» se detecta solo, cruzando la cédula: si la persona diligencia el
 		formulario después de colgar, aparecerá en la siguiente carga sin que usted marque nada.
 	</p>
 </div>
-
-<PanelGuion puedeEditar={puedeEditarGuion} />
-</div>
 {/if}
 
 <style>
-	/* ── Las dos columnas del turno ──────────────────────────────────────────
-	   A quién llamar y qué decirle, a la vez. El guión se queda a la vista al
-	   bajar por la lista: si se fuera con el desplazamiento, la operadora
-	   tendría que subir a leerlo en mitad de la llamada.
-
-	   Por debajo de 1100 px no caben dos columnas y el guión pasa a ser una hoja
-	   que sube desde abajo, con su propio botón fijo (ver PanelGuion). */
-	.trabajo {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 1.25rem;
-		margin-top: 1.25rem;
+	.titulo-fila {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+		flex-wrap: wrap;
 	}
 
-	@media (min-width: 1101px) {
-		.trabajo {
-			grid-template-columns: minmax(0, 1fr) 24rem;
-			align-items: start;
-		}
+	.titulo-fila .tarjeta__titulo {
+		margin: 0;
+	}
 
-		.trabajo :global(aside.guion) {
-			position: sticky;
-			/* Justo debajo de la barra superior, que es inamovible. */
-			top: calc(var(--alto-barra, 3.8rem) + 1rem);
-			max-height: calc(100vh - var(--alto-barra, 3.8rem) - 2rem);
-		}
+	.atencion__barra {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-bottom: 0.85rem;
 	}
 
 	/* La pantalla de una llamada ocupa el sitio de la lista y se estrecha: son

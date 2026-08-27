@@ -1,25 +1,23 @@
 <script lang="ts">
-	// El guión, delante de la operadora todo el turno.
+	// El guión completo, para leerlo entero o corregirlo.
 	//
-	// No es una pantalla aparte ni un modal: una operadora no puede irse a otra
-	// página a consultar qué decir mientras alguien le contesta el teléfono. En
-	// pantalla ancha va pegado a la derecha de la lista y se queda ahí al bajar;
-	// en un portátil pequeño o una tableta se abre como una hoja por encima, con
-	// un botón que no se mueve nunca de su sitio.
+	// Vivía en una columna fija a la derecha de la lista, y ahí sobraba: el
+	// guión que la operadora usa de verdad va DENTRO de la llamada, paso a paso.
+	// Tenerlo también al lado ponía el mismo texto dos veces, en dos estados
+	// distintos, y obligaba a decidir cuál de los dos se lee.
 	//
-	// Lo edita el administrador desde aquí mismo, sin salir de la pantalla, y
-	// cada versión que guarda queda registrada en el servidor.
+	// Aquí queda para las dos cosas que no caben en una llamada: leerlo de
+	// corrido antes de empezar el turno, y reescribirlo —solo el administrador,
+	// guardando cada versión con su fecha y su autor—.
 
 	import { onMount } from 'svelte';
 	import {
-		BookOpen,
 		Check,
 		LoaderCircle,
 		MessageSquareQuote,
 		Pencil,
 		RotateCcw,
-		TriangleAlert,
-		X
+		TriangleAlert
 	} from '@lucide/svelte';
 	import { callCenterApi } from '$lib/api/servicios';
 	import { frasesQueSeDicen, leerGuion } from './guion';
@@ -32,9 +30,6 @@
 	const cargando = $derived(almacenGuion.cargando && almacenGuion.guion === null);
 
 	let error = $state('');
-
-	/** En pantalla estrecha el panel se abre y se cierra. En ancha está siempre. */
-	let abierto = $state(false);
 
 	let editando = $state(false);
 	let borrador = $state('');
@@ -78,26 +73,7 @@
 	}
 </script>
 
-<!--
-	El botón solo existe en pantalla estrecha; en ancha el panel ya está a la
-	vista y un botón para abrir lo que está abierto solo confunde.
--->
-<button
-	type="button"
-	class="guion__tirador"
-	onclick={() => (abierto = !abierto)}
-	aria-expanded={abierto}
->
-	{#if abierto}
-		<X size={18} aria-hidden="true" />
-		Cerrar el guión
-	{:else}
-		<BookOpen size={18} aria-hidden="true" />
-		Ver el guión
-	{/if}
-</button>
-
-<aside class="guion" class:guion--abierto={abierto} aria-label="Guión de la llamada">
+<aside class="guion" aria-label="Guión de la llamada">
 	<div class="guion__cabeza">
 		<h2 class="guion__titulo">
 			<MessageSquareQuote size={17} aria-hidden="true" />
@@ -272,7 +248,6 @@
 	}
 
 	.guion__cuerpo {
-		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		gap: 0.9rem;
@@ -414,60 +389,4 @@
 		gap: 0.5rem;
 	}
 
-	/* ── Pantalla estrecha ───────────────────────────────────────────────────
-	   Por debajo de 1100 px no caben dos columnas, así que el guión se convierte
-	   en una hoja que sube desde abajo. El tirador queda fijo sobre la lista: es
-	   lo que garantiza que el guión esté SIEMPRE a un toque, que era el
-	   requisito. */
-	.guion__tirador {
-		display: none;
-	}
-
-	@media (max-width: 1100px) {
-		.guion__tirador {
-			display: inline-flex;
-			align-items: center;
-			gap: 0.4rem;
-			position: fixed;
-			right: 1rem;
-			bottom: 1rem;
-			z-index: 30;
-			border: none;
-			border-radius: 999px;
-			padding: 0.7rem 1.1rem;
-			background: var(--color-primary);
-			color: #fff;
-			font-size: 0.85rem;
-			font-weight: 700;
-			cursor: pointer;
-			box-shadow: 0 6px 20px rgb(0 0 0 / 0.28);
-		}
-
-		.guion {
-			position: fixed;
-			inset: auto 0 0 0;
-			z-index: 29;
-			max-height: 78vh;
-			border-radius: 14px 14px 0 0;
-			border-bottom: none;
-			box-shadow: 0 -8px 30px rgb(0 0 0 / 0.3);
-			transform: translateY(101%);
-			transition: transform 0.18s ease-out;
-		}
-
-		.guion--abierto {
-			transform: translateY(0);
-		}
-
-		/* Sitio para que el tirador no tape la última fila de la lista. */
-		.guion__cuerpo {
-			padding-bottom: 3.5rem;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.guion {
-			transition: none;
-		}
-	}
 </style>
