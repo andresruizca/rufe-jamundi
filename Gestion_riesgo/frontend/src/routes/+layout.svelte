@@ -11,6 +11,7 @@
 	import escudo from '$lib/assets/logo-jamundi.svg';
 	import {
 		resolverTitulo,
+		resolverMiga,
 		puedeAcceder,
 		esRutaPublica,
 		funcionaSinConexion,
@@ -51,6 +52,8 @@
 	const esPublica = $derived(esRutaPublica(ruta));
 
 	const titulo = $derived(resolverTitulo(ruta));
+	/** Grupo y pantalla, para que la miga diga dónde se está de verdad. */
+	const miga = $derived(resolverMiga(ruta));
 
 	/** Pantalla estrecha: ahí el menú nunca se abre solo al entrar. */
 	function esEstrecha(): boolean {
@@ -259,8 +262,12 @@
 
 				<nav class="miga" aria-label="Ubicación">
 					<span class="miga__raiz">SGR Jamundí</span>
-					<span class="miga__sep" aria-hidden="true">/</span>
-					<span class="miga__actual">{titulo}</span>
+					{#each miga as paso (paso.label)}
+						<span class="miga__sep" aria-hidden="true">/</span>
+						<span class:miga__grupo={paso.esGrupo} class:miga__actual={!paso.esGrupo}>
+							{paso.label}
+						</span>
+					{/each}
 				</nav>
 			</header>
 

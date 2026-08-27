@@ -428,6 +428,26 @@ h3 {
 	color: var(--color-border-strong);
 }
 
+/* El grupo: presente pero en segundo plano. Es contexto, no destino — quien
+   mira la barra busca dónde está, y lo que está mirando es la pantalla. */
+.miga__grupo {
+	color: var(--color-muted);
+	white-space: nowrap;
+	flex: none;
+}
+
+/* En pantalla estrecha el grupo estorba más de lo que ubica: la barra tiene
+   sitio para un nombre, y ese nombre es el de la pantalla. */
+@media (max-width: 640px) {
+	.miga__grupo {
+		display: none;
+	}
+
+	.miga__grupo + .miga__sep {
+		display: none;
+	}
+}
+
 .miga__actual {
 	color: var(--color-text);
 	font-weight: 700;

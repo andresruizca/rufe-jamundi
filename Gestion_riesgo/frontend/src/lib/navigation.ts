@@ -275,7 +275,11 @@ export const NAV_ITEMS: NavItem[] = [
 		type: 'item',
 		parentId: 'grupo-reportes',
 		label: 'Solicitudes ciudadanas',
-		title: 'Pre-inscripciones recibidas',
+		// El mismo nombre que el menú. Antes la pantalla se llamaba
+		// «Pre-inscripciones recibidas»: tres nombres para una sola cosa —el del
+		// menú, el del título y el de la URL— y quien llega desde el menú tiene
+		// que adivinar que llegó a donde quería.
+		title: 'Solicitudes ciudadanas',
 		href: '/riesgo/preinscripciones',
 		icon: Inbox,
 		// Lectura del censo: son solicitudes con nombre, cédula y dirección de
@@ -407,6 +411,42 @@ export function resolverTitulo(ruta: string): string {
 	const item = resolverActivo(ruta);
 
 	return item?.title ?? item?.label ?? 'Sistema de Gestión del Riesgo';
+}
+
+/**
+ * El rastro de navegación completo: grupo y pantalla.
+ *
+ * La barra decía «SGR Jamundí / Pre-inscripciones recibidas» y se saltaba el
+ * grupo, que es justo la mitad de la respuesta a «dónde estoy». Quien entra
+ * desde Reportes ve el menú abierto en Reportes y luego una miga que no lo
+ * menciona: parece que se cambió de sitio.
+ *
+ * El grupo va sin enlace a propósito. No es una pantalla —no hay un «índice de
+ * Reportes» al que llevar—, y un enlace que no lleva a ninguna parte es peor
+ * que no tenerlo.
+ *
+ * @return de la raíz a la pantalla actual, sin incluir «SGR Jamundí»
+ */
+export function resolverMiga(ruta: string): { label: string; esGrupo: boolean }[] {
+	const item = resolverActivo(ruta);
+
+	if (!item) {
+		return [{ label: 'Sistema de Gestión del Riesgo', esGrupo: false }];
+	}
+
+	const miga: { label: string; esGrupo: boolean }[] = [];
+
+	if (item.parentId) {
+		const grupo = NAV_ITEMS.find((i) => i.id === item.parentId);
+
+		if (grupo) {
+			miga.push({ label: grupo.label, esGrupo: true });
+		}
+	}
+
+	miga.push({ label: item.title ?? item.label, esGrupo: false });
+
+	return miga;
 }
 
 export type Seccion =
