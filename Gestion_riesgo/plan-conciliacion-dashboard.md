@@ -169,3 +169,56 @@ Requiere decisión aparte (ver preguntas).
 - No borra ni modifica las hojas de Google. Se dejan de leer, no se tocan.
 - No inventa datos: todo lo que no case va a un informe para revisión humana.
 - No cambia el diseño del tablero. Cambia de dónde saca las cifras.
+
+
+---
+
+# Ejecutado (26 de agosto de 2026, 21:30)
+
+Las cinco fases están aplicadas en producción.
+
+| | Antes (hoja) | Ahora (base oficial) |
+|---|---|---|
+| Fuente del tablero y los mapas | Google Sheets, en vivo | `GET /rufe/tablero` |
+| Personas | 2.856 | 2.832 |
+| Hogares | 1.355 | 1.380 |
+| Barrios | 117 | 239 (249 sin agrupar) |
+| Cobertura de edad | 60 % | **48 %**, tras recuperar 528 fechas |
+| Hogares evacuados | 73 | **54** |
+| Fichas con dato de visita | 384 | **373** |
+
+Lo que hizo la conciliación por cédula contra la base de producción:
+
+```
+Filas de la hoja:                    2.000
+Emparejadas por cédula:                980
+De la hoja que no están en la base:    319
+  fechas de nacimiento completadas:    528
+  hogares que pasan a evacuados:        53
+  hogares que ganan dato de visita:    373
+  discrepancias (no se tocan):          11
+```
+
+Las 11 discrepancias son fechas de nacimiento donde las dos digitalizaciones no
+coinciden —por ejemplo 2005-09-28 contra 1990-02-15—. **No se resolvieron
+solas**: están en `backend/scripts/discrepancias-tablero.csv` con las dos
+versiones al lado.
+
+Las 319 personas de la hoja que no están en la base son gente que aquella
+digitalización recogió y el RUD no. Quedan como pendiente: son hogares que
+podrían faltar en el censo oficial.
+
+La segunda corrida devolvió cero en las tres columnas: el cruce es idempotente
+y se puede repetir sin duplicar nada.
+
+## Lo que quedó sin hacer, y por qué
+
+- **Los barrios bajan de 249 a 239, no a 117.** La diferencia no es ortografía:
+  el RUD guarda la *vereda o sector* —«Bellavista Finca La Piscina»— y la hoja
+  guarda el *barrio*. 84 de los 112 nombres de la hoja sí encuentran su grupo,
+  y cubren el 74 % de los hogares. Agrupar el resto exige decisiones de persona
+  («Terranova Sector 1» ¿es Terranova?), que es justo lo que el informe permite.
+- **BASE-DATOS RUFE** —la segunda hoja, con 29 pestañas por barrio— no se cruzó.
+  No aporta visita ni evacuación; solo fechas de nacimiento adicionales.
+- **Instituciones educativas y Equipamientos** siguen leyendo la hoja, ahora
+  diciéndolo en pantalla.
