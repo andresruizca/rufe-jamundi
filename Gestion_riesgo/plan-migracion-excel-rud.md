@@ -346,14 +346,41 @@ El cuadre se imprime siempre: ningún hogar puede desaparecer sin explicación.
   escribe nada.
 - `backend/scripts/revision-rud.csv` — lo que quedó fuera, con el motivo exacto.
 
-## Lo que falta para aplicarlo en producción
+## Cómo se aplicó en producción (26 de agosto de 2026, 20:40)
 
-**No hay forma de correr un script PHP en el servidor**: el hosting no tiene
-SSH, y abrir MySQL remoto para correrlo desde fuera quedó descartado. Las dos
-vías posibles son un endpoint de una sola vez protegido con clave —como el
-`migrar.php` que ya se usa y se borra— o generar el SQL y aplicarlo por
-phpMyAdmin. Está pendiente de decidir.
+El hosting no tiene SSH, así que se corrió con un ejecutor web de una sola vez
+—`scripts/correr-rud-web.php`, subido con otro nombre, protegido con la
+`install_key` y borrado al terminar—, en cuatro lotes de 300 hogares.
+
+Tres cuidados que conviene no perder si esto se repite:
+
+- **El Excel nunca estuvo en el directorio público.** Se subió a
+  `/home1/gilibert/sgr_almacen`, fuera de lo que Apache sirve, y se borró al
+  acabar. `.xlsx` no está entre las extensiones que el `.htaccess` niega: puesto
+  en `api/`, habría sido descargable por cualquiera.
+- **La respuesta HTTP no lleva datos personales**, solo cuentas y motivos.
+- **Por lotes**, porque mil cuatrocientas transacciones seguidas se pasan del
+  tiempo máximo de PHP en un hosting compartido. Cada llamada tardó 0,3 s.
+
+Resultado real contra la base de producción:
+
+```
+Fichas antes:            11   (capturadas a mano por el formulario)
+Hogares del Excel:    1.539
+  entraron:           1.369  (2.826 personas)
+  a revisión:           170
+Fichas después:       1.380
+Cuadre: 1.369 + 170 = 1.539 ✓
+```
+
+Los 170 son los 167 del ensayo local más **tres hogares cuya cédula ya estaba
+registrada** en una ficha capturada a mano: 1007785602, 66830055 y 31525461.
+Eso es la conciliación haciendo su trabajo — no se duplicó a esas familias, y
+un funcionario decide si son el mismo hogar.
+
+Al terminar se restauró el `config.php` con `install_key` vacía, se borró el
+ejecutor —`/api/censo-sgr.php` responde 404— y se borró el Excel del almacén.
 
 El importador es **reanudable**: cruza por huella contra lo que ya existe, así
-que si se corta a la mitad, volver a correrlo continúa donde iba sin duplicar
-nada.
+que volver a correrlo no duplica nada. Comprobado dos veces, en local y en
+producción.
