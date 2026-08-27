@@ -1,41 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { aggregate, filterBarrios, fmt, pct, sortBarrios } from './aggregate';
-import { FALLBACK_DATA } from './data';
 import type { Barrio } from './data';
 
-// El snapshot de respaldo se refresca desde la hoja en vivo (npm run
-// data:refresh) y su total real crece con el tiempo, así que estas pruebas
-// verifican invariantes estructurales — no números exactos que se
-// volverían obsoletos en el próximo refresco.
-describe('FALLBACK_DATA integrity', () => {
-	it('barrio totals sum to the documented total', () => {
-		const agg = aggregate(FALLBACK_DATA.barrios);
-		expect(agg.total).toBe(FALLBACK_DATA.total);
-		expect(agg.total).toBeGreaterThan(0);
-	});
-
-	it('every barrio bucket has a single consistent zona (no mixed-zona bug)', () => {
-		// Regression test for the hogar 91/117 bug found while building the
-		// original artifact: a barrio bucket must never mix Urbana/Rural people.
-		for (const b of FALLBACK_DATA.barrios) {
-			expect(['Urbana', 'Rural']).toContain(b.zona);
-		}
-	});
-
-	it('urbana + rural splits add up to the total', () => {
-		const agg = aggregate(FALLBACK_DATA.barrios);
-		expect(agg.Urbana).toBeGreaterThan(0);
-		expect(agg.Rural).toBeGreaterThan(0);
-		expect(agg.Urbana + agg.Rural).toBe(agg.total);
-	});
-
-	it('gender and age columns never exceed the row total', () => {
-		for (const b of FALLBACK_DATA.barrios) {
-			expect(b.M + b.F).toBeLessThanOrEqual(b.total);
-			expect(b.Ninos + b.Jovenes + b.Adultos + b.AdultosMayores).toBeLessThanOrEqual(b.total);
-		}
-	});
-});
+// Las pruebas que comprobaban los invariantes del snapshot de respaldo se
+// retiraron con él: ese archivo era una foto de la hoja de Google, y el tablero
+// ya no lee hojas. Lo que aquellas pruebas vigilaban —que la suma por barrio
+// cuadre con el total, que ningún barrio mezcle zona urbana y rural— ahora lo
+// produce `Rufe\Tablero` en el servidor, y se comprueba allí.
 
 describe('aggregate()', () => {
 	it('returns zeros for an empty list', () => {

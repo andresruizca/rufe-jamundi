@@ -22,26 +22,6 @@ if (!existsSync(origen)) {
 copyFileSync(origen, destino);
 console.log('postbuild: build/index.html generado desde 200.html');
 
-/**
- * Publica la lista de barrios como dato servido, fuera del paquete de
- * JavaScript.
- *
- * Se copia desde `barrioTabs.json` en vez de mantenerse un segundo archivo a
- * mano: así hay una sola fuente de verdad y es imposible que la lista compilada
- * y la publicada se desincronicen en silencio.
- *
- * Lo que esto habilita es lo importante: agregar un barrio pasa a ser subir un
- * JSON al hosting, en vez de recompilar el sitio entero y volver a publicarlo
- * —que es lo que hasta ahora pisaba el resto del trabajo desplegado.
- */
-const listaOrigen = resolve(import.meta.dirname, '..', 'src', 'lib', 'baseDatosRufe', 'barrioTabs.json');
-const listaDestino = resolve(build, 'datos', 'barrios-rufe.json');
-
-if (!existsSync(listaOrigen)) {
-	console.error('postbuild: no se encontró barrioTabs.json — ¿se movió el archivo?');
-	process.exit(1);
-}
-
-mkdirSync(resolve(build, 'datos'), { recursive: true });
-copyFileSync(listaOrigen, listaDestino);
-console.log('postbuild: build/datos/barrios-rufe.json publicado');
+// La lista de barrios de «BASE-DATOS RUFE» ya no se publica: el tablero dejó de
+// leer hojas de cálculo y el censo lo sirve la API desde MySQL. Publicar un dato
+// que nadie consulta solo deja una pista falsa para quien venga después.

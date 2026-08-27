@@ -1,4 +1,4 @@
-import { SHEET_ID } from '../rufe/source';
+import { SHEET_ID } from '../hojaExterna';
 
 /**
  * Pestaña "EQUIPAMIENTOS" de la misma hoja del RUFE — mismo mecanismo que

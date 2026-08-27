@@ -1,4 +1,4 @@
-import { SHEET_ID } from '../rufe/source';
+import { SHEET_ID } from '../hojaExterna';
 
 /**
  * Pestaña "INST EDUCATIVAS" de la misma hoja del RUFE. El export CSV
