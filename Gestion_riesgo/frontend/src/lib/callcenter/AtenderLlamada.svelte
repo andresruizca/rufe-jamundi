@@ -8,6 +8,12 @@
 	//
 	// El orden es el de la llamada, no el del formulario: primero qué decir,
 	// después con quién se habla y a qué número, y al final qué pasó.
+	//
+	// El guión sale entero desde el principio, no de a un paso. Un paso a la vez
+	// obligaba a ir oprimiendo «Siguiente» mientras se habla —una mano ocupada
+	// que no hay— y, peor, escondía lo que venía después: la operadora no podía
+	// mirar de reojo si la pregunta que le acaban de hacer está tres párrafos
+	// más abajo. Con la columna pegada y su propio desplazamiento, cabe entero.
 
 	import { onDestroy, onMount } from 'svelte';
 	import {
@@ -42,19 +48,6 @@
 	} = $props();
 
 	const secciones = $derived(leerGuion(almacenGuion.guion?.cuerpo ?? ''));
-
-	/**
-	 * En qué paso del guión va la llamada.
-	 *
-	 * Un paso a la vez y no las nueve secciones seguidas: puestas todas, hay que
-	 * desplazar media pantalla para llegar a los campos, y eso ocurre mientras
-	 * alguien espera al otro lado. Quien necesite buscar algo abre «Ver el guión
-	 * completo», que las despliega todas sin perder por dónde iba.
-	 */
-	let paso = $state(0);
-	let guionCompleto = $state(false);
-
-	const seccion = $derived(secciones[Math.min(paso, Math.max(0, secciones.length - 1))] ?? null);
 
 	let formulario = $state({ resultado: '', nota: '', proxima_llamada: '', enlace_enviado: false });
 	let guardando = $state(false);
@@ -201,63 +194,12 @@
 			</p>
 		{:else}
 			<header class="guion__cabeza">
-				<div>
-					<span class="rotulo">
-						Guión · paso {Math.min(paso, secciones.length - 1) + 1} de {secciones.length}
-					</span>
-					<h3 class="guion__titulo">{seccion?.titulo || 'Guión de la llamada'}</h3>
-				</div>
-
-				<div class="guion__mandos">
-					<button
-						type="button"
-						class="boton boton--suave"
-						disabled={paso === 0}
-						onclick={() => (paso = Math.max(0, paso - 1))}
-					>
-						Anterior
-					</button>
-					<button
-						type="button"
-						class="boton boton--principal"
-						disabled={paso >= secciones.length - 1}
-						onclick={() => (paso = Math.min(secciones.length - 1, paso + 1))}
-					>
-						Siguiente
-					</button>
-					<button
-						type="button"
-						class="enlace"
-						onclick={() => (guionCompleto = !guionCompleto)}
-					>
-						{guionCompleto ? 'Ver un paso' : 'Ver el guión completo'}
-					</button>
-				</div>
+				<span class="rotulo">Guión de la llamada</span>
 			</header>
 
-			<!-- Los puntos no son adorno: dicen cuánto falta de la llamada, y
-			     permiten saltar a una sección concreta cuando alguien pregunta algo
-			     de otro paso. -->
-			<div class="pasos" role="tablist" aria-label="Pasos del guión">
-				{#each secciones as s, i (i)}
-					<button
-						type="button"
-						role="tab"
-						aria-selected={i === paso}
-						class="punto"
-						class:punto--hecho={i < paso}
-						class:punto--hoy={i === paso}
-						title={s.titulo}
-						onclick={() => (paso = i)}
-					>
-						<span class="visualmente-oculto">{s.titulo}</span>
-					</button>
-				{/each}
-			</div>
-
 			<div class="guion__cuerpo">
-				{#each guionCompleto ? secciones : seccion ? [seccion] : [] as s, i (i)}
-					{#if guionCompleto && s.titulo}
+				{#each secciones as s, i (i)}
+					{#if s.titulo}
 						<h4 class="guion__sub">{s.titulo}</h4>
 					{/if}
 
@@ -545,64 +487,10 @@
 
 	.guion__cabeza {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
 		gap: 0.8rem;
 		flex-wrap: wrap;
-	}
-
-	.guion__titulo {
-		margin: 0.15rem 0 0;
-		font-size: 1.15rem;
-		font-weight: 700;
-	}
-
-	.guion__mandos {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		flex-wrap: wrap;
-	}
-
-	.enlace {
-		border: none;
-		background: none;
-		color: var(--color-muted);
-		font-size: 0.78rem;
-		text-decoration: underline;
-		cursor: pointer;
-		padding: 0.2rem;
-	}
-
-	.enlace:hover {
-		color: var(--color-text);
-	}
-
-	.pasos {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-		flex-wrap: wrap;
-	}
-
-	.punto {
-		width: 0.55rem;
-		height: 0.55rem;
-		padding: 0;
-		border: none;
-		border-radius: 999px;
-		background: var(--color-border-strong);
-		cursor: pointer;
-		transition: width 0.15s ease-out;
-	}
-
-	.punto--hecho {
-		background: var(--color-muted);
-	}
-
-	.punto--hoy {
-		width: 1.6rem;
-		background: var(--color-primary);
 	}
 
 	.guion__cuerpo {

@@ -15,6 +15,8 @@ Usuario: root
 Contraseña: Oficinatic2026.$
 Ip del server contenedor: 10.214.80.12
 
+https://api.zavu.dev/v1/messages con Authorization: Bearer TU_API_KEY y header Zavu-Sender: kd74xhwdx91gf1d2wfcfzydgmd8d843y
+
 ---
 
 ## ALCANCE EXACTO (léelo con atención, no te salgas de aquí)
