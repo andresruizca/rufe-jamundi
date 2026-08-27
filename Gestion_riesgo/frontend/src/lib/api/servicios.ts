@@ -151,7 +151,17 @@ export const rufeApi = {
 		enlace.download = nombre;
 		enlace.click();
 		URL.revokeObjectURL(url);
-	}
+	},
+
+	/**
+	 * Las cifras del tablero, calculadas en el servidor.
+	 *
+	 * Antes el tablero las armaba en el navegador leyendo una hoja de Google en
+	 * vivo: mostraba un censo distinto del que usa el resto del sistema, bajaba
+	 * el censo entero al teléfono para sumarlo allí, y dependía de que esa hoja
+	 * siguiera compartida con cualquiera que tuviera el enlace.
+	 */
+	tablero: () => api.get<import('$lib/rufe/types').Dataset>('/rufe/tablero')
 };
 
 /**

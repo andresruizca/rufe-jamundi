@@ -144,6 +144,10 @@ $router->get('/acerca/actualizaciones', [$acerca, 'actualizaciones'], Auth::TODO
 // hogares damnificados, y el profesional que inspecciona viviendas no las
 // necesita para su trabajo.
 $router->get('/rufe/reportes', [$rufe, 'listar'], Auth::LECTURA_RUFE);
+// El tablero, calculado en el servidor. Antes lo armaba el navegador con una
+// hoja de Google, que además era pública: el censo de damnificados quedaba
+// descargable por quien tuviera la URL.
+$router->get('/rufe/tablero', [$rufe, 'tablero'], Auth::LECTURA_RUFE);
 $router->get('/rufe/reportes/{id}', [$rufe, 'ver'], Auth::LECTURA_RUFE);
 $router->get('/rufe/reportes/{id}/evidencias/{evidencia}', [$rufe, 'descargarEvidencia'], Auth::LECTURA_RUFE);
 

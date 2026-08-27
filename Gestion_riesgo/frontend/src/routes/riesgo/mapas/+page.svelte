@@ -15,9 +15,8 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { LoaderCircle, MapPin, Flame, TriangleAlert, RefreshCw } from '@lucide/svelte';
-	import { fetchLiveDataset } from '$lib/rufe/live';
 	import type { Dataset, Hogar } from '$lib/rufe/types';
-	import { mapaApi } from '$lib/api/servicios';
+	import { mapaApi, rufeApi } from '$lib/api/servicios';
 	import { ApiError } from '$lib/api/client';
 	import {
 		CENTRO_JAMUNDI,
@@ -95,7 +94,7 @@
 			// Y si algo falla se dice cuál: callarlo dejaba un mapa vacío sin
 			// ninguna pista de por qué.
 			const [resCenso, resFichas] = await Promise.allSettled([
-				fetchLiveDataset(),
+				rufeApi.tablero(),
 				mapaApi.fichas()
 			]);
 

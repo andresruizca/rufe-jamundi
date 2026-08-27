@@ -104,6 +104,18 @@
 
 <LiveStatus status={liveStatus} asOf={DATA.asOf} error={liveError} {refreshing} onRefresh={refresh} />
 
+<!--
+	Estas dos pestañas siguen leyendo la hoja de Google: ese censo —colegios y
+	equipamientos afectados— nunca entró al sistema, así que no hay de dónde
+	sacarlo. La pestaña de Personas sí muestra ya los datos oficiales, y quien
+	mira el tablero tiene que poder distinguir una cosa de la otra sin saber
+	cómo está hecho por dentro.
+-->
+<p class="fuente-externa">
+	Fuente: hoja de cálculo de la dependencia, no la base del sistema. Este censo
+	todavía no se ha incorporado al Sistema de Gestión del Riesgo.
+</p>
+
 <div class="advisory">
 	<svg
 		width="16"
@@ -330,4 +342,14 @@
 	.notas-list b {
 		color: var(--color-primary-dark);
 	}
+	.fuente-externa {
+		margin: 0 0 12px;
+		padding: 8px 12px;
+		border: 1px dashed var(--color-border);
+		border-radius: 8px;
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
 </style>

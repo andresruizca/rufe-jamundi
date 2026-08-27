@@ -34,7 +34,9 @@ use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
 use App\Rufe\Geocodificador;
 use App\Rufe\Radicado;
+use App\Rufe\Barrios;
 use App\Rufe\Rud;
+use App\Rufe\Tablero;
 use App\Rufe\Validador;
 use App\Inspeccion\BancoMateriales;
 use App\Inspeccion\Catalogos as CatalogosInspeccion;
@@ -644,6 +646,56 @@ prueba('otro jefe de hogar da otra huella', function (): void {
         Radicado::huella('2026-08-01', 'Calle 10', '312') !== Radicado::huella('2026-08-01', 'Calle 10', '999'),
         'el documento no influye en la huella'
     );
+});
+
+grupo('Tablero sobre datos oficiales');
+
+prueba('el mismo barrio escrito distinto se agrupa igual', function (): void {
+    // El censo lo escribe a mano: 249 nombres para lo que la Alcaldía maneja
+    // como 117 barrios. Sin agrupar, la tabla por barrio parte barrios reales
+    // en varios — y esa tabla es la que decide a dónde sale una brigada.
+    afirmar(Barrios::esMismo('Bocas Del Palo', 'Bocas del Palo'), 'solo cambia una mayúscula');
+    afirmar(Barrios::esMismo('TERRANOVA', 'Terranova'), 'solo cambian las mayúsculas');
+    afirmar(Barrios::esMismo('Barrio 12 De Octubre', '12 De Octubre'), '«barrio» no distingue nada');
+    afirmar(Barrios::esMismo('Vereda La Estrella', 'La Estrella'), '«vereda» tampoco');
+    afirmar(Barrios::esMismo('Quinamayó', 'Quinamayo'), 'la tilde no distingue');
+    afirmar(Barrios::esMismo('Villa Paz', 'Villapaz'), 'el alias del corregimiento oficial');
+});
+
+prueba('dos barrios distintos NO se fusionan', function (): void {
+    // El riesgo del otro lado: agrupar de más junta a familias de sitios
+    // distintos bajo un total que no corresponde a ninguno.
+    afirmar(! Barrios::esMismo('San Antonio', 'San Vicente'), 'son dos corregimientos');
+    afirmar(! Barrios::esMismo('Terranova', 'Terranova Sector 1'), 'el sector es otro sitio');
+    afirmar(! Barrios::esMismo('', 'Robles'), 'un nombre vacío no es ningún barrio');
+});
+
+prueba('el nombre del grupo es el que más gente escribió', function (): void {
+    // Y con empate manda el alfabético, para que dos recargas del tablero no
+    // cambien el nombre de un barrio: eso hace que parezca roto.
+    $g = Barrios::agrupar(['bocas del palo' => 3, 'Bocas Del Palo' => 9]);
+
+    afirmarIgual(1, count($g));
+    afirmarIgual('Bocas Del Palo', reset($g)['nombre']);
+});
+
+prueba('la edad se calcula contra la fecha del evento, no contra hoy', function (): void {
+    // Si se usara la fecha actual, un niño que cumple doce años cambiaría de
+    // grupo él solo y la cifra que la Alcaldía reportó el mes pasado dejaría de
+    // reproducirse.
+    afirmarIgual('Ninos', Tablero::grupoDeEdad('2020-01-01'));
+    afirmarIgual('Jovenes', Tablero::grupoDeEdad('2005-01-01'));
+    afirmarIgual('Adultos', Tablero::grupoDeEdad('1980-01-01'));
+    afirmarIgual('AdultosMayores', Tablero::grupoDeEdad('1950-01-01'));
+});
+
+prueba('sin fecha de nacimiento no se inventa un grupo de edad', function (): void {
+    // Dos tercios del censo en papel no la traen. Repartirlos «a ojo» inflaría
+    // justo los indicadores que se usan para priorizar ayuda a menores y
+    // adultos mayores.
+    afirmarIgual(null, Tablero::grupoDeEdad(null));
+    afirmarIgual(null, Tablero::grupoDeEdad(''));
+    afirmarIgual(null, Tablero::grupoDeEdad('2030-01-01'), 'una fecha futura no es una edad');
 });
 
 grupo('Censo RUD (carga desde Excel)');

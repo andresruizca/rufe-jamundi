@@ -42,6 +42,9 @@ final class Migrador
         'preinscripcion_02_video.sql',
         // Zona urbana/rural y las señales de daño que marca el ciudadano.
         'preinscripcion_03_pasos.sql',
+        // Las dos casillas de visita del RUFE en papel, que la digitalización
+        // a MySQL nunca recogió y que sí estaban en la hoja de Google.
+        'rufe_05_visita.sql',
         // Un video por cada daño marcado, en vez de un catálogo suelto que se
         // le pedía a todo el mundo. Va después de preinscripcion_02_video.sql,
         // que es quien crea `categorias_video`.

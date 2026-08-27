@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { FALLBACK_DATA } from '$lib/data';
 	import type { Zona, Dataset } from '$lib/data';
-	import { fetchLiveDataset } from '$lib/rufe/live';
+	import { rufeApi } from '$lib/api/servicios';
+	import { fechaHora } from '$lib/formato';
+	import { ApiError } from '$lib/api/client';
 	import { aggregate, filterBarrios, sortBarrios, fmt, pct } from '$lib/aggregate';
 	import type { SortKey } from '$lib/aggregate';
 	import {
@@ -56,17 +57,31 @@
 	let liveError = $state<string | undefined>(undefined);
 	let refreshing = $state(false);
 
-	const DATA = $derived(liveDataset ?? FALLBACK_DATA);
+	/**
+	 * Vacío mientras carga, y NO una foto de hace días.
+	 *
+	 * Antes había un respaldo estático del 18 de agosto que se dibujaba mientras
+	 * llegaban los datos y también cuando fallaban. Un tablero que enseña cifras
+	 * de hace diez días sin decirlo es peor que uno que dice «no pude cargar»:
+	 * nadie sospecha de un número que se ve bien.
+	 */
+	const VACIO: Dataset = { total: 0, asOf: '', barrios: [], hogares: [] };
+	const DATA = $derived(liveDataset ?? VACIO);
+
+	// La API responde la fecha en formato ISO; el tablero la enseña como se lee
+	// en Colombia. La conversión vive aquí y no en el servidor porque la hora
+	// que importa es la del navegador de quien mira.
+	const actualizado = $derived(DATA.asOf ? fechaHora(DATA.asOf) : '');
 
 	async function refresh() {
 		refreshing = true;
 		try {
-			liveDataset = await fetchLiveDataset();
+			liveDataset = await rufeApi.tablero();
 			liveStatus = 'live';
 			liveError = undefined;
 		} catch (e) {
 			liveStatus = liveDataset ? 'live' : 'stale';
-			liveError = e instanceof Error ? e.message : 'No se pudo conectar con la hoja en vivo.';
+			liveError = e instanceof ApiError ? e.message : 'No se pudieron cargar las cifras.';
 		} finally {
 			refreshing = false;
 		}
@@ -227,7 +242,21 @@
 </svelte:head>
 
 <div class="wrap">
-	<Header asOf={DATA.asOf} total={DATA.total} hogares={DATA.hogares.length} />
+	<Header asOf={actualizado} total={DATA.total} hogares={DATA.hogares.length} />
+
+	{#if DATA.warnings?.length}
+		<!--
+			Lo que el tablero tiene que advertir para no engañar a quien lo lee.
+			Un indicador calculado sobre un tercio de la gente no está mal: está
+			incompleto, y la diferencia entre las dos cosas decide si alguien lo
+			copia tal cual a un informe para la Alcaldía.
+		-->
+		<ul class="avisos">
+			{#each DATA.warnings as aviso (aviso)}
+				<li>{aviso}</li>
+			{/each}
+		</ul>
+	{/if}
 
 	<DashboardTabs bind:active={activeTab} />
 
@@ -238,7 +267,7 @@
 	{:else}
 	<LiveStatus
 		status={liveStatus}
-		asOf={DATA.asOf}
+		asOf={actualizado}
 		error={liveError}
 		{refreshing}
 		onRefresh={refresh}
@@ -1012,4 +1041,17 @@
 	footer p {
 		margin: 0 0 6px;
 	}
+	.avisos {
+		margin: 0 0 14px;
+		padding: 10px 14px 10px 30px;
+		list-style: disc;
+		border: 1px solid var(--color-border);
+		border-left: 3px solid var(--color-warning, #b58900);
+		border-radius: 8px;
+		background: var(--color-surface-alt);
+		font-size: 0.84rem;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
 </style>

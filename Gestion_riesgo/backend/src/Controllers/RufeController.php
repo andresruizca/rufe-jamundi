@@ -13,6 +13,7 @@ use App\Core\Response;
 use App\Rufe\Archivos;
 use App\Rufe\Busqueda;
 use App\Rufe\Catalogos;
+use App\Rufe\Tablero;
 use App\Rufe\Validador;
 use Throwable;
 
@@ -107,6 +108,25 @@ final class RufeController
                 'paginas' => (int) ceil($total / $porPagina),
             ],
         ]);
+    }
+
+    /**
+     * Las cifras del tablero, sobre la base oficial.
+     *
+     * Devuelve la misma forma que el tablero consumía de la hoja de Google, así
+     * que la pantalla no cambia: cambia de dónde salen los números. Y con eso
+     * se acaba que dos pantallas del mismo sistema —el tablero y la bandeja—
+     * respondan cosas distintas a «cuántos hogares hay».
+     *
+     * No se audita como acceso a datos personales: son agregados por barrio.
+     * La lista de hogares que devuelve lleva radicado y dirección, que es lo
+     * mismo que ya muestra la bandeja a este mismo rol.
+     */
+    public function tablero(Request $req): void
+    {
+        Auth::exigirUsuario($req);
+
+        Response::ok(Tablero::dataset());
     }
 
     public function ver(Request $req): void

@@ -18,11 +18,11 @@
 	<span class="dot" class:pulse={status === 'loading' || refreshing}></span>
 	<span class="text">
 		{#if status === 'loading'}
-			Conectando con la hoja en vivo…
+			Cargando las cifras del sistema…
 		{:else if status === 'live'}
-			En vivo · actualizado {asOf}
+			Datos oficiales del sistema · {asOf}
 		{:else}
-			Sin conexión con la hoja — mostrando el último snapshot ({asOf})
+			No se pudieron cargar las cifras. Vuelva a intentarlo.
 		{/if}
 	</span>
 	<button type="button" onclick={onRefresh} disabled={refreshing}>
