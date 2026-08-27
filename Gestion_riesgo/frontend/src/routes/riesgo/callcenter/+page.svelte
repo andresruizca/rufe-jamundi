@@ -334,35 +334,35 @@
 				value={resumen.por_subsanar}
 				color="var(--color-warning)"
 				icon={TriangleAlert}
-				sub="Hay que llamarlas y explicarles"
+				sub="Hay que volver a llamarlas"
 			/>
 			<KpiTile
 				label="Llamados, sin registrarse"
 				value={resumen.contactados_sin_preinscribir}
 				color="var(--color-accent)"
 				icon={CircleDot}
-				sub="Se les explicó y aún no lo hacen"
+				sub="Ya se les explicó"
 			/>
 			<KpiTile
 				label="Volver a llamar hoy"
 				value={resumen.para_hoy}
 				color="var(--color-secondary-dark)"
 				icon={Clock}
-				sub="Quedaron para hoy o antes"
+				sub="Quedaron para hoy"
 			/>
 			<KpiTile
 				label="Sin teléfono"
 				value={resumen.sin_telefono}
 				color="var(--color-muted)"
 				icon={PhoneOff}
-				sub="Por teléfono no se les llega"
+				sub="Sin número en la ficha"
 			/>
 			<KpiTile
 				label="No aplica"
 				value={resumen.no_aplica}
 				color="var(--color-muted)"
 				icon={UserCheck}
-				sub="El ingeniero las sacó de la campaña"
+				sub="Fuera de la campaña"
 			/>
 		</div>
 	{/if}
@@ -825,11 +825,48 @@
 	}
 
 
+	/* Las siete cifras en UNA fila.
+	   Son la foto de la campaña: leerlas de un vistazo es lo que hace que
+	   alguien note que «Les faltó algo» subió a treinta. Partidas en dos filas,
+	   la segunda parece una nota al pie y deja de mirarse.
+
+	   `minmax(0, 1fr)` y no `auto`: sin el mínimo en cero, una etiqueta larga
+	   —«Llamados, sin registrarse»— ensancha su columna y descuadra las otras
+	   seis. Con siete columnas iguales, la etiqueta parte en dos líneas y las
+	   tarjetas siguen midiendo lo mismo.
+
+	   Por debajo de 1150 px no caben siete legibles, así que se vuelve a
+	   repartir solo en las filas que hagan falta. */
 	.kpi-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-		gap: 0.7rem;
+		grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+		gap: 0.55rem;
 		margin-top: 1rem;
+	}
+
+	@media (min-width: 1150px) {
+		.kpi-grid {
+			grid-template-columns: repeat(7, minmax(0, 1fr));
+		}
+	}
+
+	/* Siete cifras donde antes había seis: las tarjetas se aprietan un poco.
+	   Solo aquí —KpiTile lo comparten el tablero y los mapas, donde son cuatro
+	   y tienen sitio de sobra—. El número no se toca: es lo que se lee. */
+	.kpi-grid :global(.kpi-tile) {
+		padding: 10px 11px;
+		gap: 3px;
+	}
+
+	.kpi-grid :global(.kpi-label) {
+		font-size: 11.5px;
+		gap: 5px;
+		line-height: 1.25;
+	}
+
+	.kpi-grid :global(.kpi-sub) {
+		font-size: 11px;
+		line-height: 1.3;
 	}
 
 	.pestanas {
