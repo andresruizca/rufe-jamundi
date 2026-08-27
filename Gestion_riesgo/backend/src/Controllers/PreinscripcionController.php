@@ -434,15 +434,35 @@ final class PreinscripcionController
 
         // El formato antes de gastar cubeta, igual que en la web: quien teclea
         // mal no debe quedarse sin intentos.
-        $documento = Censo::normalizar($req->texto('documento'));
+        $cuerpo = $req->todo();
+        $documento = Censo::normalizar((string) self::buscarEnCuerpo($cuerpo, ['documento']));
 
         if (! Censo::pareceCedula($documento)) {
+            // La plataforma no documenta cómo envuelve los parámetros de una
+            // herramienta, y en la primera prueba real no venían en la raíz. Se
+            // registran los NOMBRES de las claves recibidas —nunca sus valores,
+            // que incluyen la cédula— para poder ajustar sin adivinar.
+            error_log('SGR: el bot mandó un cuerpo sin cédula reconocible. Claves: '.implode(', ', self::formaDelCuerpo($cuerpo)));
+
             throw HttpError::validacion([
                 'documento' => 'Escriba su número de cédula, sin puntos ni espacios.',
             ]);
         }
 
-        foreach (self::planDeLimitesFirmado(self::origenDelBot($req->todo()), $documento) as $l) {
+        $origen = self::origenDelBot($cuerpo);
+
+        // Sin identificador del ciudadano los límites bajan a contar por cédula,
+        // que frena a quien insiste sobre una pero no a quien recorre muchas. No
+        // es un detalle menor, así que queda constancia de la forma del cuerpo
+        // —solo los NOMBRES de las claves— para poder corregir la extracción.
+        //
+        // El aviso se apaga solo: en cuanto se acierte con la clave, deja de
+        // escribirse. Si nunca aparece en el log, es que siempre se identifica.
+        if ($origen === null) {
+            error_log('SGR: el bot no manda identificador de ciudadano; se limita por cédula. Claves: '.implode(', ', self::formaDelCuerpo($cuerpo)));
+        }
+
+        foreach (self::planDeLimitesFirmado($origen, $documento) as $l) {
             try {
                 Limite::consumir($l['accion'], $l['identidad'], $l['maximo'], $l['ventana'], $l['mensaje']);
             } catch (HttpError $e) {
@@ -537,14 +557,85 @@ final class PreinscripcionController
      */
     public static function origenDelBot(array $cuerpo): ?string
     {
-        foreach (['conversationId', 'contactId', 'sessionId', 'from', 'phone'] as $clave) {
-            $v = $cuerpo[$clave] ?? null;
-            if (is_scalar($v) && trim((string) $v) !== '') {
-                return trim((string) $v);
+        return self::buscarEnCuerpo($cuerpo, ['conversationId', 'contactId', 'sessionId', 'from', 'phone']);
+    }
+
+    /**
+     * El primero de esos campos que aparezca en el cuerpo, esté donde esté.
+     *
+     * Busca por niveles y no solo en la raíz porque la plataforma del bot
+     * envuelve los parámetros de la herramienta y no documenta cómo. En la
+     * primera prueba real `documento` no llegó en la raíz, y adivinar el
+     * envoltorio es exactamente lo que deja el canal mudo cuando el proveedor
+     * lo cambia de versión.
+     *
+     * Dos reglas que no se contradicen, pero que hay que aplicar en el orden
+     * correcto:
+     *
+     *  • Entre claves DISTINTAS manda la preferencia. `conversationId` gana a
+     *    `from` esté donde esté cada uno: cuenta igual para limitar y no obliga
+     *    a manejar un número de móvil.
+     *  • Para la MISMA clave gana la más externa, que es la del llamador y no
+     *    un eco dentro del envoltorio.
+     *
+     * De ahí que el recorrido sea clave por clave, y por niveles dentro de cada
+     * una. Al revés —por niveles y probando las claves dentro— la profundidad
+     * pesaría más que la preferencia y un `from` en la raíz le ganaría a un
+     * `conversationId` un nivel más abajo.
+     *
+     * @param  array<string,mixed>  $cuerpo
+     * @param  list<string>  $claves  en orden de preferencia
+     */
+    public static function buscarEnCuerpo(array $cuerpo, array $claves, int $profundidad = 4): ?string
+    {
+        foreach ($claves as $clave) {
+            $nivel = [$cuerpo];
+
+            for ($i = 0; $i < $profundidad && $nivel !== []; $i++) {
+                foreach ($nivel as $nodo) {
+                    $v = $nodo[$clave] ?? null;
+                    if (is_scalar($v) && trim((string) $v) !== '') {
+                        return trim((string) $v);
+                    }
+                }
+
+                $siguiente = [];
+                foreach ($nivel as $nodo) {
+                    foreach ($nodo as $v) {
+                        if (is_array($v)) {
+                            $siguiente[] = $v;
+                        }
+                    }
+                }
+                $nivel = $siguiente;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Los nombres de las claves del cuerpo, hasta dos niveles. NUNCA los
+     * valores: ahí viaja la cédula.
+     *
+     * @param  array<string,mixed>  $cuerpo
+     * @return list<string>
+     */
+    public static function formaDelCuerpo(array $cuerpo): array
+    {
+        $forma = [];
+
+        foreach ($cuerpo as $k => $v) {
+            if (is_array($v)) {
+                foreach (array_keys($v) as $k2) {
+                    $forma[] = $k.'.'.$k2;
+                }
+            } else {
+                $forma[] = (string) $k;
+            }
+        }
+
+        return $forma;
     }
 
     /**

@@ -2880,6 +2880,61 @@ prueba('el identificador del ciudadano se busca en el cuerpo del bot', function 
     );
 });
 
+prueba('la cédula se encuentra aunque venga envuelta', function (): void {
+    // La plataforma del bot no documenta cómo envuelve los parámetros de una
+    // herramienta, y en la primera prueba real NO llegaron en la raíz. Buscar
+    // solo ahí es lo que dejó el canal devolviendo 422 a todo.
+    $c = 'App\\Controllers\\PreinscripcionController';
+
+    afirmarIgual('1098765432', $c::buscarEnCuerpo(['documento' => '1098765432'], ['documento']), 'en la raíz');
+    afirmarIgual('1098765432', $c::buscarEnCuerpo(['parameters' => ['documento' => '1098765432']], ['documento']), 'bajo parameters');
+    afirmarIgual('1098765432', $c::buscarEnCuerpo(['tool' => ['input' => ['documento' => '1098765432']]], ['documento']), 'dos niveles abajo');
+    afirmarIgual(null, $c::buscarEnCuerpo(['otra' => 'cosa'], ['documento']), 'si no está, null');
+});
+
+prueba('gana la clave más externa, no la más profunda', function (): void {
+    // Si el mismo nombre aparece dentro y fuera del envoltorio, el de fuera es
+    // el del llamador. Buscar en profundidad en vez de por niveles cogería el
+    // de dentro, que puede ser un eco de otra cosa.
+    $c = 'App\\Controllers\\PreinscripcionController';
+
+    afirmarIgual(
+        'fuera',
+        $c::buscarEnCuerpo(['documento' => 'fuera', 'params' => ['documento' => 'dentro']], ['documento']),
+        'el más externo gana'
+    );
+});
+
+prueba('la forma del cuerpo no incluye ningún valor', function (): void {
+    // Se registra para poder ajustar sin adivinar, y por eso mismo no puede
+    // llevar valores: ahí viaja la cédula de alguien.
+    $c = 'App\\Controllers\\PreinscripcionController';
+    $forma = $c::formaDelCuerpo(['tool' => 'verificar_rufe', 'parameters' => ['documento' => '1098765432']]);
+
+    afirmar(in_array('parameters.documento', $forma, true), 'debe describir la estructura');
+    afirmar(! in_array('1098765432', $forma, true), 'NUNCA puede filtrar la cédula');
+    afirmarIgual(
+        0,
+        count(array_filter($forma, static fn (string $x): bool => str_contains($x, '1098765432'))),
+        'ningún valor puede aparecer en la forma'
+    );
+});
+
+prueba('el orden de preferencia manda al buscar el origen', function (): void {
+    $c = 'App\\Controllers\\PreinscripcionController';
+
+    // conversationId antes que from, aunque from esté más arriba: cuenta igual
+    // y no obliga a manejar un número de móvil.
+    afirmarIgual(
+        'conv_9',
+        $c::buscarEnCuerpo(
+            ['from' => '573001112233', 'ctx' => ['conversationId' => 'conv_9']],
+            ['conversationId', 'contactId', 'sessionId', 'from', 'phone']
+        ),
+        'la preferencia de clave pesa más que la profundidad'
+    );
+});
+
 prueba('el bot responde plano, sin la envoltura ok/data', function () use ($raiz): void {
     // El motor de flujos guarda la respuesta en una variable y la compara como
     // texto; no está documentado que sepa bajar por campos anidados.
