@@ -94,6 +94,29 @@ return [
         // es público. Generar con:
         //   php -r "echo bin2hex(random_bytes(32));"
         'servicio_secreto' => '',
+
+        // Secreto con el que el bot de WhatsApp FIRMA cada llamada a
+        //   POST /preinscripcion/verificacion-bot
+        //
+        // Existe aparte de `servicio_secreto` porque las herramientas de la
+        // plataforma del bot NO PUEDEN añadir cabeceras propias: no hay manera
+        // de que manden `X-RUFE-Servicio`. Lo único que envían es una firma
+        // HMAC-SHA256 del cuerpo, en `X-Zavu-Signature`. Esa firma prueba lo
+        // mismo que el secreto en la cabecera y además cubre el cuerpo, así que
+        // nadie puede reutilizarla para consultar otra cédula.
+        //
+        // Debe ser EXACTAMENTE el mismo valor que el `webhookSecret` de la
+        // herramienta configurada en la plataforma. Si difieren, el endpoint
+        // rechaza todo y el canal queda mudo sin que aparezca ningún error del
+        // lado del bot — es el fallo más difícil de diagnosticar de este
+        // archivo.
+        //
+        // VACÍO por omisión: mientras lo esté, esa ruta responde 404.
+        //
+        // El valor real va SOLO en config.php, que no se versiona. Este archivo
+        // es público. Generar con:
+        //   php -r "echo bin2hex(random_bytes(32));"
+        'bot_secreto' => '',
     ],
 
     'geocodificacion' => [

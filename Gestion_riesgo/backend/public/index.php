@@ -123,6 +123,11 @@ $router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
 // Por POST y no por GET: una cédula en la barra de direcciones acaba en el
 // registro de accesos de Apache y en el historial del navegador.
 $router->post('/preinscripcion/verificacion', [$preinscripcion, 'verificar']);
+// La misma consulta para el bot de WhatsApp, que firma el cuerpo en vez de
+// mandar un secreto en una cabecera: sus herramientas no pueden añadir
+// cabeceras propias. Responde 404 mientras `rufe.bot_secreto` esté vacío, así
+// que existir aquí escrita no la habilita.
+$router->post('/preinscripcion/verificacion-bot', [$preinscripcion, 'verificarBot']);
 $router->post('/preinscripcion/cargas', [$preinscripcion, 'abrirCarga']);
 $router->post('/preinscripcion/cargas/{carga}/archivos', [$preinscripcion, 'subirArchivo']);
 $router->delete('/preinscripcion/cargas/{carga}/archivos/{id}', [$preinscripcion, 'eliminarArchivo']);

@@ -2747,6 +2747,187 @@ prueba('el formato de la cédula se comprueba antes de gastar cubeta', function 
     );
 });
 
+/** Atajo para el plan de la vía firmada. @return list<array<string,mixed>> */
+function planFirmado(?string $origen, string $documento = '1098765432'): array
+{
+    return App\Controllers\PreinscripcionController::planDeLimitesFirmado($origen, $documento);
+}
+
+prueba('la firma del bot se acepta en hexadecimal pelado', function (): void {
+    $secreto = str_repeat('a', 64);
+    $cuerpo = '{"documento":"1098765432"}';
+    $firma = hash_hmac('sha256', $cuerpo, $secreto);
+
+    afirmar(
+        App\Controllers\PreinscripcionController::firmaValida($cuerpo, $firma, $secreto),
+        'el formato documentado para herramientas debe valer'
+    );
+});
+
+prueba('la firma del bot se acepta también con marca de tiempo', function (): void {
+    // Los webhooks de la misma plataforma firman "{t}.{cuerpo}" y mandan
+    // `t=<epoch>,v2=<hex>`. La documentación de las herramientas es escueta y
+    // los dos formatos conviven, así que se aceptan ambos en vez de apostar.
+    $secreto = str_repeat('b', 64);
+    $cuerpo = '{"documento":"1098765432"}';
+    $t = '1786113454';
+    $cabecera = 't='.$t.',v2='.hash_hmac('sha256', $t.'.'.$cuerpo, $secreto);
+
+    afirmar(
+        App\Controllers\PreinscripcionController::firmaValida($cuerpo, $cabecera, $secreto),
+        'el formato con marca de tiempo debe valer'
+    );
+});
+
+prueba('una firma falsa no pasa', function (): void {
+    $secreto = str_repeat('c', 64);
+    $cuerpo = '{"documento":"1098765432"}';
+
+    afirmar(
+        ! App\Controllers\PreinscripcionController::firmaValida($cuerpo, str_repeat('0', 64), $secreto),
+        'una firma inventada no puede valer'
+    );
+});
+
+prueba('cambiar el cuerpo después de firmar invalida la firma', function (): void {
+    // Es lo que aporta firmar el cuerpo y no solo mandar un secreto: una firma
+    // capturada no sirve para consultar OTRA cédula.
+    $secreto = str_repeat('d', 64);
+    $firma = hash_hmac('sha256', '{"documento":"1098765432"}', $secreto);
+
+    afirmar(
+        ! App\Controllers\PreinscripcionController::firmaValida('{"documento":"9999999999"}', $firma, $secreto),
+        'la firma de una cédula no puede servir para otra'
+    );
+});
+
+prueba('sin secreto configurado ninguna firma vale', function (): void {
+    // La misma propiedad que en la vía de las cabeceras: mientras config.php no
+    // tenga un secreto, esta puerta no existe.
+    afirmar(
+        ! App\Controllers\PreinscripcionController::firmaValida('{}', hash_hmac('sha256', '{}', ''), ''),
+        'con el secreto vacío no se puede autenticar nada'
+    );
+});
+
+prueba('el bot con identificador de ciudadano usa las cubetas del ciudadano', function (): void {
+    // Las MISMAS cubetas que la vía de X-RUFE-Origen, a propósito: es la misma
+    // persona contada igual, venga por donde venga, y no dos presupuestos que
+    // se suman.
+    afirmarIgual(
+        [
+            'preinscripcion.verificar.origen.hora',
+            'preinscripcion.verificar.origen.dia',
+            'preinscripcion.verificar.servicio.hora',
+        ],
+        accionesDe(planFirmado('conv_abc123')),
+        'con identificador se cuenta por ciudadano'
+    );
+});
+
+prueba('el bot sin identificador cae a la cubeta por cédula', function (): void {
+    // El motor de flujos no expone el teléfono de quien escribe. Cuando no
+    // llega ningún identificador no hay forma de contar «por persona», y lo
+    // único que queda por debajo del techo es la cédula consultada.
+    afirmarIgual(
+        [
+            'preinscripcion.verificar.bot.cedula.dia',
+            'preinscripcion.verificar.servicio.hora',
+        ],
+        accionesDe(planFirmado(null)),
+        'sin identificador se cuenta por cédula'
+    );
+});
+
+prueba('el techo global está en las DOS ramas del bot', function (): void {
+    // Es la propiedad que de verdad importa. Sin identificador del ciudadano,
+    // el techo es lo único que impide recorrer el censo con el secreto en la
+    // mano: por cédula se frena a quien insiste sobre una, no a quien prueba
+    // muchas. Si alguna rama se quedara sin techo, esa sería la puerta.
+    foreach ([planFirmado('conv_abc123'), planFirmado(null)] as $plan) {
+        $ultimo = $plan[count($plan) - 1];
+        afirmar($ultimo['global'], 'el techo global debe cerrar todo plan del bot');
+        afirmarIgual(
+            'preinscripcion.verificar.servicio.hora',
+            $ultimo['accion'],
+            'y debe ser el mismo techo en las dos ramas'
+        );
+    }
+});
+
+prueba('dos conversaciones del bot no comparten cubeta', function (): void {
+    $a = planFirmado('conv_aaa');
+    $b = planFirmado('conv_bbb');
+
+    afirmar(
+        $a[0]['identidad'] !== $b[0]['identidad'],
+        'agotar la cubeta de una conversación no puede dejar sin servicio a otra'
+    );
+});
+
+prueba('el identificador del ciudadano se busca en el cuerpo del bot', function (): void {
+    $c = 'App\Controllers\PreinscripcionController';
+
+    afirmarIgual('conv_1', $c::origenDelBot(['conversationId' => 'conv_1']), 'conversationId');
+    afirmarIgual('cont_2', $c::origenDelBot(['contactId' => 'cont_2']), 'contactId');
+    afirmarIgual(null, $c::origenDelBot(['documento' => '1098765432']), 'sin contexto, null');
+    // Se prefiere la conversación al teléfono: cuenta igual y no obliga a
+    // manejar un número de móvil para algo que no lo necesita.
+    afirmarIgual(
+        'conv_3',
+        $c::origenDelBot(['from' => '573001112233', 'conversationId' => 'conv_3']),
+        'la conversación gana al teléfono'
+    );
+});
+
+prueba('el bot responde plano, sin la envoltura ok/data', function () use ($raiz): void {
+    // El motor de flujos guarda la respuesta en una variable y la compara como
+    // texto; no está documentado que sepa bajar por campos anidados.
+    // `{{rufe.habilitado}}` funciona seguro, `{{rufe.data.habilitado}}` es una
+    // apuesta. Y «si»/«no» en vez de true/false porque la comparación es
+    // textual y cómo serializa un booleano cada versión es justo lo que rompe
+    // un martes en producción.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = (int) strpos($php, 'public function verificarBot(Request $req): void');
+    $hasta = (int) strpos($php, 'public static function firmaValida', $desde);
+    $cuerpo = substr($php, $desde, $hasta - $desde);
+
+    afirmarIgual(0, substr_count($cuerpo, 'Response::ok'), 'el bot no debe usar la envoltura ok/data');
+    afirmar(str_contains($cuerpo, "'si' : 'no'"), 'debe responder si/no como texto');
+});
+
+prueba('el bot no revela más que la web', function () use ($raiz): void {
+    // Cambia el envoltorio, nunca el contenido: si algún día alguien añadiera
+    // aquí el nombre o el estado del caso, este endpoint dejaría de ser un
+    // booleano y pasaría a ser un buscador de damnificados — y por WhatsApp,
+    // donde cualquiera escribe desde cualquier número.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = (int) strpos($php, 'public function verificarBot(Request $req): void');
+    $hasta = (int) strpos($php, 'public static function firmaValida', $desde);
+    $cuerpo = substr($php, $desde, $hasta - $desde);
+
+    afirmarIgual(1, substr_count($cuerpo, 'Response::'), 'una sola respuesta');
+    afirmar(! str_contains($cuerpo, 'rufe_personas'), 'no debe consultar personas por su cuenta');
+    afirmar(
+        strpos($cuerpo, 'pareceCedula') < strpos($cuerpo, 'planDeLimitesFirmado'),
+        'la validación del documento debe ir antes de consumir ningún límite'
+    );
+});
+
+prueba('la firma se comprueba antes que nada', function () use ($raiz): void {
+    // Antes de mirar el documento y antes de tocar la base: quien no trae firma
+    // válida no debe poder ni provocar una consulta al censo.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = (int) strpos($php, 'public function verificarBot(Request $req): void');
+    $hasta = (int) strpos($php, 'public static function firmaValida', $desde);
+    $cuerpo = substr($php, $desde, $hasta - $desde);
+
+    afirmar(
+        strpos($cuerpo, 'firmaValida') < strpos($cuerpo, 'Censo::normalizar'),
+        'la firma se comprueba antes de leer el documento'
+    );
+});
+
 prueba('los límites del canal son más estrechos que los de la web', function (): void {
     // Una IP puede ser el celular compartido de una vereda; un número de
     // WhatsApp es una persona. Si el canal fuera más ancho, sería el camino
@@ -3117,6 +3298,13 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         // en la lista de damnificados—, y por eso devuelve un booleano y nada
         // más, va por POST y lleva doble límite de tasa. Ver Preinscripcion\Censo.
         'POST /preinscripcion/verificacion',
+        // La misma consulta para el bot de WhatsApp. Aparece en esta lista
+        // porque el router la sirve sin sesión, pero abierta no está: sin
+        // `rufe.bot_secreto` en config.php responde 404, y con él exige una
+        // firma HMAC del cuerpo. Responde exactamente lo mismo que la de
+        // arriba —si esa cédula está en el censo, y nada más— solo que plano,
+        // porque el motor de flujos del bot compara variables como texto.
+        'POST /preinscripcion/verificacion-bot',
     ], rutasPublicas($raiz));
 });
 

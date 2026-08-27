@@ -113,6 +113,21 @@ final class PreinscripcionController
     private const MAX_VERIFICACIONES_SERVICIO_HORA = 300;
 
     /**
+     * Cuántas veces se puede consultar UNA MISMA cédula desde el canal firmado.
+     *
+     * Es la cubeta de repuesto. La plataforma del bot no le pasa al endpoint
+     * ningún identificador del ciudadano —sus flujos no exponen el teléfono de
+     * quien escribe—, así que cuando no llega ninguno no hay forma de contar
+     * «por persona» y esto es lo único que queda por debajo del techo global.
+     *
+     * Frena el machaqueo sobre una cédula concreta, que es el caso real: el
+     * vecino que quiere saber si el de al lado está en el censo. NO frena
+     * recorrer cédulas distintas — para eso está el techo global, y por eso el
+     * techo no es opcional.
+     */
+    private const MAX_VERIFICACIONES_BOT_CEDULA_DIA = 20;
+
+    /**
      * La identidad con la que se cuenta el techo global.
      *
      * Constante y no la IP del bot: si el servidor del canal cambia de IP —o
@@ -373,6 +388,234 @@ final class PreinscripcionController
                 'global' => true,
             ],
         ];
+    }
+
+    /**
+     * La misma consulta, pero para el bot de WhatsApp, que firma en vez de
+     * mandar un secreto en una cabecera.
+     *
+     * Existe aparte de `verificar()` por una limitación de la plataforma del
+     * bot: sus herramientas **no pueden añadir cabeceras propias**. No hay
+     * manera de que mande `X-RUFE-Servicio` ni `X-RUFE-Origen`. Lo único que
+     * envía es una firma HMAC del cuerpo, y esa firma prueba exactamente lo
+     * mismo que probaba el secreto en la cabecera: que quien llama conoce el
+     * secreto compartido. Mejor, de hecho — la firma cubre también el cuerpo,
+     * así que nadie puede reutilizarla para consultar otra cédula.
+     *
+     * Responde PLANO —`{"habilitado":"si"}`— y no con la envoltura
+     * `{ok,data}` del resto de la API. No es descuido: el motor de flujos del
+     * bot guarda la respuesta en una variable y la compara como texto, y no
+     * está documentado que sepa bajar por campos anidados. `{{rufe.habilitado}}`
+     * funciona seguro; `{{rufe.data.habilitado}}` es una apuesta.
+     *
+     * Y «si»/«no» en vez de true/false por lo mismo: la comparación del motor
+     * es textual, y cómo serializa un booleano cada versión es justo la clase
+     * de detalle que rompe en producción un martes.
+     *
+     * La INFORMACIÓN que da es idéntica a la de `verificar()`: si esa cédula
+     * está en el censo, y nada más. Cambia el envoltorio, nunca el contenido.
+     */
+    public function verificarBot(Request $req): void
+    {
+        $secreto = (string) Config::get('rufe.bot_secreto', '');
+
+        // Sin secreto configurado la ruta NO EXISTE. Un 404 y no un 403: hasta
+        // que alguien la habilite a conciencia, quien la busque no debe poder
+        // distinguirla de una ruta que nunca se escribió.
+        if ($secreto === '' || ! self::llegoPorHttps()) {
+            throw new HttpError('No encontrado', 404);
+        }
+
+        // Mismo 404 ante una firma que no cuadra, por lo mismo: un 401 le
+        // confirmaría a quien tantea que la ruta está ahí y espera una firma.
+        if (! self::firmaValida($req->cuerpoCrudo(), $req->cabecera('X-Zavu-Signature'), $secreto)) {
+            throw new HttpError('No encontrado', 404);
+        }
+
+        // El formato antes de gastar cubeta, igual que en la web: quien teclea
+        // mal no debe quedarse sin intentos.
+        $documento = Censo::normalizar($req->texto('documento'));
+
+        if (! Censo::pareceCedula($documento)) {
+            throw HttpError::validacion([
+                'documento' => 'Escriba su número de cédula, sin puntos ni espacios.',
+            ]);
+        }
+
+        foreach (self::planDeLimitesFirmado(self::origenDelBot($req->todo()), $documento) as $l) {
+            try {
+                Limite::consumir($l['accion'], $l['identidad'], $l['maximo'], $l['ventana'], $l['mensaje']);
+            } catch (HttpError $e) {
+                if ($l['global']) {
+                    error_log(
+                        'SGR: el canal de servicio agotó su techo de '
+                        .self::MAX_VERIFICACIONES_SERVICIO_HORA.' consultas por hora.'
+                    );
+                }
+
+                throw $e;
+            }
+        }
+
+        Response::json(['habilitado' => Censo::estaInscrito($documento) ? 'si' : 'no']);
+    }
+
+    /**
+     * ¿La firma del cuerpo cuadra con el secreto compartido?
+     *
+     * Se aceptan dos formatos a propósito. El documentado para herramientas es
+     * el hexadecimal pelado; el de los webhooks de la misma plataforma es
+     * `t=<epoch>,v2=<hex>` sobre `"{t}.{cuerpo}"`. La documentación de la
+     * primera es escueta y las dos conviven, así que se prueban ambas en vez de
+     * apostar por una.
+     *
+     * No es precaución teórica: en el proveedor anterior la firma llegaba como
+     * `v1,sha256=<hex>` y quitar solo `sha256=` dejaba el `v1,` delante, con lo
+     * que NADA coincidía nunca. El canal estuvo mudo días por eso, y el síntoma
+     * —«firma inválida»— no señalaba a la causa.
+     *
+     * `hash_equals` porque una comparación normal corta en el primer byte
+     * distinto y deja adivinar la firma midiendo tiempos.
+     */
+    public static function firmaValida(string $crudo, ?string $cabecera, string $secreto): bool
+    {
+        $valor = trim((string) $cabecera);
+
+        if ($secreto === '' || $valor === '') {
+            return false;
+        }
+
+        // Formato con marca de tiempo: t=<epoch>,v2=<hex>
+        if (str_contains($valor, '=') && str_contains($valor, ',')) {
+            $marca = null;
+            $firmas = [];
+
+            foreach (explode(',', $valor) as $parte) {
+                $trozo = explode('=', trim($parte), 2);
+                if (count($trozo) !== 2) {
+                    continue;
+                }
+                [$clave, $dato] = $trozo;
+                if ($clave === 't') {
+                    $marca = $dato;
+                } else {
+                    $firmas[] = $dato;
+                }
+            }
+
+            foreach ($firmas as $firma) {
+                // Con marca: se firma "{t}.{cuerpo}". Sin ella, el cuerpo solo.
+                $candidatos = $marca === null ? [$crudo] : [$marca.'.'.$crudo, $crudo];
+                foreach ($candidatos as $carga) {
+                    if (hash_equals(hash_hmac('sha256', $carga, $secreto), $firma)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Formato documentado para herramientas: el hexadecimal, a secas.
+        return hash_equals(hash_hmac('sha256', $crudo, $secreto), $valor);
+    }
+
+    /**
+     * El identificador del ciudadano dentro del cuerpo que manda el bot, si es
+     * que manda alguno.
+     *
+     * La plataforma no documenta qué contexto acompaña a la llamada de una
+     * herramienta, así que se buscan los nombres plausibles y se acepta el
+     * primero que aparezca. Si no viene ninguno, se devuelve null y los límites
+     * se cuentan de otra forma — ver `planDeLimitesFirmado()`.
+     *
+     * Se prefiere el identificador de conversación al teléfono: sirve igual
+     * para contar y no obliga a guardar un número de móvil, ni siquiera
+     * hasheado, para algo que no lo necesita.
+     *
+     * @param  array<string,mixed>  $cuerpo
+     */
+    public static function origenDelBot(array $cuerpo): ?string
+    {
+        foreach (['conversationId', 'contactId', 'sessionId', 'from', 'phone'] as $clave) {
+            $v = $cuerpo[$clave] ?? null;
+            if (is_scalar($v) && trim((string) $v) !== '') {
+                return trim((string) $v);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Qué cubetas gasta una consulta ya autenticada por firma.
+     *
+     * Pura y aparte, por lo mismo que `planDeLimites()`: para poder comprobar
+     * las cifras sin montar MySQL.
+     *
+     * Con identificador del ciudadano se usan las MISMAS cubetas que la vía de
+     * `X-RUFE-Origen`, a propósito: es la misma persona contada igual, venga
+     * por donde venga, y no dos presupuestos que se suman.
+     *
+     * Sin él solo queda la cédula y el techo. Es más débil y conviene decirlo
+     * claro: por cédula se frena a quien insiste sobre una, no a quien recorre
+     * muchas. Mientras el bot no mande un identificador, **el techo global es
+     * la única defensa real contra enumerar el censo** con el secreto en la
+     * mano. Es la razón de que vaya siempre, en las dos ramas.
+     *
+     * @return list<array{accion:string,identidad:string,maximo:int,ventana:int,mensaje:string,global:bool}>
+     */
+    public static function planDeLimitesFirmado(?string $origen, string $documento): array
+    {
+        $identidad = $origen === null ? '' : Censo::normalizar($origen);
+        // Un identificador de conversación puede no ser numérico; si al
+        // normalizar como cédula no queda nada, se usa tal cual.
+        if ($identidad === '' && $origen !== null) {
+            $identidad = $origen;
+        }
+
+        $plan = [];
+
+        if ($identidad !== '') {
+            $plan[] = [
+                'accion' => 'preinscripcion.verificar.origen.hora',
+                'identidad' => $identidad,
+                'maximo' => self::MAX_VERIFICACIONES_ORIGEN_HORA,
+                'ventana' => 3600,
+                'mensaje' => 'Ha consultado demasiadas veces. Espere unos minutos e intente de nuevo.',
+                'global' => false,
+            ];
+            $plan[] = [
+                'accion' => 'preinscripcion.verificar.origen.dia',
+                'identidad' => $identidad,
+                'maximo' => self::MAX_VERIFICACIONES_ORIGEN_DIA,
+                'ventana' => 86400,
+                'mensaje' => 'Ha consultado demasiadas veces. '.self::LINEA_ATENCION,
+                'global' => false,
+            ];
+        } else {
+            $plan[] = [
+                'accion' => 'preinscripcion.verificar.bot.cedula.dia',
+                'identidad' => $documento,
+                'maximo' => self::MAX_VERIFICACIONES_BOT_CEDULA_DIA,
+                'ventana' => 86400,
+                'mensaje' => 'Ha consultado demasiadas veces esta cédula. '.self::LINEA_ATENCION,
+                'global' => false,
+            ];
+        }
+
+        // El techo va el ÚLTIMO y va SIEMPRE: así solo lo gasta una consulta
+        // que ya pasó su propia cubeta, y ninguna rama se queda sin él.
+        $plan[] = [
+            'accion' => 'preinscripcion.verificar.servicio.hora',
+            'identidad' => self::IDENTIDAD_SERVICIO,
+            'maximo' => self::MAX_VERIFICACIONES_SERVICIO_HORA,
+            'ventana' => 3600,
+            'mensaje' => 'El servicio está recibiendo demasiadas consultas. Intente de nuevo en unos minutos.',
+            'global' => true,
+        ];
+
+        return $plan;
     }
 
     /**

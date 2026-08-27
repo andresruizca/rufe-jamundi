@@ -9,6 +9,16 @@ final class Request
 {
     private array $cuerpo;
 
+    /**
+     * El cuerpo tal como llegó, sin decodificar.
+     *
+     * Hace falta para comprobar una firma HMAC: se calcula sobre los BYTES que
+     * mandó quien firma. Decodificar y volver a serializar cambia el orden de
+     * las claves y los espacios, y la firma deja de coincidir aunque el
+     * contenido sea el mismo.
+     */
+    private string $crudo = '';
+
     /** @param array<string,string> $params comodines de la ruta */
     public function __construct(
         public readonly string $metodo,
@@ -50,9 +60,19 @@ final class Request
             return [];
         }
 
+        // Se guarda antes de decodificar: php://input no siempre se puede
+        // volver a leer, y quien comprueba una firma necesita estos bytes.
+        $this->crudo = $crudo;
+
         $datos = json_decode($crudo, true);
 
         return is_array($datos) ? $datos : [];
+    }
+
+    /** El cuerpo sin decodificar, para comprobar firmas. Vacío en multipart. */
+    public function cuerpoCrudo(): string
+    {
+        return $this->crudo;
     }
 
     public function esMultipart(): bool
