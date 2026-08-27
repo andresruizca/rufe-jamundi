@@ -83,6 +83,44 @@ final class PreinscripcionController
     private const MAX_VERIFICACIONES_DIA = 40;
 
     /**
+     * Los mismos dos límites, pero contando por ciudadano y no por conexión.
+     *
+     * El canal de WhatsApp consulta esto desde UN solo servidor, así que por IP
+     * los mil trescientos hogares comparten una única cubeta: en la consulta 16
+     * de la hora el bot deja de funcionar para todo el mundo. La cubeta correcta
+     * no es la conexión, es la persona que está escribiendo — y esa la sabe el
+     * bot, no el servidor.
+     *
+     * Un poco más estrechos que los de IP a propósito: una IP puede ser el
+     * celular compartido de una vereda; un número de WhatsApp es una persona.
+     */
+    private const MAX_VERIFICACIONES_ORIGEN_HORA = 10;
+
+    private const MAX_VERIFICACIONES_ORIGEN_DIA = 30;
+
+    /**
+     * Techo global del canal, y la única defensa si el secreto se filtra.
+     *
+     * `X-RUFE-Origen` lo dice el propio bot. Quien robe el secreto puede
+     * inventar un número distinto en cada petición y saltarse los dos límites de
+     * arriba sin esfuerzo; esto es lo único que acota el daño.
+     *
+     * 300 por hora son cinco consultas por segundo sostenidas —de sobra para
+     * tres agentes— y convierten enumerar decenas de miles de cédulas en un
+     * trabajo de meses que además queda a la vista en `rufe_limite`. No subirlo
+     * «por si acaso»: subirlo es acortar esos meses.
+     */
+    private const MAX_VERIFICACIONES_SERVICIO_HORA = 300;
+
+    /**
+     * La identidad con la que se cuenta el techo global.
+     *
+     * Constante y no la IP del bot: si el servidor del canal cambia de IP —o
+     * hay dos— el techo tiene que seguir siendo uno solo.
+     */
+    private const IDENTIDAD_SERVICIO = 'bot';
+
+    /**
      * A dónde llamar cuando la cédula no aparece.
      *
      * Escrito una sola vez: este número es lo ÚNICO que se lleva quien no puede
@@ -183,22 +221,10 @@ final class PreinscripcionController
      */
     public function verificar(Request $req): void
     {
-        Limite::consumir(
-            'preinscripcion.verificar.hora',
-            $req->ip(),
-            self::MAX_VERIFICACIONES_HORA,
-            3600,
-            'Ha consultado demasiadas veces desde esta conexión. Espere unos minutos.'
-        );
-
-        Limite::consumir(
-            'preinscripcion.verificar.dia',
-            $req->ip(),
-            self::MAX_VERIFICACIONES_DIA,
-            86400,
-            'Ha consultado demasiadas veces desde esta conexión. '.self::LINEA_ATENCION
-        );
-
+        // El formato se comprueba ANTES de gastar cubeta. Un «12ab» no llega a
+        // preguntarle nada al censo, así que cobrárselo solo servía para que
+        // quien se equivoca tecleando se quedara sin intentos. Enumerar sigue
+        // costando lo mismo: para eso hay que mandar cédulas bien formadas.
         $documento = Censo::normalizar($req->texto('documento'));
 
         if (! Censo::pareceCedula($documento)) {
@@ -207,10 +233,168 @@ final class PreinscripcionController
             ]);
         }
 
+        foreach (self::planDeLimites(
+            $req->ip(),
+            $req->cabecera('X-RUFE-Servicio'),
+            $req->cabecera('X-RUFE-Origen'),
+            (string) Config::get('rufe.servicio_secreto', ''),
+            self::llegoPorHttps()
+        ) as $l) {
+            try {
+                Limite::consumir($l['accion'], $l['identidad'], $l['maximo'], $l['ventana'], $l['mensaje']);
+            } catch (HttpError $e) {
+                // Que el canal entero toque su techo no es algo que el ciudadano
+                // pueda resolver esperando: o hay tres veces más tráfico del
+                // previsto, o alguien está usando el secreto para enumerar. Se
+                // deja constancia sin un solo dato personal — ni el número de
+                // quien escribía, ni la cédula que consultaba.
+                if ($l['global']) {
+                    error_log(
+                        'SGR: el canal de servicio agotó su techo de '
+                        .self::MAX_VERIFICACIONES_SERVICIO_HORA.' consultas por hora.'
+                    );
+                }
+
+                throw $e;
+            }
+        }
+
         Response::ok([
             'habilitado' => Censo::estaInscrito($documento),
             'linea_atencion' => self::LINEA_ATENCION,
         ]);
+    }
+
+    /**
+     * Qué cubetas gasta esta consulta: las de la conexión, o las del ciudadano.
+     *
+     * Va aparte de `verificar()` y devuelve un plan en vez de ejecutarlo para
+     * que se pueda comprobar sin base de datos. Aquí se decide quién queda
+     * limitado y con qué números: es la clase de cosa que hay que poder probar
+     * sin montar MySQL, y las pruebas de este proyecto no lo montan.
+     *
+     * ── Cuándo se usa la vía del servicio ────────────────────────────────────
+     *
+     * Las tres condiciones, todas obligatorias:
+     *
+     * 1. **Hay secreto configurado.** Con `servicio_secreto` vacío esta vía no
+     *    existe: nadie la habilita por accidente, y el sistema se comporta
+     *    exactamente como antes de que se escribiera este método.
+     * 2. **El secreto coincide**, comparado con `hash_equals`. Un `===` corta en
+     *    el primer byte distinto y deja adivinar el secreto midiendo tiempos.
+     * 3. **Viene por HTTPS.** Un secreto compartido que viaja en claro deja de
+     *    ser un secreto en el primer salto de red.
+     *
+     * ── Y qué pasa si no se cumplen ──────────────────────────────────────────
+     *
+     * Se cae al límite por IP, el de siempre. **Nunca un 401.** Un 401 le
+     * confirmaría a quien está tanteando que acertó el nombre de la cabecera, y
+     * eso es justo lo que no puede saber: sin esa confirmación, probar
+     * cabeceras al azar es indistinguible de no probar nada.
+     *
+     * @return list<array{accion:string,identidad:string,maximo:int,ventana:int,mensaje:string,global:bool}>
+     */
+    public static function planDeLimites(
+        string $ip,
+        ?string $cabeceraSecreto,
+        ?string $cabeceraOrigen,
+        string $secretoConfigurado,
+        bool $porHttps
+    ): array {
+        // El origen es el número de WhatsApp del ciudadano. Se normaliza igual
+        // que una cédula —solo dígitos— para que «+57 318 333 3510» y
+        // «573183335103» no sean dos personas distintas con dos cubetas.
+        $origen = Censo::normalizar((string) $cabeceraOrigen);
+        $enviado = (string) $cabeceraSecreto;
+
+        $esServicio = $secretoConfigurado !== ''
+            && $enviado !== ''
+            && $porHttps
+            && hash_equals($secretoConfigurado, $enviado)
+            && $origen !== '';
+
+        if (! $esServicio) {
+            return [
+                [
+                    'accion' => 'preinscripcion.verificar.hora',
+                    'identidad' => $ip,
+                    'maximo' => self::MAX_VERIFICACIONES_HORA,
+                    'ventana' => 3600,
+                    'mensaje' => 'Ha consultado demasiadas veces desde esta conexión. Espere unos minutos.',
+                    'global' => false,
+                ],
+                [
+                    'accion' => 'preinscripcion.verificar.dia',
+                    'identidad' => $ip,
+                    'maximo' => self::MAX_VERIFICACIONES_DIA,
+                    'ventana' => 86400,
+                    'mensaje' => 'Ha consultado demasiadas veces desde esta conexión. '.self::LINEA_ATENCION,
+                    'global' => false,
+                ],
+            ];
+        }
+
+        // Sustituyen a los de IP, no se suman: por IP el canal entero es una
+        // sola conexión, que es exactamente el problema que esto resuelve.
+        //
+        // El techo global va el ÚLTIMO a propósito. Así solo lo gasta una
+        // consulta que ya pasó los límites de su ciudadano: quien insiste desde
+        // su WhatsApp se choca con su propia cubeta y no se lleva por delante la
+        // del canal.
+        return [
+            [
+                'accion' => 'preinscripcion.verificar.origen.hora',
+                'identidad' => $origen,
+                'maximo' => self::MAX_VERIFICACIONES_ORIGEN_HORA,
+                'ventana' => 3600,
+                // El mensaje de la web habla de «esta conexión», y para quien
+                // escribe por WhatsApp eso es falso: no comparte conexión con
+                // nadie. Decirle algo falso en un canal de emergencias hace que
+                // deje de creerse lo demás.
+                'mensaje' => 'Ha consultado demasiadas veces. Espere unos minutos e intente de nuevo.',
+                'global' => false,
+            ],
+            [
+                'accion' => 'preinscripcion.verificar.origen.dia',
+                'identidad' => $origen,
+                'maximo' => self::MAX_VERIFICACIONES_ORIGEN_DIA,
+                'ventana' => 86400,
+                'mensaje' => 'Ha consultado demasiadas veces. '.self::LINEA_ATENCION,
+                'global' => false,
+            ],
+            [
+                'accion' => 'preinscripcion.verificar.servicio.hora',
+                'identidad' => self::IDENTIDAD_SERVICIO,
+                'maximo' => self::MAX_VERIFICACIONES_SERVICIO_HORA,
+                'ventana' => 3600,
+                // Sin texto propio: el 429 con `Retry-After` que ya emite
+                // `Limite` es el correcto. Este caso no lo arregla el ciudadano.
+                'mensaje' => 'El servicio está recibiendo demasiadas consultas. Intente de nuevo en unos minutos.',
+                'global' => true,
+            ],
+        ];
+    }
+
+    /**
+     * ¿La petición llegó cifrada?
+     *
+     * El `.htaccess` ya redirige todo a HTTPS, pero eso es configuración que
+     * alguien puede cambiar sin darse cuenta de que de ella depende un secreto
+     * compartido. Se comprueba también aquí.
+     *
+     * `X-Forwarded-Proto` porque en hosting compartido el PHP suele estar
+     * detrás de un proxy que termina el TLS: sin mirarla, `HTTPS` viene vacía
+     * en peticiones que sí llegaron cifradas.
+     */
+    private static function llegoPorHttps(): bool
+    {
+        $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
+
+        if ($https !== '' && $https !== 'off') {
+            return true;
+        }
+
+        return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     }
 
     /**

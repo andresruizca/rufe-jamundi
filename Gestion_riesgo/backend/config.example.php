@@ -69,6 +69,31 @@ return [
         //
         // Generar con:  php -r "echo bin2hex(random_bytes(32));"
         'sal' => '',
+
+        // Secreto compartido con el canal de WhatsApp de Gestión del Riesgo.
+        //
+        // VACÍO por omisión, y eso importa: mientras lo esté, la consulta de
+        // cédula se limita por IP como siempre y esta vía NO EXISTE. Nadie la
+        // habilita por accidente.
+        //
+        // Con un valor aquí, una petición a POST /preinscripcion/verificacion
+        // que llegue por HTTPS y traiga las dos cabeceras
+        //
+        //     X-RUFE-Servicio: <este mismo secreto>
+        //     X-RUFE-Origen:   <número de WhatsApp del ciudadano, solo dígitos>
+        //
+        // se limita por el NÚMERO DEL CIUDADANO en vez de por la IP. El motivo
+        // es que el canal consulta desde un solo servidor: por IP, los mil
+        // trescientos hogares comparten una única cubeta y el bot se queda mudo
+        // para todo el mundo en la consulta 16 de la hora.
+        //
+        // El límite no se levanta, se cuenta por la clave correcta. Y sigue
+        // habiendo un techo global del canal, por si este secreto se filtra.
+        //
+        // El valor real va SOLO en config.php, que no se versiona. Este archivo
+        // es público. Generar con:
+        //   php -r "echo bin2hex(random_bytes(32));"
+        'servicio_secreto' => '',
     ],
 
     'geocodificacion' => [

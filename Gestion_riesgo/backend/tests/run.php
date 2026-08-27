@@ -2525,6 +2525,239 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
     afirmarIgual($esperadas, $alcanza);
 });
 
+grupo('El canal de WhatsApp consultando el censo');
+
+/**
+ * Atajo para leer el plan de límites con el estilo de las pruebas de al lado.
+ *
+ * @return list<array<string,mixed>>
+ */
+function planVerificar(
+    string $secretoConfigurado = '',
+    ?string $cabecera = null,
+    ?string $origen = null,
+    bool $https = true,
+    string $ip = '190.0.0.7'
+): array {
+    return App\Controllers\PreinscripcionController::planDeLimites(
+        $ip, $cabecera, $origen, $secretoConfigurado, $https
+    );
+}
+
+/** Las acciones del plan, en orden. @return list<string> */
+function accionesDe(array $plan): array
+{
+    return array_map(static fn (array $l): string => $l['accion'], $plan);
+}
+
+prueba('sin secreto configurado, la vía del servicio no existe', function (): void {
+    // Es la propiedad que hace seguro tener este código escrito: mientras nadie
+    // ponga un secreto en config.php, el sistema se comporta byte a byte como
+    // antes. Ni siquiera mandando las cabeceras correctas cambia nada.
+    $plan = planVerificar('', 'lo-que-sea', '573183335103');
+
+    afirmarIgual(
+        ['preinscripcion.verificar.hora', 'preinscripcion.verificar.dia'],
+        accionesDe($plan),
+        'con el secreto vacío se limita por IP, como siempre'
+    );
+});
+
+prueba('dos ciudadanos del canal tienen cubetas independientes', function (): void {
+    // El problema que resuelve todo esto: por IP, los mil trescientos hogares
+    // comparten una cubeta porque el bot consulta desde un solo servidor. Si
+    // las claves de dos números coincidieran, seguiríamos igual.
+    $secreto = str_repeat('a', 64);
+
+    $uno = planVerificar($secreto, $secreto, '573183335103');
+    $otro = planVerificar($secreto, $secreto, '573125755695');
+
+    afirmarIgual('573183335103', $uno[0]['identidad'], 'la cubeta es el número del ciudadano');
+    afirmarIgual('573125755695', $otro[0]['identidad'], 'y la del otro es la suya');
+    afirmar($uno[0]['identidad'] !== $otro[0]['identidad'], 'agotar uno no puede agotar el otro');
+});
+
+prueba('el número del ciudadano se normaliza como una cédula', function (): void {
+    // «+57 318 333 3510» y «573183335103» son la misma persona. Sin
+    // normalizar, cada forma de escribirlo sería una cubeta nueva y el límite
+    // por ciudadano se sortearía poniendo un espacio.
+    $secreto = str_repeat('b', 64);
+
+    afirmarIgual(
+        planVerificar($secreto, $secreto, '+57 318 333 3510')[0]['identidad'],
+        planVerificar($secreto, $secreto, '573183333510')[0]['identidad'],
+        'el mismo número escrito de dos maneras es una sola cubeta'
+    );
+});
+
+prueba('un secreto equivocado cae al límite por IP y NO da 401', function (): void {
+    // Un 401 le confirmaría a quien tantea que acertó el nombre de la cabecera.
+    // Sin esa confirmación, probar cabeceras al azar es indistinguible de no
+    // probar nada. Por eso el plan es el de siempre, no un error.
+    $plan = planVerificar(str_repeat('c', 64), 'no-es-el-secreto', '573183335103');
+
+    afirmarIgual(
+        ['preinscripcion.verificar.hora', 'preinscripcion.verificar.dia'],
+        accionesDe($plan),
+        'con secreto incorrecto se limita por IP'
+    );
+});
+
+prueba('con el secreto correcto pero sin origen, cae al límite por IP', function (): void {
+    // Sin saber quién escribe no hay cubeta por ciudadano que valga: dejarlo
+    // pasar sería levantar el límite, que es justo lo que no se puede hacer.
+    $secreto = str_repeat('d', 64);
+
+    afirmarIgual(
+        ['preinscripcion.verificar.hora', 'preinscripcion.verificar.dia'],
+        accionesDe(planVerificar($secreto, $secreto, null)),
+        'sin X-RUFE-Origen se limita por IP'
+    );
+
+    afirmarIgual(
+        ['preinscripcion.verificar.hora', 'preinscripcion.verificar.dia'],
+        accionesDe(planVerificar($secreto, $secreto, 'no-tiene-digitos')),
+        'un origen sin dígitos es como no traerlo'
+    );
+});
+
+prueba('sin HTTPS no hay vía de servicio', function (): void {
+    // Un secreto compartido que viaja en claro deja de ser un secreto en el
+    // primer salto de red.
+    $secreto = str_repeat('e', 64);
+
+    afirmarIgual(
+        ['preinscripcion.verificar.hora', 'preinscripcion.verificar.dia'],
+        accionesDe(planVerificar($secreto, $secreto, '573183335103', false)),
+        'en claro se limita por IP'
+    );
+});
+
+prueba('el canal siempre tiene un techo global, cualquiera que sea el origen', function (): void {
+    // Es la única defensa si el secreto se filtra: el origen lo dice el propio
+    // bot, así que quien lo robe puede inventar uno distinto en cada petición.
+    // Que este límite falte —o que se cuente por origen— deja el censo abierto
+    // a enumeración.
+    $secreto = str_repeat('f', 64);
+
+    foreach (['573183335103', '573125755695', '573001112233'] as $numero) {
+        $plan = planVerificar($secreto, $secreto, $numero);
+        $global = array_values(array_filter($plan, static fn (array $l): bool => $l['global']));
+
+        afirmarIgual(1, count($global), 'hay exactamente un límite global');
+        afirmarIgual(
+            'bot',
+            $global[0]['identidad'],
+            'el techo se cuenta con una identidad fija, no con la del ciudadano ni la IP'
+        );
+        afirmarIgual(3600, $global[0]['ventana'], 'el techo es por hora');
+    }
+});
+
+prueba('el techo global se consume el último', function (): void {
+    // Así solo lo gasta una consulta que ya pasó los límites de su ciudadano.
+    // Al revés, alguien insistiendo desde su WhatsApp se llevaría por delante
+    // la cubeta del canal entero y dejaría al bot mudo para los demás.
+    $secreto = str_repeat('0', 64);
+    $plan = planVerificar($secreto, $secreto, '573183335103');
+
+    afirmarIgual(
+        [
+            'preinscripcion.verificar.origen.hora',
+            'preinscripcion.verificar.origen.dia',
+            'preinscripcion.verificar.servicio.hora',
+        ],
+        accionesDe($plan),
+        'primero el ciudadano, después el canal'
+    );
+    afirmar($plan[2]['global'], 'el último es el global');
+});
+
+prueba('el ciudadano del canal nunca lee «desde esta conexión»', function (): void {
+    // Quien escribe por WhatsApp no comparte conexión con nadie: decírselo es
+    // mentirle, y en un canal de emergencias eso hace que deje de creerse lo
+    // demás que se le diga.
+    $secreto = str_repeat('9', 64);
+
+    foreach (planVerificar($secreto, $secreto, '573183335103') as $l) {
+        afirmar(
+            ! str_contains($l['mensaje'], 'esta conexión'),
+            "el mensaje de «{$l['accion']}» habla de una conexión que el ciudadano no comparte"
+        );
+    }
+});
+
+prueba('el tráfico web mantiene sus límites y sus mensajes', function (): void {
+    // La instrucción era clara: para la web no puede cambiar nada.
+    $plan = planVerificar();
+
+    afirmarIgual(15, $plan[0]['maximo'], '15 por hora, como siempre');
+    afirmarIgual(3600, $plan[0]['ventana'], 'ventana de una hora');
+    afirmarIgual(40, $plan[1]['maximo'], '40 por día, como siempre');
+    afirmarIgual(86400, $plan[1]['ventana'], 'ventana de un día');
+    afirmarIgual('190.0.0.7', $plan[0]['identidad'], 'la cubeta sigue siendo la IP');
+    afirmar(
+        str_contains($plan[0]['mensaje'], 'desde esta conexión'),
+        'el mensaje de la web no cambia'
+    );
+});
+
+prueba('ni el secreto ni el número salen en ningún mensaje', function (): void {
+    // Lo que se le devuelve al ciudadano acaba en el chat, y lo que va al log
+    // acaba en un archivo que nadie limpia. Ninguno de los dos es sitio para un
+    // secreto compartido ni para el teléfono de una familia damnificada.
+    $secreto = 'secreto-de-prueba-que-no-debe-aparecer';
+    $numero = '573183335103';
+
+    foreach (planVerificar($secreto, $secreto, $numero) as $l) {
+        afirmar(! str_contains($l['mensaje'], $secreto), "«{$l['accion']}» filtra el secreto");
+        afirmar(! str_contains($l['mensaje'], $numero), "«{$l['accion']}» filtra el teléfono");
+    }
+});
+
+prueba('la respuesta es la misma venga por donde venga', function () use ($raiz): void {
+    // El endpoint responde `{habilitado, linea_atencion}` y nada más. Si algún
+    // día alguien añadiera una respuesta distinta para el canal —«no estás en
+    // el censo, pero sí en este otro listado»— este endpoint dejaría de ser un
+    // booleano y pasaría a ser un buscador de damnificados.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = strpos($php, 'public function verificar(Request $req): void');
+    $hasta = strpos($php, 'public static function planDeLimites', (int) $desde);
+    $cuerpo = substr($php, (int) $desde, (int) $hasta - (int) $desde);
+
+    afirmarIgual(
+        1,
+        substr_count($cuerpo, 'Response::ok'),
+        'verificar() tiene más de una respuesta: el canal y la web deben recibir la misma'
+    );
+});
+
+prueba('el formato de la cédula se comprueba antes de gastar cubeta', function () use ($raiz): void {
+    // Un «12ab» no llega a preguntarle nada al censo. Cobrárselo solo servía
+    // para que quien se equivoca tecleando se quedara sin intentos. Enumerar
+    // sigue costando igual: para eso hay que mandar cédulas bien formadas.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = (int) strpos($php, 'public function verificar(Request $req): void');
+    $hasta = (int) strpos($php, 'public static function planDeLimites', $desde);
+    $cuerpo = substr($php, $desde, $hasta - $desde);
+
+    afirmar(
+        strpos($cuerpo, 'pareceCedula') < strpos($cuerpo, 'planDeLimites'),
+        'la validación del documento debe ir antes de consumir ningún límite'
+    );
+});
+
+prueba('los límites del canal son más estrechos que los de la web', function (): void {
+    // Una IP puede ser el celular compartido de una vereda; un número de
+    // WhatsApp es una persona. Si el canal fuera más ancho, sería el camino
+    // cómodo para enumerar.
+    $secreto = str_repeat('1', 64);
+    $plan = planVerificar($secreto, $secreto, '573183335103');
+
+    afirmar($plan[0]['maximo'] < 15, 'por hora, más estrecho que la web');
+    afirmar($plan[1]['maximo'] < 40, 'por día, más estrecho que la web');
+});
+
 grupo('Call center: qué hacer con una solicitud rechazada');
 
 prueba('solo «no aplica» saca a una familia de la campaña', function (): void {
