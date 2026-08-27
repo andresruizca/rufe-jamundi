@@ -242,7 +242,7 @@
 				aria-valuenow={procesadas}
 				aria-label="Direcciones procesadas"
 			>
-				<span class="barra__hecho" style="width:{avance}%"></span>
+				<span class="barra__hecho" class:barra__hecho--algo={procesadas > 0} style="width:{avance}%"></span>
 				<span class="barra__cifra">{avance}%</span>
 			</div>
 		{/if}
@@ -316,7 +316,7 @@
 				</button>
 				<span class="progreso">
 					<LoaderCircle size={15} class="girando" aria-hidden="true" />
-					{procesadas} de {alArrancar} · {ubicadas} ubicadas
+					{avance}% · {procesadas} de {alArrancar} · {ubicadas} ubicadas
 					{#if minutosFaltan !== null}
 						· faltan unos {minutosFaltan} min
 					{/if}
@@ -439,7 +439,9 @@
 	   botón, habría que buscarla cada vez. */
 	.barra {
 		position: relative;
-		height: 1.35rem;
+		display: flex;
+		align-items: center;
+		height: 1.6rem;
 		margin: 0.2rem 0 1rem;
 		border-radius: 999px;
 		background: var(--color-surface-alt);
@@ -456,18 +458,70 @@
 		transition: width 400ms ease;
 	}
 
+	/* Con menos del 2 % el relleno era una raya de un píxel: se veía igual que
+	   una barra vacía, que es justo lo que hacía dudar de si el proceso corría. */
+	.barra__hecho--algo {
+		min-width: 1.6rem;
+	}
+
+	/*
+		El brillo que recorre la parte hecha.
+		Entre lote y lote pasan hasta treinta segundos sin que el porcentaje se
+		mueva. Sin algo vivo, una barra quieta durante medio minuto se lee como un
+		proceso colgado — y quien la mira cierra la pantalla, que es lo peor que
+		puede pasar aquí.
+	*/
+	.barra__hecho::after {
+		content: '';
+		display: block;
+		height: 100%;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			rgb(255 255 255 / 28%) 50%,
+			transparent 100%
+		);
+		animation: recorrer 1.4s linear infinite;
+	}
+
+	@keyframes recorrer {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(100%);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.barra__hecho::after {
+			animation: none;
+		}
+	}
+
+	/*
+		La cifra, en texto normal y sin trucos de mezcla.
+		Antes iba con `mix-blend-mode: difference` y un `filter` para que se leyera
+		sobre las dos mitades de la barra. El filtro convierte a ese elemento en su
+		propia raíz de composición y la mezcla acababa pintando un rectángulo
+		opaco sobre TODA la barra: se tapaban el relleno y la propia cifra, y la
+		barra parecía vacía aunque el proceso fuera por el 18 %.
+	*/
 	.barra__cifra {
 		position: absolute;
 		inset: 0;
 		display: grid;
 		place-items: center;
-		font-size: 0.75rem;
+		font-size: 0.78rem;
 		font-weight: 700;
-		/* Mezcla para que se lea sobre las dos mitades de la barra, la llena y la
-		   vacía, sin tener que moverla de sitio. */
 		color: var(--color-text);
-		mix-blend-mode: difference;
-		filter: invert(1) grayscale(1) contrast(3);
+		/* Un contorno oscuro basta para que se lea igual sobre el azul del
+		   relleno y sobre el fondo vacío, sin depender del tema. */
+		text-shadow:
+			0 1px 2px rgb(0 0 0 / 65%),
+			0 0 3px rgb(0 0 0 / 45%);
+		pointer-events: none;
 	}
+
 
 </style>
