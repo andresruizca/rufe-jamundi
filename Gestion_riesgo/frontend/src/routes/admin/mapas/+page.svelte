@@ -162,7 +162,20 @@
 				ubicadas += r.ubicadas;
 				await refrescar();
 
-				if (r.procesadas === 0 || r.pendientes === 0) break;
+				if (r.pendientes === 0) break;
+
+				// Cero procesadas con pendientes por hacer no es «ya está»: es que
+				// el servidor no encontró ninguna que le tocara. Antes esto se
+				// trataba igual que terminar, y la pantalla se detenía sin decir
+				// nada —parecía que el botón no hacía nada—.
+				if (r.procesadas === 0) {
+					error =
+						'El servidor no devolvió ninguna dirección para procesar, aunque quedan '
+						+ r.pendientes
+						+ ' pendientes. Vuelva a intentarlo; si sigue igual, avise.';
+
+					break;
+				}
 			} catch (e) {
 				error = e instanceof ApiError ? e.message : 'Se interrumpió la ubicación.';
 				break;
@@ -236,14 +249,25 @@
 			-->
 			<div
 				class="barra"
+				class:barra--esperando={procesadas === 0}
 				role="progressbar"
 				aria-valuemin="0"
 				aria-valuemax={alArrancar}
 				aria-valuenow={procesadas}
 				aria-label="Direcciones procesadas"
 			>
-				<span class="barra__hecho" class:barra__hecho--algo={procesadas > 0} style="width:{avance}%"></span>
-				<span class="barra__cifra">{avance}%</span>
+				<span
+					class="barra__hecho"
+					class:barra__hecho--algo={procesadas > 0}
+					style="width:{procesadas === 0 ? 100 : avance}%"
+				></span>
+				<span class="barra__cifra">
+					{#if procesadas === 0}
+						Consultando el primer grupo…
+					{:else}
+						{avance}%
+					{/if}
+				</span>
 			</div>
 		{/if}
 
@@ -316,7 +340,11 @@
 				</button>
 				<span class="progreso">
 					<LoaderCircle size={15} class="girando" aria-hidden="true" />
-					{avance}% · {procesadas} de {alArrancar} · {ubicadas} ubicadas
+					{#if procesadas === 0}
+						Consultando las primeras direcciones… puede tardar medio minuto
+					{:else}
+						{avance}% · {procesadas} de {alArrancar} · {ubicadas} ubicadas
+					{/if}
 					{#if minutosFaltan !== null}
 						· faltan unos {minutosFaltan} min
 					{/if}
@@ -523,5 +551,16 @@
 		pointer-events: none;
 	}
 
+
+	/*
+		Mientras no vuelve el primer lote no hay porcentaje que enseñar: la barra
+		se llena entera de un tono apagado y deja que la corra el brillo. Es la
+		diferencia entre «está trabajando» y «se colgó», y son hasta veinte
+		segundos de espera antes de la primera cifra.
+	*/
+	.barra--esperando .barra__hecho {
+		background: color-mix(in srgb, var(--color-primary) 35%, transparent);
+		transition: none;
+	}
 
 </style>

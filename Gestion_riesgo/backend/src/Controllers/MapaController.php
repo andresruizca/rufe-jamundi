@@ -31,8 +31,17 @@ final class MapaController
     /** Cuántas direcciones acepta consultar de una vez. */
     private const MAX_CONSULTA = 3000;
 
-    /** Cuántas se geocodifican por llamada, para no agotar el tiempo de PHP. */
-    private const LOTE = 10;
+    /**
+     * Cuántas se geocodifican por llamada.
+     *
+     * Seis y no diez desde que una dirección puede costar hasta cuatro
+     * consultas —con barrio, sin barrio, el barrio solo y el corregimiento—,
+     * cada una con su segundo de pausa. Con diez, un lote podía tardar cuarenta
+     * segundos: cuarenta segundos en los que la pantalla no recibe ni una cifra
+     * y parece colgada. Con seis la barra se mueve cada veinte, y el tiempo
+     * total es el mismo.
+     */
+    private const LOTE = 6;
 
     /**
      * Devuelve las coordenadas conocidas de una lista de direcciones y apunta
@@ -342,24 +351,30 @@ final class MapaController
         // cortaría a la mitad y la pantalla no sabría por dónde iba.
         @set_time_limit(180);
 
-        // Se piden más de las que caben en un lote y se filtran aquí: solo se
-        // gastan consultas en direcciones que el censo de hoy va a dibujar. Las
-        // que quedaron de la fuente anterior se saltan — geocodificarlas serían
-        // treinta minutos de espera para un punto que nadie va a ver.
+        // Solo se gastan consultas en direcciones que el censo de hoy va a
+        // dibujar; las que quedaron de la fuente anterior se saltan.
         $contextos = $this->contextoPorClave();
         $enUso = $contextos;
 
-        $candidatas = Db::all(
-            'SELECT clave, direccion FROM rufe_geocodificacion
-              WHERE latitud IS NULL AND intentos < :max
-              ORDER BY intentos ASC, creado_en ASC
-              LIMIT '.(self::LOTE * 40),
-            ['max' => Geocodificador::MAX_INTENTOS]
-        );
-
+        // Se recorre la cola ENTERA y se filtra aquí. Antes se pedían las
+        // primeras cuatrocientas y se filtraban esas, y el proceso se quedaba
+        // parado sin procesar nada: la cola está ordenada por antigüedad, y las
+        // ochocientas obsoletas —que entraron cuando el tablero leía una hoja
+        // de cálculo— son TODAS más viejas que las del censo actual. Las
+        // cuatrocientas primeras eran obsoletas siempre, así que el lote salía
+        // vacío, la pantalla recibía «cero procesadas» y se detenía como si ya
+        // no quedara nada por hacer.
+        //
+        // Son un par de miles de filas de dos columnas: recorrerlas cuesta
+        // menos que la primera consulta de red del lote.
         $pendientes = [];
 
-        foreach ($candidatas as $fila) {
+        foreach (Db::all(
+            'SELECT clave, direccion FROM rufe_geocodificacion
+              WHERE latitud IS NULL AND intentos < :max
+              ORDER BY intentos ASC, creado_en ASC',
+            ['max' => Geocodificador::MAX_INTENTOS]
+        ) as $fila) {
             if (! isset($enUso[(string) $fila['clave']])) {
                 continue;
             }
