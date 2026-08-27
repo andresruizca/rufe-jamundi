@@ -312,6 +312,13 @@ h3 {
 
 /* ── Contenido ────────────────────────────────────────────────────────── */
 
+/* El alto de la barra, disponible para las páginas: lo usan las que traen su
+   propia barra pegajosa para colocarse justo debajo. */
+.app,
+.contenido {
+	--alto-barra: 3.8rem;
+}
+
 .contenido {
 	display: flex;
 	flex-direction: column;
@@ -319,10 +326,32 @@ h3 {
 	min-width: 0;
 }
 
+/*
+ * La barra superior manda sobre todo lo que se desplaza.
+ *
+ * Estaba en z-index 20, el mismo que la barra de filtros del tablero. A igual
+ * altura gana quien va después en el documento, así que al bajar por el tablero
+ * los filtros se subían encima del menú y del rastro de navegación. La barra es
+ * lo único que no se mueve de la pantalla: tiene que quedar por encima de
+ * cualquier cosa pegajosa que traiga una página.
+ *
+ * Se queda por debajo del menú lateral (60) y de su velo (55), que sí deben
+ * taparla cuando se abren.
+ */
 .barra {
 	position: sticky;
 	top: 0;
-	z-index: 20;
+	z-index: 40;
+
+	/*
+	 * Su alto, publicado para quien lo necesite.
+	 *
+	 * Una página con su propia barra pegajosa tiene que saber a qué altura
+	 * pegarse para quedar DEBAJO de esta y no encima. Con `min-height` fijo el
+	 * número no puede desfasarse de la realidad al cambiar el relleno.
+	 */
+	--alto-barra: 3.8rem;
+	min-height: var(--alto-barra);
 	display: flex;
 	align-items: center;
 

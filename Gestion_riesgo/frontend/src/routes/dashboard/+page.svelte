@@ -777,8 +777,11 @@
 		padding: 10px;
 		box-shadow: var(--shadow);
 		position: sticky;
-		top: 8px;
-		z-index: 20;
+		/* Debajo de la barra superior, no encima: a la misma altura de
+		   apilamiento ganaba esta por ir después en el documento y tapaba el
+		   menú y el rastro de navegación. */
+		top: calc(var(--alto-barra, 3.8rem) + 8px);
+		z-index: 15;
 	}
 	@media (min-width: 720px) {
 		.filterbar {
