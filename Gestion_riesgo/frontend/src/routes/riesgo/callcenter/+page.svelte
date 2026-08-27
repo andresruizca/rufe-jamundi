@@ -825,18 +825,22 @@
 	}
 
 
-	/* Las siete cifras en UNA fila.
-	   Son la foto de la campaña: leerlas de un vistazo es lo que hace que
-	   alguien note que «Les faltó algo» subió a treinta. Partidas en dos filas,
-	   la segunda parece una nota al pie y deja de mirarse.
+	/* Las cifras de la campaña, en UNA fila.
+	   Son la foto del avance: leerlas de un vistazo es lo que hace que alguien
+	   note que «Les faltó algo» subió a treinta. Partidas en dos filas, la
+	   segunda parece una nota al pie y deja de mirarse.
 
-	   `minmax(0, 1fr)` y no `auto`: sin el mínimo en cero, una etiqueta larga
-	   —«Llamados, sin registrarse»— ensancha su columna y descuadra las otras
-	   seis. Con siete columnas iguales, la etiqueta parte en dos líneas y las
-	   tarjetas siguen midiendo lo mismo.
+	   `grid-auto-flow: column` y NO un número de columnas escrito a mano. La
+	   primera versión decía `repeat(7, …)` porque conté siete tarjetas y son
+	   ocho: la octava se fue a una segunda fila ella sola. Así la rejilla no
+	   necesita saber cuántas hay, y añadir una novena mañana no vuelve a
+	   partirla.
 
-	   Por debajo de 1150 px no caben siete legibles, así que se vuelve a
-	   repartir solo en las filas que hagan falta. */
+	   `minmax(0, 1fr)`: sin el mínimo en cero, una etiqueta larga —«Llamados,
+	   sin registrarse»— ensancha su columna y descuadra las demás.
+
+	   Por debajo de 1250 px ocho tarjetas no se leen, así que se vuelven a
+	   repartir en las filas que hagan falta. */
 	.kpi-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
@@ -844,13 +848,15 @@
 		margin-top: 1rem;
 	}
 
-	@media (min-width: 1150px) {
+	@media (min-width: 1250px) {
 		.kpi-grid {
-			grid-template-columns: repeat(7, minmax(0, 1fr));
+			grid-template-columns: none;
+			grid-auto-flow: column;
+			grid-auto-columns: minmax(0, 1fr);
 		}
 	}
 
-	/* Siete cifras donde antes había seis: las tarjetas se aprietan un poco.
+	/* Ocho cifras donde antes había cinco: las tarjetas se aprietan un poco.
 	   Solo aquí —KpiTile lo comparten el tablero y los mapas, donde son cuatro
 	   y tienen sitio de sobra—. El número no se toca: es lo que se lee. */
 	.kpi-grid :global(.kpi-tile) {
