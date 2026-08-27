@@ -176,6 +176,17 @@
 		</p>
 	{/if}
 
+	<!--
+		Dos columnas: el guión a la izquierda, ancho, y a la derecha con quién se
+		habla y qué se anota.
+
+		El guión ocupa la mayor parte porque es lo único que se lee EN VOZ ALTA
+		mientras se habla; los datos de la derecha se consultan de reojo. Apilados
+		uno debajo de otro, llegar al formulario obligaba a desplazar hasta perder
+		el guión de vista, justo cuando hace falta.
+	-->
+	<div class="atencion__cuerpo">
+
 	<!-- ① El guión ─────────────────────────────────────────────────────── -->
 	<section class="bloque bloque--guion">
 		{#if almacenGuion.cargando && secciones.length === 0}
@@ -273,6 +284,8 @@
 			</div>
 		{/if}
 	</section>
+
+	<div class="atencion__ficha-col">
 
 	<!-- ② Con quién se habla y a qué número ───────────────────────────── -->
 	<section class="bloque identidad">
@@ -411,6 +424,9 @@
 			{/if}
 		</section>
 	{/if}
+
+	</div><!-- /columna de la derecha -->
+	</div><!-- /las dos columnas -->
 </div>
 
 <style>
@@ -432,6 +448,39 @@
 		font-size: 0.78rem;
 		color: var(--color-muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.atencion__cuerpo {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.85rem;
+		align-items: start;
+	}
+
+	.atencion__ficha-col {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+		min-width: 0;
+	}
+
+	@media (min-width: 62rem) {
+		.atencion__cuerpo {
+			/* Aproximadamente 60 / 40, como en la pizarra. El guión se lleva la
+			   parte ancha porque son frases que se leen en voz alta: partidas en
+			   una columna estrecha se leen a trompicones. */
+			grid-template-columns: minmax(0, 1.5fr) minmax(20rem, 1fr);
+		}
+
+		/* El guión se queda a la vista mientras se rellena el formulario de al
+		   lado. Con desplazamiento propio: si compartiera el de la página, bajar
+		   a «¿Cómo terminó la llamada?» se lo llevaría fuera de la pantalla. */
+		.bloque--guion {
+			position: sticky;
+			top: calc(var(--alto-barra, 3.8rem) + 0.5rem);
+			max-height: calc(100vh - var(--alto-barra, 3.8rem) - 1.5rem);
+			overflow-y: auto;
+		}
 	}
 
 	.bloque {
@@ -560,8 +609,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.55rem;
-		max-height: 26rem;
-		overflow-y: auto;
 	}
 
 	.guion__sub {
@@ -644,6 +691,15 @@
 		position: sticky;
 		top: calc(var(--alto-barra, 3.8rem) + 0.5rem);
 		z-index: 5;
+	}
+
+	/* Con las dos columnas, la de la derecha es la que se desplaza y la
+	   identidad va arriba del todo: pegarla ahí la dejaría flotando sobre su
+	   propia columna sin ganar nada. */
+	@media (min-width: 62rem) {
+		.identidad {
+			position: static;
+		}
 	}
 
 	.identidad__nombre {

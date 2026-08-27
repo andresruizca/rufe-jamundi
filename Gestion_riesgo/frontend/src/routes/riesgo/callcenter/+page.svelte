@@ -372,7 +372,7 @@
 		/>
 	</div>
 {:else if verGuion}
-	<div class="atendiendo">
+	<div class="atendiendo atendiendo--estrecho">
 		<div class="atencion__barra">
 			<button type="button" class="boton boton--suave" onclick={() => (verGuion = false)}>
 				<ArrowLeft size={15} aria-hidden="true" />
@@ -640,12 +640,19 @@
 		margin-bottom: 0.85rem;
 	}
 
-	/* La pantalla de una llamada ocupa el sitio de la lista y se estrecha: son
-	   bloques de texto y campos, y a 1900 px de ancho una línea de guión se
-	   vuelve ilegible de lado a lado. */
+	/* La pantalla de una llamada ocupa el sitio de la lista, a todo el ancho:
+	   dentro ya se reparte en dos columnas —guión y datos del ciudadano—, y es
+	   ahí donde se limita el ancho de la línea de texto. */
 	.atendiendo {
+		margin-top: 1.25rem;
+	}
+
+	/* El guión leído de corrido sí se estrecha: es una sola columna de frases, y
+	   a 1900 px de ancho una línea se vuelve ilegible de lado a lado. */
+	.atendiendo--estrecho {
 		max-width: 62rem;
-		margin: 1.25rem auto 0;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
 	/* ── El teléfono ─────────────────────────────────────────────────────────
