@@ -36,10 +36,16 @@
  * hubiera decidido nada — y eso es la foto de una cédula.
  */
 export const API_CACHEABLE = [
-	// Los catálogos de los dos formatos. Sin ellos no hay ni formulario que
+	// Los catálogos de los tres formatos. Sin ellos no hay ni formulario que
 	// dibujar, y no contienen dato personal alguno.
+	//
+	// El de la pre-inscripción faltaba, y era el más importante de los tres: es
+	// el único formulario que abre un ciudadano desde su casa, muchas veces con
+	// la señal que le queda. Sin este catálogo guardado, el formulario público
+	// no se dibujaba sin conexión — la aplicación instalada abría en blanco.
 	'/api/rufe/catalogos',
 	'/api/inspeccion/catalogos',
+	'/api/preinscripcion/catalogos',
 
 	// Censo RUFE: la bandeja y la ficha.
 	'/api/rufe/reportes',
@@ -53,10 +59,18 @@ export const API_CACHEABLE = [
 	'/api/preinscripcion/fichas',
 	'/api/preinscripcion/fichas/{}',
 
+	// Solicitudes ciudadanas: las cifras de avance de la bandeja.
+	'/api/preinscripcion/resumen',
+
 	// Mapa y tablero.
+	//
+	// `/api/rufe/tablero` entró al pasar el tablero de leer una hoja de Google a
+	// leer la base. Sin él aquí, el tablero y los mapas —que también lo usan—
+	// dejaron de funcionar sin señal el día que se hizo ese cambio, sin que
+	// nada lo avisara: la lista de lo que se guarda no sabe de rutas nuevas.
 	'/api/mapa/fichas',
 	'/api/mapa/ubicaciones/{}',
-	'/api/rufe/estadisticas',
+	'/api/rufe/tablero',
 
 	// Call center.
 	'/api/callcenter/hogares',

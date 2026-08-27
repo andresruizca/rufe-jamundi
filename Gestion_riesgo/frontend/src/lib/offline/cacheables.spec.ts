@@ -84,3 +84,30 @@ describe('la lista', () => {
 		expect(API_CACHEABLE.filter((r) => /fotos|videos|evidencias|archivos/.test(r))).toEqual([]);
 	});
 });
+
+describe('las rutas que el sistema usa de verdad están cubiertas', () => {
+	// Esta es la prueba que faltaba. La lista de lo que se guarda no se entera
+	// de una ruta nueva: el día que el tablero pasó de leer una hoja de Google a
+	// leer la base, `/api/rufe/tablero` se quedó fuera y el tablero y los mapas
+	// dejaron de abrir sin señal, sin que nada lo avisara.
+	it('guarda el tablero, que alimenta el panel y los mapas', () => {
+		expect(seGuardaDeLaApi('/api/rufe/tablero')).toBe(true);
+	});
+
+	it('guarda el catálogo del formulario ciudadano', () => {
+		// Es el único formulario que abre un ciudadano desde su casa. Sin este
+		// catálogo, la aplicación instalada abre en blanco cuando no hay señal.
+		expect(seGuardaDeLaApi('/api/preinscripcion/catalogos')).toBe(true);
+	});
+
+	it('guarda las cifras de avance de la bandeja ciudadana', () => {
+		expect(seGuardaDeLaApi('/api/preinscripcion/resumen')).toBe(true);
+	});
+
+	it('sigue sin guardar las evidencias ni la sesión', () => {
+		// Lo que no puede acabar en un aparato prestado, pase lo que pase.
+		expect(seGuardaDeLaApi('/api/preinscripcion/fichas/3/fotos/7')).toBe(false);
+		expect(seGuardaDeLaApi('/api/rufe/reportes/3/evidencias/9')).toBe(false);
+		expect(seGuardaDeLaApi('/api/auth/login')).toBe(false);
+	});
+});

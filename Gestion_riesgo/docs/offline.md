@@ -128,3 +128,48 @@ Volver a la política anterior —solo catálogos— es dejar en `API_CACHEABLE`
 únicamente `/api/rufe/catalogos` y `/api/inspeccion/catalogos`. Nada más cambia:
 las salvaguardas siguen valiendo y las pantallas de consulta vuelven a pedir
 conexión, que es lo que el armazón ya sabe explicar.
+
+---
+
+## Revisión del 27 de agosto de 2026
+
+Auditoría de lo que había, tras una semana de cambios. Tres cosas estaban rotas
+y ninguna avisaba.
+
+### El tablero y los mapas habían dejado de funcionar sin señal
+
+Al pasar el tablero de leer una hoja de Google a leer la base, apareció
+`GET /rufe/tablero` — y la lista de lo que se guarda no se entera de una ruta
+nueva. Desde ese día las dos pantallas abrían en blanco sin conexión, y nada lo
+delataba: el fallo solo se ve poniendo el navegador en modo sin red.
+
+Ahora hay una prueba que cubre por nombre las rutas que el sistema usa de
+verdad, no solo el comportamiento del comodín.
+
+### El formulario ciudadano nunca funcionó sin señal
+
+`/api/preinscripcion/catalogos` no estaba en la lista. Sin ese catálogo no hay
+formulario que dibujar: la aplicación instalada abría en blanco.
+
+Es el más importante de los tres catálogos —es el único formulario que abre un
+ciudadano desde su casa, con la señal que le quede— y era el que faltaba.
+
+### La puerta de la cédula era un muro sin señal
+
+La primera pantalla del formulario consulta si la cédula está en el censo. Sin
+conexión eso no se puede responder, y la persona se quedaba fuera.
+
+Ahora se entra igual, con un aviso claro dentro del formulario. **No es un
+agujero**: quien decide es el servidor al recibir el envío, y esa comprobación
+no se puede saltar desde el navegador. Lo que se pierde es avisar antes; lo que
+se gana es que una familia sin señal pueda dejar su solicitud lista.
+
+### Y el botón de instalar no se veía donde hacía falta
+
+Vivía solo dentro del menú lateral del sistema. El formulario ciudadano no
+tiene menú, así que el ciudadano —el único que lo usa— nunca vio la opción de
+instalarlo. Ahora está al final del formulario.
+
+Importa más de lo que parece: instalada, el navegador deja de tratarla como una
+pestaña más que puede desalojar cuando le falte espacio, y en iPhone Safari
+desaloja la caché de los sitios NO instalados tras unos días sin usarlos.

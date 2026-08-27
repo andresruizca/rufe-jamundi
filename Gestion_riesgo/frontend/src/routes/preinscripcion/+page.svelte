@@ -38,6 +38,7 @@
 	import SelectorSenales from '$lib/preinscripcion/SelectorSenales.svelte';
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
 	import PuertaCedula from '$lib/preinscripcion/PuertaCedula.svelte';
+	import BotonInstalar from '$lib/components/layout/BotonInstalar.svelte';
 	import {
 		bloqueoDeAvance,
 		datosVacios,
@@ -116,6 +117,15 @@
 	 * envío. Esto es la cortesía de avisar antes.
 	 */
 	let habilitado = $state(false);
+
+	/**
+	 * Se entró sin poder verificar la cédula, por no haber señal.
+	 *
+	 * El formulario sigue sirviendo —quien lo abre desde su casa con la señal
+	 * que le queda tiene que poder llenarlo— pero hay que decirlo: si esa cédula
+	 * no está en el censo, el envío se rechazará al llegar.
+	 */
+	let sinVerificar = $state(false);
 
 	function entrarConCedula(documento: string) {
 		datos.documento = documento;
@@ -420,11 +430,24 @@
 			</p>
 		</div>
 	{:else if !habilitado}
-		<PuertaCedula onEntrar={entrarConCedula} />
+		<PuertaCedula onEntrar={entrarConCedula} entroSinVerificar={(v) => (sinVerificar = v)} />
 	{:else if catalogos}
 		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
 
 		<p class="ayuda-paso">{paso.ayuda}</p>
+
+		{#if sinVerificar}
+			<!--
+				Se entró sin red. No se calla: si esa cédula no está en el censo, el
+				envío se rechazará al llegar, y quien llenó cuatro pasos merece
+				saberlo antes y no después.
+			-->
+			<p class="aviso aviso--alerta" role="status">
+				<TriangleAlert size={15} aria-hidden="true" />
+				No pudimos comprobar su cédula porque no había conexión. Puede llenar el formulario; al
+				enviarlo se comprobará, y si no está en el censo se le indicará a dónde llamar.
+			</p>
+		{/if}
 
 		{#if errorEnvio}
 			<p class="aviso aviso--error" role="alert">
@@ -779,6 +802,17 @@
 			{/if}
 		</nav>
 	{/if}
+	<div class="instalar">
+		<!--
+			Instalar el formulario en el teléfono.
+			El botón existía solo dentro del menú lateral del sistema, y este
+			formulario no tiene menú: el ciudadano —el único que lo usa— nunca vio
+			la opción. Instalado, el navegador deja de tratarlo como una pestaña
+			más que puede desalojar, que es justo lo que se lleva por delante lo
+			guardado para trabajar sin señal.
+		-->
+		<BotonInstalar />
+	</div>
 </div>
 
 <style>
@@ -970,4 +1004,10 @@
 		height: 1px;
 		overflow: hidden;
 	}
+	.instalar {
+		margin-top: 1.4rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+
 </style>

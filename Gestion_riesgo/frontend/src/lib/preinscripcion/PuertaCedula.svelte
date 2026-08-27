@@ -27,11 +27,19 @@
 	type Props = {
 		/** Se llama con la cédula ya normalizada cuando el censo la reconoce. */
 		onEntrar: (documento: string) => void;
+		/** Se enciende cuando se entró sin haber podido verificar, por no haber red. */
+		entroSinVerificar?: (sinVerificar: boolean) => void;
 	};
 
-	let { onEntrar }: Props = $props();
+	let { onEntrar, entroSinVerificar }: Props = $props();
+
+	$effect(() => {
+		entroSinVerificar?.(sinRed);
+	});
 
 	let cedula = $state('');
+	/** Se entró sin poder verificar: hay que decirlo dentro del formulario. */
+	let sinRed = $state(false);
 	let consultando = $state(false);
 	let error = $state('');
 	/** El «no» del censo, que no es un error del formulario y se ve distinto. */
@@ -65,12 +73,22 @@
 
 			negado = true;
 		} catch (e) {
-			// Sin conexión NO es «su cédula no aparece». Se dice lo que pasó, y se
-			// deja el botón para volver a intentarlo cuando vuelva la señal.
+			// Sin conexión NO es «su cédula no aparece», y tampoco puede ser un
+			// muro. Quien abre esto desde su casa, con la señal que le queda,
+			// tiene que poder llenar el formulario: se sigue adelante y se avisa.
+			//
+			// No es un agujero. Quien decide es el servidor al recibir el envío, y
+			// esa comprobación no se puede saltar desde el navegador. Lo que se
+			// pierde es avisar antes; lo que se gana es que una familia sin señal
+			// pueda dejar su solicitud lista para cuando la haya.
 			if (e instanceof ApiError && e.status === 0) {
-				error =
-					'No hay conexión en este momento y necesitamos verificar su cédula. Inténtelo de nuevo cuando tenga señal.';
-			} else if (e instanceof ApiError) {
+				sinRed = true;
+				onEntrar(documento);
+
+				return;
+			}
+
+			if (e instanceof ApiError) {
 				error = e.message;
 			} else {
 				error = 'No se pudo verificar su cédula. Inténtelo de nuevo en unos minutos.';
