@@ -5,7 +5,7 @@
 	// gente envía no lo ve nadie. Por defecto se muestran las que están sin
 	// atender, que es el trabajo pendiente; el resto se consulta con el filtro.
 
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import {
 		IdCard, Image, Inbox, LoaderCircle, MapPin, Trash2, TriangleAlert, Video, X
 	} from '@lucide/svelte';
@@ -47,6 +47,35 @@
 	let cargando = $state(true);
 	let error = $state('');
 
+	// ── Búsqueda mientras se escribe ────────────────────────────────────────
+	//
+	// Quien atiende esta bandeja recibe llamadas: «soy fulano, mandé la
+	// solicitud la semana pasada». Sin buscador había que ir pasando páginas.
+	//
+	// Los dos cuidados de siempre: un retardo, para no lanzar una consulta por
+	// tecla; y un número de orden, porque las respuestas NO llegan en el orden
+	// en que se piden y la de «juan» puede contestar después que la de «juan
+	// pérez», dejando en pantalla el resultado de lo que ya no está escrito.
+	let q = $state('');
+	let buscando = $state(false);
+
+	const ESPERA_MS = 350;
+	const MINIMO_PARA_BUSCAR_SOLO = 3;
+
+	let temporizador: ReturnType<typeof setTimeout> | null = null;
+	let ultima = 0;
+
+	/** El avance del proceso, para las cifras de arriba. */
+	let resumen = $state<{
+		por_estado: Record<string, number>;
+		total: number;
+		hoy: number;
+		semana: number;
+		demoradas: number;
+		dias_demora: number;
+		mas_antigua_sin_atender: string | null;
+	} | null>(null);
+
 	const paginas = $derived(Math.max(1, Math.ceil(total / 25)));
 
 	const ESTADOS = [
@@ -64,30 +93,77 @@
 		DESCARTADA: 'Descartada'
 	};
 
-	onMount(cargar);
+	onMount(() => {
+		void cargar();
+		void cargarResumen();
+	});
+
+	onDestroy(() => {
+		if (temporizador) clearTimeout(temporizador);
+	});
 
 	async function cargar() {
-		cargando = true;
+		const mia = ++ultima;
+
+		// La primera vez toca la pantalla de carga; después se conserva la lista
+		// anterior atenuada, porque vaciar la tabla en cada pulsación la hace
+		// parpadear y quien lee pierde el sitio.
+		if (filas.length === 0) cargando = true;
+		else buscando = true;
+
 		error = '';
 
 		try {
-			const r = await preinscripcionApi.listar({ estado, pagina });
+			const r = await preinscripcionApi.listar({ estado, pagina, q });
+
+			// Llegó tarde: ya se pidió algo más nuevo.
+			if (mia !== ultima) return;
+
 			filas = r.preinscripciones as unknown as Fila[];
 			total = r.total;
 		} catch (e) {
+			if (mia !== ultima) return;
+
 			error = e instanceof ApiError ? e.message : 'No se pudieron cargar las solicitudes.';
 		} finally {
-			cargando = false;
+			if (mia === ultima) {
+				cargando = false;
+				buscando = false;
+			}
 		}
 	}
 
+	async function cargarResumen() {
+		try {
+			resumen = await preinscripcionApi.resumen();
+		} catch {
+			// El resumen es un añadido: si falla, la bandeja sigue sirviendo.
+			resumen = null;
+		}
+	}
+
+	/** Al escribir: se espera a que pare y entonces se busca. */
+	function alEscribir() {
+		if (temporizador) clearTimeout(temporizador);
+
+		const texto = q.trim();
+		if (texto !== '' && texto.length < MINIMO_PARA_BUSCAR_SOLO) return;
+
+		temporizador = setTimeout(() => {
+			pagina = 1;
+			void cargar();
+		}, ESPERA_MS);
+	}
+
 	function filtrar(valor: string) {
+		if (temporizador) clearTimeout(temporizador);
 		estado = valor;
 		pagina = 1;
 		void cargar();
 	}
 
 	function irA(n: number) {
+		if (temporizador) clearTimeout(temporizador);
 		pagina = Math.min(Math.max(1, n), paginas);
 		void cargar();
 	}
@@ -212,6 +288,9 @@
 			informeLote = r.conservadas;
 			pidiendoLote = informeLote.length > 0;
 			motivoLote = '';
+
+			// Y las cifras de arriba cambian con cada borrado.
+			void cargarResumen();
 		} catch (e) {
 			errorLote = e instanceof ApiError ? e.message : 'No se pudieron eliminar las solicitudes.';
 		} finally {
@@ -303,6 +382,66 @@
 		<CompartirFormulario />
 	</div>
 
+	{#if resumen}
+		<!--
+			Cómo va el proceso, no solo en qué casilla está cada solicitud.
+			Las tres cifras responden preguntas distintas: cuánto entra, cuánto se
+			atasca y cuánto llega a inspección. La del atasco es la que de verdad
+			manda: cien solicitudes sin atender no dicen nada si llegaron esta
+			mañana, y son un problema serio si llevan una semana.
+		-->
+		<div class="avance">
+			<div class="avance__dato">
+				<span class="avance__valor">{resumen.hoy}</span>
+				<span class="avance__nota">llegaron hoy</span>
+			</div>
+			<div class="avance__dato">
+				<span class="avance__valor">{resumen.semana}</span>
+				<span class="avance__nota">en los últimos 7 días</span>
+			</div>
+			<div class="avance__dato" class:avance__dato--alerta={resumen.demoradas > 0}>
+				<span class="avance__valor">{resumen.demoradas}</span>
+				<span class="avance__nota">
+					sin atender hace más de {resumen.dias_demora} días
+				</span>
+			</div>
+			<div class="avance__dato">
+				<span class="avance__valor">{resumen.por_estado.CONVERTIDA ?? 0}</span>
+				<span class="avance__nota">
+					llegaron a inspección
+					{#if resumen.total > 0}
+						· {Math.round(((resumen.por_estado.CONVERTIDA ?? 0) / resumen.total) * 100)}% de
+						{resumen.total}
+					{/if}
+				</span>
+			</div>
+		</div>
+	{/if}
+
+	<div class="campo buscador">
+		<label class="campo__etiqueta" for="pre-q">Buscar</label>
+		<div class="buscador__caja">
+			<input
+				id="pre-q"
+				class="campo__control"
+				type="search"
+				placeholder="Cédula, nombre, teléfono o número de radicado"
+				bind:value={q}
+				oninput={alEscribir}
+				aria-describedby="pre-q-ayuda"
+			/>
+			{#if buscando}
+				<span class="buscador__señal" aria-hidden="true">
+					<LoaderCircle size={16} class="girando" />
+				</span>
+			{/if}
+		</div>
+		<span class="campo__ayuda" id="pre-q-ayuda">
+			Busca mientras escribe. El nombre puede ir en cualquier orden; la cédula se busca completa.
+			También encuentra por dirección o barrio.
+		</span>
+	</div>
+
 	<div class="filtros" role="group" aria-label="Filtrar por estado">
 		{#each ESTADOS as e (e.valor)}
 			<button
@@ -312,7 +451,7 @@
 				aria-pressed={estado === e.valor}
 				onclick={() => filtrar(e.valor)}
 			>
-				{e.etiqueta}
+				{e.etiqueta}{#if resumen}<span class="filtro__cuenta">{e.valor === '' ? resumen.total : (resumen.por_estado[e.valor] ?? 0)}</span>{/if}
 			</button>
 		{/each}
 	</div>
@@ -356,7 +495,7 @@
 			</div>
 		{/if}
 
-		<div class="tabla-envoltura">
+		<div class="tabla-envoltura" class:tabla-envoltura--buscando={buscando} aria-busy={buscando}>
 			<table class="tabla">
 				<thead>
 					<tr>
@@ -1072,4 +1211,85 @@
 		white-space: nowrap;
 		border: 0;
 	}
+	/* ── Cómo va el proceso ──────────────────────────────────────────────────
+	   Cuatro cifras arriba del todo: es lo primero que se mira al abrir, antes
+	   incluso de saber qué solicitudes hay. */
+	.avance {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem 2rem;
+		margin: 0 0 1rem;
+		padding: 0.8rem 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		background: var(--color-surface-alt);
+	}
+
+	.avance__dato {
+		display: grid;
+		gap: 0.1rem;
+	}
+
+	.avance__valor {
+		font-size: 1.5rem;
+		font-weight: 700;
+		line-height: 1.1;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.avance__nota {
+		font-size: 0.78rem;
+		line-height: 1.35;
+		color: var(--color-muted);
+	}
+
+	/* El atasco se marca en rojo solo cuando existe. Un indicador siempre
+	   encendido deja de mirarse a la semana. */
+	.avance__dato--alerta .avance__valor {
+		color: var(--color-danger);
+	}
+
+	.buscador {
+		max-width: 32rem;
+		margin-bottom: 0.9rem;
+	}
+
+	.buscador__caja {
+		position: relative;
+	}
+
+	.buscador__caja .campo__control {
+		width: 100%;
+		padding-right: 2.4rem;
+	}
+
+	/* La señal va DENTRO del campo: fuera empujaría la fila y el formulario
+	   daría un salto con cada tecla. */
+	.buscador__señal {
+		position: absolute;
+		top: 50%;
+		right: 0.7rem;
+		transform: translateY(-50%);
+		display: flex;
+		color: var(--color-muted);
+		pointer-events: none;
+	}
+
+	/* Mientras llega el resultado nuevo se conserva el anterior atenuado.
+	   Vaciar la tabla en cada pulsación la haría parpadear. */
+	.tabla-envoltura--buscando {
+		opacity: 0.55;
+		transition: opacity 120ms ease;
+	}
+
+	.filtro__cuenta {
+		margin-left: 0.4rem;
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		background: var(--color-surface);
+		font-size: 0.72rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
 </style>

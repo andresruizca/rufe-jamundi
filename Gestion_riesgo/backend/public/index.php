@@ -214,6 +214,9 @@ $router->put('/inspeccion/fichas/{id}/estado', [$inspeccion, 'cambiarEstado'], A
 // solicitudes de ciudadanos con nombre, cédula y dirección—; decidir sobre
 // ellas, de escritura.
 $router->get('/preinscripcion/fichas', [$preinscripcion, 'listar'], Auth::LECTURA_RUFE);
+// Cómo va el proceso, no solo en qué estado está cada solicitud: cuántas
+// entraron hoy, cuántas llevan días sin atender y cuántas llegaron a inspección.
+$router->get('/preinscripcion/resumen', [$preinscripcion, 'resumen'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}', [$preinscripcion, 'ver'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}/fotos/{foto}', [$preinscripcion, 'descargarFoto'], Auth::LECTURA_RUFE);
 $router->get('/preinscripcion/fichas/{id}/videos/{video}', [$preinscripcion, 'descargarVideo'], Auth::LECTURA_RUFE);

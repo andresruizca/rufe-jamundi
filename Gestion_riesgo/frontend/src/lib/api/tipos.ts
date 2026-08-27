@@ -10,6 +10,16 @@ export type Usuario = {
 	ultimo_acceso: string | null;
 	creado_en: string;
 	/**
+	 * Cuánto trabajo lleva hecho. Solo viene en el listado.
+	 *
+	 * `null` significa «no se calculó aquí», no «cero»: en la respuesta de crear
+	 * o editar no hay conteo que dar, y mostrar un cero ahí sería mentir sobre
+	 * el trabajo de alguien.
+	 */
+	inspecciones?: number | null;
+	ultima_inspeccion?: string | null;
+	fichas_censo?: number | null;
+	/**
 	 * Datos propios del profesional que inspecciona viviendas.
 	 *
 	 * Son los del numeral 1 del formato. Viven en el usuario porque son suyos y

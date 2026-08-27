@@ -383,6 +383,23 @@ export const preinscripcionApi = {
 		}>(`/preinscripcion/fichas${consulta ? `?${consulta}` : ''}`);
 	},
 
+	/**
+	 * Cómo va el proceso, no solo en qué estado está cada solicitud.
+	 *
+	 * Las pestañas dicen cuántas hay en cada casilla; esto dice si el trabajo
+	 * avanza o se acumula, que es otra pregunta.
+	 */
+	resumen: () =>
+		api.get<{
+			por_estado: Record<string, number>;
+			total: number;
+			hoy: number;
+			semana: number;
+			demoradas: number;
+			dias_demora: number;
+			mas_antigua_sin_atender: string | null;
+		}>('/preinscripcion/resumen'),
+
 	ver: (id: number) => api.get<PreinscripcionDetalle>(`/preinscripcion/fichas/${id}`),
 
 	/** Las fotos viven fuera del docroot y solo salen con el token en la cabecera. */

@@ -2757,6 +2757,46 @@ function rutasPublicas(string $raiz): array
     return $salida;
 }
 
+prueba('el buscador de la bandeja ciudadana no repite marcadores', function () use ($raiz): void {
+    // Con preparadas nativas, un marcador repetido es «Invalid parameter
+    // number» AL PREPARAR: el buscador respondería error 500 con cualquier
+    // texto y no funcionaría nunca. Es exactamente como estuvo roto el buscador
+    // del censo durante semanas, así que aquí se vigila desde el primer día.
+    $metodo = new ReflectionMethod(App\Controllers\PreinscripcionController::class, 'busqueda');
+    $metodo->setAccessible(true);
+
+    foreach (['Juan Pérez', '16844290', 'Cra 78', 'juan 3126058353'] as $texto) {
+        [$sql, $params] = $metodo->invoke(null, $texto);
+
+        preg_match_all('/:([a-z][a-z0-9_]*)/i', $sql, $m);
+
+        foreach (array_count_values($m[1]) as $nombre => $veces) {
+            afirmarIgual(1, $veces, "el marcador «{$nombre}» aparece {$veces} veces con «{$texto}»");
+        }
+
+        $enSql = array_keys(array_count_values($m[1]));
+        $enParams = array_keys($params);
+        sort($enSql);
+        sort($enParams);
+        afirmarIgual($enSql, $enParams, "descuadre con «{$texto}»");
+    }
+});
+
+prueba('la bandeja ciudadana busca la cédula exacta, no por trozos', function (): void {
+    // Un documento parcial devolvería decenas de familias ajenas y convertiría
+    // el buscador en una forma de pasear por el censo de damnificados.
+    $metodo = new ReflectionMethod(App\Controllers\PreinscripcionController::class, 'busqueda');
+    $metodo->setAccessible(true);
+
+    [$sql, $params] = $metodo->invoke(null, '16844290');
+
+    afirmar(str_contains($sql, 'documento = :doc'), 'la cédula debe compararse exacta');
+    afirmarIgual('16844290', $params['doc']);
+
+    // Sin texto no hay condición: la bandeja entera se lista igual que antes.
+    afirmarIgual(['', []], $metodo->invoke(null, '   '));
+});
+
 prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
     // La lista va escrita a mano porque cada entrada amplía lo que un
     // desconocido puede tocar. Este sistema declaró desde el principio que todo

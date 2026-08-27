@@ -265,6 +265,12 @@
 					<th>Correo</th>
 					<th>Rol</th>
 					<th>Estado</th>
+					<!--
+						Cuánto lleva hecho cada uno. Hasta ahora esta pantalla decía quién
+						existe y cuándo entró por última vez; con seis inspectores en campo
+						la pregunta que se hace de verdad es quién está trabajando.
+					-->
+					<th>Trabajo</th>
 					<th>Último acceso</th>
 					<th><span class="visualmente-oculto">Acciones</span></th>
 				</tr>
@@ -282,6 +288,23 @@
 							<span class="etiqueta {u.activo ? 'etiqueta--activo' : 'etiqueta--inactivo'}">
 								{u.activo ? 'Activo' : 'Inactivo'}
 							</span>
+						</td>
+						<td>
+							{#if (u.inspecciones ?? 0) > 0 || (u.fichas_censo ?? 0) > 0}
+								<span class="trabajo">
+									{#if (u.inspecciones ?? 0) > 0}
+										<span><strong>{u.inspecciones}</strong> inspección(es)</span>
+									{/if}
+									{#if (u.fichas_censo ?? 0) > 0}
+										<span class="trabajo__otro"><strong>{u.fichas_censo}</strong> ficha(s) del censo</span>
+									{/if}
+									{#if u.ultima_inspeccion}
+										<span class="trabajo__otro">última: {fechaHora(u.ultima_inspeccion)}</span>
+									{/if}
+								</span>
+							{:else}
+								<span class="trabajo__nada">Sin registros</span>
+							{/if}
 						</td>
 						<td>{fechaHora(u.ultimo_acceso)}</td>
 						<td>
@@ -633,4 +656,21 @@
 		white-space: nowrap;
 		border: 0;
 	}
+	.trabajo {
+		display: grid;
+		gap: 0.1rem;
+		font-size: 0.84rem;
+		line-height: 1.35;
+	}
+
+	.trabajo__otro {
+		font-size: 0.76rem;
+		color: var(--color-muted);
+	}
+
+	.trabajo__nada {
+		font-size: 0.82rem;
+		color: var(--color-muted);
+	}
+
 </style>

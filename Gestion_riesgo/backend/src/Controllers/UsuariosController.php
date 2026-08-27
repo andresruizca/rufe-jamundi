@@ -45,7 +45,28 @@ final class UsuariosController
 
     public function listar(Request $req): void
     {
-        $usuarios = Db::all('SELECT '.self::CAMPOS.' FROM usuarios ORDER BY nombre ASC');
+        // Cuántas inspecciones y cuántas fichas del censo lleva cada uno.
+        //
+        // Van como SUBCONSULTAS y no como JOIN con GROUP BY: un JOIN a dos
+        // tablas de trabajo multiplica filas —un inspector con 12 inspecciones
+        // y 3 fichas saldría 36 veces— y el conteo se infla sin que nada lo
+        // delate. Es el mismo fallo que congeló el call center.
+        //
+        // Y sirven para algo concreto: hasta ahora la pantalla de usuarios solo
+        // decía quién existe y cuándo entró por última vez. Con esto dice
+        // quién está trabajando, que es lo que se pregunta de verdad cuando hay
+        // seis inspectores en campo.
+        $usuarios = Db::all(
+            'SELECT '.self::CAMPOS.',
+                    (SELECT COUNT(*) FROM inspeccion_viviendas i
+                      WHERE i.creado_por_usuario_id = usuarios.id) AS inspecciones,
+                    (SELECT MAX(i.creado_en) FROM inspeccion_viviendas i
+                      WHERE i.creado_por_usuario_id = usuarios.id) AS ultima_inspeccion,
+                    (SELECT COUNT(*) FROM rufe_reportes r
+                      WHERE r.creado_por_usuario_id = usuarios.id) AS fichas_censo
+               FROM usuarios
+              ORDER BY nombre ASC'
+        );
 
         Response::ok([
             'usuarios' => array_map([$this, 'presentar'], $usuarios),
@@ -306,6 +327,12 @@ final class UsuariosController
             'activo'         => (bool) $u['activo'],
             'ultimo_acceso'  => $u['ultimo_acceso'],
             'creado_en'      => $u['creado_en'],
+            // Cuánto trabajo lleva hecho. Solo viaja en el listado, donde se
+            // calcula; en las respuestas de crear o editar no hay conteo que
+            // dar y el campo llega en cero, que sería mentira.
+            'inspecciones'       => isset($u['inspecciones']) ? (int) $u['inspecciones'] : null,
+            'ultima_inspeccion'  => $u['ultima_inspeccion'] ?? null,
+            'fichas_censo'       => isset($u['fichas_censo']) ? (int) $u['fichas_censo'] : null,
             // El perfil viaja siempre, aunque el rol no sea inspector: si a
             // alguien se le cambia el rol y luego se le devuelve, sus datos
             // siguen ahí en vez de haberse perdido por el camino.

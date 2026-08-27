@@ -58,6 +58,16 @@ final class PreinscripcionController
      */
     private const MAX_BORRADO_LOTE = 50;
 
+    /**
+     * A partir de cuántos días una solicitud sin atender cuenta como demorada.
+     *
+     * Tres. No es un número redondo por gusto: quien manda la solicitud acaba
+     * de perder parte de su casa, y a los tres días sin respuesta ya está
+     * llamando al conmutador. El número existe para que el atasco se vea antes
+     * de que llame.
+     */
+    private const DIAS_DEMORA = 3;
+
     private const MAX_ENVIOS_HORA = 5;
 
     /**
@@ -599,13 +609,22 @@ final class PreinscripcionController
         Videos::reubicarPendientes();
 
         $estado = strtoupper($req->query('estado', '') ?? '');
-        $where = '';
+        $condiciones = [];
         $filtros = [];
 
         if (in_array($estado, ['RECIBIDA', 'EN_REVISION', 'CONVERTIDA', 'DESCARTADA'], true)) {
-            $where = ' WHERE estado = :estado';
+            $condiciones[] = 'estado = :estado';
             $filtros['estado'] = $estado;
         }
+
+        [$condicionBusqueda, $paramsBusqueda] = self::busqueda((string) ($req->query('q', '') ?? ''));
+
+        if ($condicionBusqueda !== '') {
+            $condiciones[] = $condicionBusqueda;
+            $filtros += $paramsBusqueda;
+        }
+
+        $where = $condiciones === [] ? '' : ' WHERE '.implode(' AND ', $condiciones);
 
         $pagina = max(1, (int) ($req->query('pagina', '1') ?? 1));
         $porPagina = 25;
@@ -628,6 +647,126 @@ final class PreinscripcionController
             'total'            => $total,
             'pagina'           => $pagina,
             'por_pagina'       => $porPagina,
+        ]);
+    }
+
+    /**
+     * La condición del buscador de la bandeja.
+     *
+     * Quien atiende esta bandeja recibe llamadas: «soy fulano, mandé la
+     * solicitud la semana pasada». Sin buscador había que ir pasando páginas.
+     *
+     * Se busca por cédula exacta, por nombre en cualquier orden, por teléfono,
+     * por radicado y por dirección o barrio. Cada una tiene su motivo:
+     *
+     *  • **Cédula exacta, no por trozos.** Un documento parcial devolvería
+     *    decenas de familias ajenas y convertiría el buscador en una forma de
+     *    pasear por el censo de damnificados.
+     *  • **Nombre en cualquier orden.** «garcía juan» encuentra a «Juan Pérez
+     *    García»: quien llama dice su nombre como le sale, no como está escrito
+     *    en la casilla. Las tildes y las mayúsculas las resuelve sola la
+     *    colación de la tabla.
+     *  • **Cada marcador aparece UNA vez.** Con preparadas nativas, repetir el
+     *    nombre de un marcador es «Invalid parameter number» al preparar — el
+     *    fallo que dejó roto el buscador del censo durante semanas.
+     *
+     * @return array{0: string, 1: array<string,string>}
+     */
+    private static function busqueda(string $texto): array
+    {
+        $texto = trim($texto);
+
+        if ($texto === '') {
+            return ['', []];
+        }
+
+        $partes = [];
+        $params = [];
+
+        $comodin = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $texto).'%';
+
+        foreach (['radicado', 'direccion', 'vereda', 'corregimiento', 'correo'] as $i => $columna) {
+            $clave = 'b'.$i;
+            $partes[] = "{$columna} LIKE :{$clave}";
+            $params[$clave] = $comodin;
+        }
+
+        $soloDigitos = preg_replace('/\D+/', '', $texto) ?? '';
+
+        if (strlen($soloDigitos) >= 4) {
+            $partes[] = 'documento = :doc';
+            $params['doc'] = $soloDigitos;
+
+            // El teléfono sí por trozos: la gente da los últimos cuatro dígitos
+            // cuando no recuerda el número entero.
+            $partes[] = 'telefono LIKE :tel';
+            $params['tel'] = '%'.$soloDigitos.'%';
+        }
+
+        $palabras = array_values(array_filter(
+            preg_split('/\s+/u', $texto) ?: [],
+            static fn (string $p): bool => mb_strlen($p) >= 2 && preg_match('/^\d+$/', $p) !== 1
+        ));
+
+        if ($palabras !== []) {
+            $porNombre = [];
+
+            foreach (array_slice($palabras, 0, 4) as $i => $palabra) {
+                $clave = 'n'.$i;
+                $porNombre[] = "nombre_completo LIKE :{$clave}";
+                $params[$clave] = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $palabra).'%';
+            }
+
+            $partes[] = '('.implode(' AND ', $porNombre).')';
+        }
+
+        return ['('.implode(' OR ', $partes).')', $params];
+    }
+
+    /**
+     * Cómo va el proceso, en cinco cifras.
+     *
+     * Las pestañas dicen en qué estado está cada solicitud, pero no si el
+     * trabajo avanza o se acumula. Para eso hacen falta tres cosas que la
+     * tabla no muestra:
+     *
+     *  • **Cuántas entraron hoy y esta semana**, que es el ritmo de llegada.
+     *  • **Cuántas llevan más de tres días sin atender.** Es el único número
+     *    que delata un atasco: cien solicitudes sin atender no dicen nada si
+     *    llegaron esta mañana, y son un problema serio si llevan una semana.
+     *  • **Cuántas terminaron en inspección.** Es la razón de ser de la
+     *    bandeja; sin esa cifra nadie sabe si el embudo está funcionando.
+     */
+    public function resumen(Request $req): void
+    {
+        Auth::exigirUsuario($req);
+
+        $porEstado = [];
+
+        foreach (Db::all('SELECT estado, COUNT(*) AS n FROM preinscripciones GROUP BY estado') as $f) {
+            $porEstado[(string) $f['estado']] = (int) $f['n'];
+        }
+
+        $cuenta = static fn (string $sql, array $p = []): int => (int) (Db::first(
+            'SELECT COUNT(*) AS n FROM preinscripciones WHERE '.$sql,
+            $p
+        )['n'] ?? 0);
+
+        Response::ok([
+            'por_estado' => $porEstado,
+            'total' => array_sum($porEstado),
+            'hoy' => $cuenta('DATE(creado_en) = CURDATE()'),
+            'semana' => $cuenta('creado_en >= (NOW() - INTERVAL 7 DAY)'),
+            // El atasco: sin atender y con más de tres días encima.
+            'demoradas' => $cuenta(
+                "estado = 'RECIBIDA' AND creado_en < (NOW() - INTERVAL :dias DAY)",
+                ['dias' => self::DIAS_DEMORA]
+            ),
+            'dias_demora' => self::DIAS_DEMORA,
+            'mas_antigua_sin_atender' => Db::first(
+                "SELECT creado_en FROM preinscripciones WHERE estado = 'RECIBIDA'
+                  ORDER BY creado_en ASC LIMIT 1"
+            )['creado_en'] ?? null,
         ]);
     }
 
