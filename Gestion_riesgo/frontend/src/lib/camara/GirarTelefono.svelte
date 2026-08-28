@@ -40,8 +40,12 @@
 		justify-content: center;
 		gap: 1rem;
 		/* Oscurece sin tapar: quien ya está encuadrando tiene que seguir viendo
-		   lo que la cámara ve, o no sabrá si giró bien. */
-		background: rgb(0 0 0 / 0.55);
+		   lo que la cámara ve, o no sabrá si giró bien.
+
+		   0.42 y no más: esto se apila sobre el oscurecido de la silueta, y las
+		   dos capas juntas dejaban el visor casi negro en una habitación con
+		   poca luz — que es justo donde se llena este formulario de noche. */
+		background: rgb(0 0 0 / 0.42);
 		backdrop-filter: blur(1px);
 		pointer-events: none;
 		padding: 1rem;

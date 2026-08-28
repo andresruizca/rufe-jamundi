@@ -22,7 +22,7 @@
 	} from '@lucide/svelte';
 	import { ErrorDeVideo, RESTRICCIONES, formatoSoportado, mimeBase, subirVideo } from './video';
 	import GirarTelefono from '$lib/camara/GirarTelefono.svelte';
-	import { usarOrientacion } from '$lib/camara/orientacion.svelte';
+	import { pedirApaisado, soltarApaisado, usarOrientacion } from '$lib/camara/orientacion.svelte';
 
 	type Categoria = {
 		id: number;
@@ -62,6 +62,7 @@
 	let vistaPrevia = $state<string | null>(null);
 	let grabado = $state<Blob | null>(null);
 
+	let contenedorCamara = $state<HTMLElement | null>(null);
 	let video = $state<HTMLVideoElement | null>(null);
 	let flujo: MediaStream | null = null;
 	let grabadora: MediaRecorder | null = null;
@@ -99,6 +100,12 @@
 	function soltarCamara() {
 		flujo?.getTracks().forEach((t) => t.stop());
 		flujo = null;
+
+		// Aquí y no en cada sitio que cierra la cámara: son cuatro caminos
+		// —cerrar, terminar de grabar, que se corte sola al llegar al máximo, y
+		// salir de la página— y olvidar uno deja el formulario entero apaisado
+		// después de grabar.
+		void soltarApaisado();
 	}
 
 	function cerrarTodo() {
@@ -119,6 +126,14 @@
 
 		try {
 			flujo = await navigator.mediaDevices.getUserMedia(RESTRICCIONES);
+
+			// La pantalla se pone apaisada sola donde el navegador sabe hacerlo:
+			// así la persona solo tiene que girar el aparato para verla derecha.
+			// Va DESPUÉS de conseguir la cámara —no tiene sentido girar una
+			// pantalla que se va a quedar sin video— y antes de dibujarla, para
+			// que no se vea saltar. Donde no se pueda, queda el aviso de girar.
+			await tick();
+			if (contenedorCamara) await pedirApaisado(contenedorCamara);
 		} catch {
 			error =
 				'No se pudo abrir la cámara. Revise que le haya dado permiso al navegador y vuelva a intentarlo.';
@@ -328,7 +343,13 @@
 	un recuadro pequeño no funciona, y el video que sale de ahí tampoco.
 -->
 {#if enPantallaCompleta}
-	<div class="camara" role="dialog" aria-modal="true" aria-label="Grabar {categoria.nombre}">
+	<div
+		bind:this={contenedorCamara}
+		class="camara"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Grabar {categoria.nombre}"
+	>
 		<!-- svelte-ignore a11y_media_has_caption -->
 		<video class="camara__vista" bind:this={video} muted playsinline autoplay></video>
 

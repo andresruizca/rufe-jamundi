@@ -24,7 +24,7 @@
 	import { onDestroy } from 'svelte';
 	import { Camera, ImagePlus, RefreshCw, TriangleAlert, X } from '@lucide/svelte';
 	import GirarTelefono from './GirarTelefono.svelte';
-	import { usarOrientacion } from './orientacion.svelte';
+	import { pedirApaisado, soltarApaisado, usarOrientacion } from './orientacion.svelte';
 
 	let {
 		titulo,
@@ -41,6 +41,7 @@
 
 	const orientacion = usarOrientacion();
 
+	let contenedor = $state<HTMLElement | null>(null);
 	let video = $state<HTMLVideoElement | null>(null);
 	let flujo: MediaStream | null = null;
 	let error = $state('');
@@ -68,6 +69,11 @@
 
 	async function abrir() {
 		if (flujo !== null) return;
+
+		// Antes de pedir la cámara: si el navegador sabe, la pantalla se pone
+		// apaisada sola y la persona solo tiene que girar el aparato para verla
+		// derecha. Si no sabe, no pasa nada y queda el aviso de girar.
+		if (contenedor) await pedirApaisado(contenedor);
 
 		try {
 			flujo = await navigator.mediaDevices.getUserMedia({
@@ -98,6 +104,7 @@
 		flujo?.getTracks().forEach((t) => t.stop());
 		flujo = null;
 		lista = false;
+		void soltarApaisado();
 	}
 
 	function cerrar() {
@@ -165,7 +172,7 @@
 	}
 </script>
 
-<div class="camara" role="dialog" aria-modal="true" aria-label={titulo}>
+<div bind:this={contenedor} class="camara" role="dialog" aria-modal="true" aria-label={titulo}>
 	<header class="camara__barra">
 		<span class="camara__titulo">{titulo}</span>
 		<button type="button" class="camara__cerrar" onclick={cerrar} aria-label="Cerrar la cámara">
@@ -316,7 +323,9 @@
 		max-width: calc(var(--ancho) * 100vh * var(--proporcion));
 		border: 2px solid rgb(255 255 255 / 0.9);
 		border-radius: 10px;
-		box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.55);
+		/* Marca el hueco sin apagar la escena. Sube por encima de esto y, con el
+		   aviso de girar encima, no se ve nada con poca luz. */
+		box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.42);
 	}
 
 	/* Las cuatro esquinas marcadas: es lo que hace que se lea como «encaje aquí»

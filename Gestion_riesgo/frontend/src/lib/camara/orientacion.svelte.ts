@@ -66,3 +66,71 @@ export function usarOrientacion(): { readonly actual: Orientacion } {
 		}
 	};
 }
+
+/**
+ * Pide que la pantalla se ponga apaisada de verdad, no que el usuario la gire.
+ *
+ * ── Por qué hace falta esto además del aviso ─────────────────────────────────
+ *
+ * El aviso «gire el teléfono» daba por hecho que girar el aparato giraba la
+ * página, y no siempre: la aplicación instalada declaraba `orientation` en el
+ * manifiesto y se quedaba de pie por mucho que el teléfono girara. Quien lo
+ * probaba veía el aviso, giraba, y no pasaba nada — pedirle algo a alguien y
+ * que al hacerlo no ocurra nada es peor que no pedírselo.
+ *
+ * Corregido el manifiesto, esto va un paso más allá: en Android la pantalla se
+ * pone apaisada SOLA al abrir la cámara. La persona no tiene que hacer nada más
+ * que girar el aparato para que se le vea derecho.
+ *
+ * ── Y por qué el aviso sigue existiendo ──────────────────────────────────────
+ *
+ * `screen.orientation.lock` no existe en Safari de iOS, y en el resto exige
+ * pantalla completa —que a su vez exige venir de un gesto de la persona, como
+ * el toque que abrió la cámara—. Cuando algo de eso falla, no pasa nada malo:
+ * queda la pantalla como estaba y el aviso hace su trabajo. Por eso todo va
+ * envuelto y ningún fallo se propaga.
+ *
+ * @param elemento el contenedor de la cámara, que es lo que va a pantalla completa
+ * @return si de verdad se consiguió el apaisado
+ */
+export async function pedirApaisado(elemento: HTMLElement): Promise<boolean> {
+	try {
+		if (document.fullscreenElement === null && elemento.requestFullscreen) {
+			await elemento.requestFullscreen({ navigationUI: 'hide' });
+		}
+	} catch {
+		// Sin pantalla completa se puede intentar el bloqueo igual: algunos
+		// navegadores lo permiten en una aplicación instalada.
+	}
+
+	try {
+		await screen.orientation?.lock('landscape');
+
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Devuelve la pantalla a como estaba.
+ *
+ * Se llama SIEMPRE al cerrar la cámara, incluso si el bloqueo falló: dejar la
+ * aplicación entera apaisada después de tomar una foto convertiría un formulario
+ * de pie en algo que se lee de lado.
+ */
+export async function soltarApaisado(): Promise<void> {
+	try {
+		screen.orientation?.unlock();
+	} catch {
+		// No todos lo implementan. Al salir de pantalla completa se suelta solo.
+	}
+
+	try {
+		if (document.fullscreenElement !== null) {
+			await document.exitFullscreen();
+		}
+	} catch {
+		// Ya estaba fuera, o el navegador lo cerró por su cuenta.
+	}
+}
