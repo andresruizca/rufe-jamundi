@@ -2525,6 +2525,33 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
     afirmarIgual($esperadas, $alcanza);
 });
 
+prueba('una carga sin dueño dura lo suficiente para volver al día siguiente', function (): void {
+    // No es un número cualquiera: es cuánto tiempo tiene una familia para
+    // volver antes de que se le borren los videos.
+    //
+    // Las fotos del formulario ciudadano viven también en el teléfono y se
+    // vuelven a subir solas, así que sobreviven a cualquier caducidad. Los
+    // VIDEOS solo existen en el servidor: se suben por trozos y no se guardan
+    // en el aparato. Con las dos horas que había, quien grababa de noche y
+    // volvía por la mañana ya no los tenía.
+    //
+    // Bajarlo otra vez es volver a perder videos de gente damnificada. Si algún
+    // día hace falta por disco, el arreglo es guardar también los videos en el
+    // teléfono, no acortar esto.
+    afirmar(
+        App\Rufe\Archivos::HORAS_CARGA >= 12,
+        'la carga caduca antes de que a alguien le dé tiempo de volver'
+    );
+
+    // Y un tope, porque esto también es disco de un hosting compartido que
+    // nadie reclama: el peor caso por carga son ocho videos de 20 MiB más las
+    // fotos.
+    afirmar(
+        App\Rufe\Archivos::HORAS_CARGA <= 24,
+        'una carga sin dueño no puede vivir más de un día en el disco'
+    );
+});
+
 grupo('El hogar precargado del censo');
 
 prueba('el estado de una persona lo decide el servidor, no el navegador', function (): void {

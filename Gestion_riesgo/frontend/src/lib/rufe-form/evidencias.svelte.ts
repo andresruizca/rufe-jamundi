@@ -160,7 +160,7 @@ export class GestorEvidencias {
 		}
 
 		// Las fotos recuperadas se vuelven a subir: la carga anterior pudo caducar
-		// (vive dos horas) y el servidor ya no tendría esos archivos.
+		// (vive doce horas) y el servidor ya no tendría esos archivos.
 		if (this.archivos.length > 0) void this.subirPendientes();
 	}
 

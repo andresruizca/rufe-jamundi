@@ -874,7 +874,7 @@ final class PreinscripcionController
      * archivo. Quien no lo tenga no puede ver ni adjuntar nada a esa carga, y
      * adivinarlo exige acertar 256 bits.
      *
-     * Las cargas abandonadas caducan en dos horas y se purgan con el tráfico.
+     * Las cargas abandonadas caducan en doce horas y se purgan con el tráfico.
      * Sin eso, un endpoint público de subida es alojamiento gratuito.
      */
     public function abrirCarga(Request $req): void
@@ -1117,7 +1117,7 @@ final class PreinscripcionController
      * Antes esto no existía y los dos atajos de `crear()` —el reintento sin
      * señal y la solicitud duplicada— devolvían el radicado y se marchaban sin
      * tocar la carga. Las fotos y los videos recién subidos se quedaban
-     * huérfanos en `temporal/` y la purga se los llevaba dos horas después.
+     * huérfanos en `temporal/` y la purga se los llevaba al caducar la carga.
      *
      * El caso que lo hace grave: una familia se inscribe, y días más tarde
      * vuelve a inscribirse porque esta vez sí consiguió grabar el video del

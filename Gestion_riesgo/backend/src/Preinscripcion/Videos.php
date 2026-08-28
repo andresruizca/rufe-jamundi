@@ -28,7 +28,8 @@ use RuntimeException;
  *  • Tope duro de bytes por video y de videos por carga.
  *  • El video solo existe cuando llegaron TODOS sus trozos; a medias no se
  *    adopta ni se sirve.
- *  • Lo que no se completa caduca en dos horas y se purga con el tráfico, igual
+ *  • Lo que no se completa caduca con la carga —doce horas, ver
+ *    `Archivos::HORAS_CARGA`— y se purga con el tráfico, igual
  *    que las cargas de fotos.
  *  • El MIME se verifica sobre el archivo ya armado, leyendo su contenido, no
  *    lo que diga el cliente.

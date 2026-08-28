@@ -31,8 +31,32 @@ use RuntimeException;
  */
 final class Archivos
 {
-    /** Vigencia de una carga sin adoptar, en horas. */
-    public const HORAS_CARGA = 2;
+    /**
+     * Vigencia de una carga sin adoptar, en horas.
+     *
+     * Eran dos, y dos horas es lo que tarda una familia en perder sus videos.
+     *
+     * Las fotos del formulario ciudadano viven también en el teléfono, así que
+     * sobreviven a cualquier caducidad: al volver se vuelven a subir. Los
+     * VIDEOS no —se suben por trozos y solo existen aquí—, así que la vigencia
+     * de la carga es literalmente cuánto tiempo tiene alguien para volver antes
+     * de que se le borren. Con dos horas, quien graba de noche y vuelve por la
+     * mañana ya no los tiene.
+     *
+     * ── Por qué doce y no más ────────────────────────────────────────────────
+     *
+     * Esto es lo que puede acumularse en disco sin que nadie lo reclame. El
+     * tope por carga son ocho videos de 20 MiB más 16 MiB de fotos: 176 MiB en
+     * el peor caso, aunque lo corriente sean 25. La cuenta tiene 51 GB y usa 1,
+     * así que doce horas caben de sobra incluso con cientos de formularios
+     * abandonados a la vez.
+     *
+     * Un día entero empezaría a ser una decisión de otro tipo: doce cubren
+     * «grabé anoche y sigo por la mañana», que es el caso real, sin convertir
+     * el disco compartido de la Alcaldía en un almacén de videos que nadie
+     * envió.
+     */
+    public const HORAS_CARGA = 12;
 
     // ── Cargas temporales ────────────────────────────────────────────────────
 
