@@ -59,6 +59,9 @@ final class Migrador
         // Solicitudes de quien no aparece en el censo. Va al final: apunta a
         // `rufe_reportes`, que ya existe mucho antes.
         'sincenso_01.sql',
+        // El núcleo familiar dentro de la solicitud ciudadana. Va al final:
+        // añade una columna a `preinscripciones` y una tabla que apunta a ella.
+        'preinscripcion_05_hogar.sql',
     ];
 
     /**
