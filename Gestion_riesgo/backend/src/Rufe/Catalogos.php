@@ -253,6 +253,20 @@ final class Catalogos
         4 => 'No informa',
     ];
 
+    /**
+     * El formato físico solo trae tres opciones de género y seis de
+     * pertenencia étnica; "No informa" no está en ninguna de las dos. Se
+     * queda en `GENEROS`/`ETNIAS` porque 32 personas y 403 personas,
+     * respectivamente, ya lo tienen guardado desde la carga del RUD —y
+     * `RufeController` lo sigue necesitando para mostrarles su ficha—, pero
+     * `paraApi()` ya no lo ofrece: aquí siempre hay un funcionario delante
+     * que puede conseguir una respuesta real, así que no hace falta la
+     * salida que sí hacía falta en un censo de papel incompleto.
+     */
+    public const GENERO_NO_INFORMA = 4;
+
+    public const ETNIA_NO_INFORMA = 7;
+
     /** @var array<int,string> */
     public const ETNIAS = [
         1 => 'Indígena',
@@ -267,7 +281,7 @@ final class Catalogos
         // población afro de Jamundí, dar por «no aplica» lo que nadie preguntó
         // deforma una cifra que se usa para priorizar ayuda.
         7 => 'No informa',
-];
+    ];
 
     // ── Catálogos de opción única del formato ────────────────────────────────
 
@@ -472,8 +486,14 @@ final class Catalogos
             'documento_otro' => self::DOCUMENTO_OTRO,
             'parentescos' => self::listaNumerada(self::PARENTESCOS),
             'parentesco_jefe' => self::PARENTESCO_JEFE,
-            'generos' => self::listaNumerada(self::GENEROS),
-            'etnias' => self::listaNumerada(self::ETNIAS),
+            // GENEROS y ETNIAS traen "No informa", pero el formulario no lo
+            // ofrece: ver el comentario junto a GENERO_NO_INFORMA.
+            'generos' => self::listaNumerada(
+                array_diff_key(self::GENEROS, [self::GENERO_NO_INFORMA => true])
+            ),
+            'etnias' => self::listaNumerada(
+                array_diff_key(self::ETNIAS, [self::ETNIA_NO_INFORMA => true])
+            ),
             'zonas' => self::listaTextual(self::ZONAS),
             'alojamientos' => self::listaTextual(self::ALOJAMIENTOS),
             'formas_tenencia' => self::listaTextual(self::FORMAS_TENENCIA),
