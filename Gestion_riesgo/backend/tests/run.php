@@ -1203,6 +1203,43 @@ prueba('el archivo de reversión NUNCA está en la lista del Migrador', function
     );
 });
 
+prueba('ninguna migración se queda fuera de la lista', function () use ($raiz): void {
+    // El 28 de agosto de 2026 el call center se cayó entero en producción con
+    // «Unknown column 'g2.canal'»: se desplegó el código que consultaba esa
+    // columna y la migración que la crea nunca se corrió contra la base. La
+    // pantalla que usan las tres operadoras quedó inservible.
+    //
+    // Aquel archivo SÍ estaba en la lista —lo que falló fue correrla, y eso lo
+    // vigila el despliegue, no una prueba—. Pero el hermano de ese fallo sí se
+    // caza aquí: escribir una migración y olvidar registrarla produce
+    // exactamente el mismo síntoma, y hasta hoy nada lo habría dicho.
+    //
+    // La única excepción es el archivo de reversión, y está declarada arriba
+    // con su motivo: borra las siete tablas del censo.
+    $enDisco = array_map('basename', glob($raiz.'/database/*.sql') ?: []);
+    $registrados = Migrador::ARCHIVOS;
+    $exentos = ['rufe_revertir.sql'];
+
+    foreach ($enDisco as $archivo) {
+        afirmar(
+            in_array($archivo, $registrados, true) || in_array($archivo, $exentos, true),
+            "database/{$archivo} existe pero no está en Migrador::ARCHIVOS: nunca se va a aplicar"
+        );
+    }
+});
+
+prueba('todo lo registrado existe de verdad', function () use ($raiz): void {
+    // Al revés: un nombre mal escrito en la lista revienta el despliegue entero
+    // —`aplicar()` lanza al no encontrar el archivo—, y se lleva por delante
+    // las migraciones que iban después.
+    foreach (Migrador::ARCHIVOS as $archivo) {
+        afirmar(
+            is_file($raiz.'/database/'.$archivo),
+            "Migrador::ARCHIVOS nombra database/{$archivo}, que no existe"
+        );
+    }
+});
+
 prueba('la inspección se aplica después del RUFE, del que depende', function (): void {
     // Declara una foránea contra rufe_reportes y añade columnas a
     // rufe_evidencias: al revés, la migración reventaría en el primer despliegue.
