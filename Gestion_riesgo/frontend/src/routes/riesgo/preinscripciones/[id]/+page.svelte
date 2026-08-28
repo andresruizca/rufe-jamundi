@@ -321,6 +321,56 @@
 				</dd>
 			</div>
 
+			<!--
+				El hogar que el ciudadano revisó.
+
+				Lo importante no es el listado: es QUÉ CAMBIÓ respecto del censo. Un
+				listado idéntico al de la ficha no exige nada de quien revisa; una
+				cédula corregida o una persona que ya no vive ahí, sí. Por eso lo
+				que cambió se dice con el valor viejo al lado, y lo que no cambió se
+				queda callado.
+			-->
+			{#if detalle.hogar.length > 0}
+				<div class="ancho">
+					<dt>Quiénes viven en la vivienda, según el ciudadano</dt>
+					<dd>
+						<ul class="hogar">
+							{#each detalle.hogar as h (h.id)}
+								<li class="hogar__persona" class:hogar__persona--fuera={h.estado === 'NO_VIVE_AQUI'}>
+									<div class="hogar__linea">
+										<span class="hogar__nombre">{h.nombres} {h.apellidos}</span>
+										{#if h.estado === 'CORREGIDA'}
+											<span class="pastilla pastilla--corregida">Corregida</span>
+										{:else if h.estado === 'NUEVA'}
+											<span class="pastilla pastilla--nueva">La agregó el ciudadano</span>
+										{:else if h.estado === 'NO_VIVE_AQUI'}
+											<span class="pastilla pastilla--fuera">Dice que ya no vive aquí</span>
+										{/if}
+									</div>
+
+									<span class="hogar__meta">
+										{[h.parentesco, h.tipo_documento, h.numero_documento, h.fecha_nacimiento]
+											.filter((x) => x !== '')
+											.join(' · ')}
+									</span>
+
+									{#if h.estado === 'CORREGIDA' && h.censo}
+										<span class="hogar__antes">
+											El censo decía: {h.censo.nombres} {h.censo.apellidos}
+											{#if h.censo.numero_documento}· {h.censo.numero_documento}{/if}
+											{#if h.censo.fecha_nacimiento}· {h.censo.fecha_nacimiento}{/if}
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+						<p class="hogar__nota">
+							Esto es una propuesta del ciudadano. La ficha del censo no ha cambiado.
+						</p>
+					</dd>
+				</div>
+			{/if}
+
 			{#if p.descripcion_dano}
 				<div><dt>Lo que reportó</dt><dd class="relato">{p.descripcion_dano}</dd></div>
 			{/if}
@@ -670,6 +720,87 @@
 
 	.relato {
 		white-space: pre-wrap;
+	}
+
+	/* El listado del hogar no cabe en la columna estrecha del resto de la
+	   ficha: son varias líneas por persona, y una de ellas es la comparación
+	   con el censo. Ocupa el ancho entero. */
+	.datos > div.ancho {
+		grid-template-columns: 1fr;
+		gap: 0.35rem;
+	}
+
+	.hogar {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.hogar__persona {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		border-left: 3px solid var(--color-border);
+		padding-left: 0.65rem;
+	}
+
+	.hogar__persona--fuera {
+		opacity: 0.65;
+	}
+
+	.hogar__linea {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.hogar__nombre {
+		font-weight: 600;
+	}
+
+	.hogar__meta {
+		font-size: 0.8rem;
+		color: var(--color-muted);
+	}
+
+	/* Lo que decía el censo, al lado y no en otra pantalla: la decisión de
+	   quien revisa es exactamente comparar estas dos líneas. */
+	.hogar__antes {
+		font-size: 0.79rem;
+		color: var(--color-warning);
+	}
+
+	.hogar__nota {
+		margin: 0.6rem 0 0;
+		font-size: 0.79rem;
+		color: var(--color-muted);
+		font-style: italic;
+	}
+
+	.pastilla {
+		border-radius: 999px;
+		padding: 0.1rem 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+
+	.pastilla--corregida {
+		background: var(--color-warning-bg);
+		color: var(--color-warning);
+	}
+
+	.pastilla--nueva {
+		background: var(--color-info-bg);
+		color: var(--color-info);
+	}
+
+	.pastilla--fuera {
+		background: var(--color-danger-bg);
+		color: var(--color-danger);
 	}
 
 	.senales {

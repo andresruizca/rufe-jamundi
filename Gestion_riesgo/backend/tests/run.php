@@ -2525,7 +2525,127 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
     afirmarIgual($esperadas, $alcanza);
 });
 
+grupo('El hogar precargado del censo');
+
+prueba('el estado de una persona lo decide el servidor, no el navegador', function (): void {
+    // Es la propiedad que sostiene toda la funcionalidad. Si el estado viniera
+    // del cliente, bastaría con mandar «IGUAL» para que una corrección —o una
+    // persona inventada— entrara sin que ningún funcionario la mirara.
+    $censo = [
+        'nombres' => 'Martha Cecilia', 'apellidos' => 'Londoño Zaen',
+        'numero_documento' => '16844290', 'fecha_nacimiento' => '1970-05-02',
+        'tipo_documento' => 1, 'parentesco' => 1, 'genero' => 2,
+    ];
+
+    $igual = $censo + ['estado' => 'CORREGIDA'];  // el navegador miente
+    afirmarIgual('IGUAL', App\Preinscripcion\Censo::estadoDePersona($igual, $censo, false));
+
+    $cambiada = array_merge($censo, ['apellidos' => 'Londoño Zaén', 'estado' => 'IGUAL']);
+    afirmarIgual('CORREGIDA', App\Preinscripcion\Censo::estadoDePersona($cambiada, $censo, false));
+});
+
+prueba('quien no venía del censo es persona nueva', function (): void {
+    afirmarIgual(
+        'NUEVA',
+        App\Preinscripcion\Censo::estadoDePersona(
+            ['nombres' => 'Recién', 'apellidos' => 'Nacido'], null, false
+        )
+    );
+});
+
+prueba('el ciudadano no borra a nadie: lo marca como que ya no vive ahí', function (): void {
+    // Quitar de un clic a una persona del censo de damnificados, y perder que
+    // alguna vez estuvo, no puede hacerse sin que un funcionario lo mire.
+    $censo = ['nombres' => 'Juan', 'apellidos' => 'Pérez', 'tipo_documento' => 1, 'parentesco' => 3, 'genero' => 1];
+
+    afirmarIgual(
+        'NO_VIVE_AQUI',
+        App\Preinscripcion\Censo::estadoDePersona($censo, $censo, true),
+        'la marca manda sobre todo lo demás'
+    );
+});
+
+prueba('mayúsculas y espacios de sobra no son una corrección', function (): void {
+    // Si lo fueran, la bandeja se llenaría de «correcciones» que no cambian
+    // nada y el funcionario dejaría de mirarlas — incluidas las de verdad.
+    $censo = ['nombres' => 'María José', 'apellidos' => 'Mina', 'tipo_documento' => 1, 'parentesco' => 1, 'genero' => 2];
+    $enviada = ['nombres' => '  MARÍA  JOSÉ ', 'apellidos' => 'mina', 'tipo_documento' => 1, 'parentesco' => 1, 'genero' => 2];
+
+    afirmarIgual('IGUAL', App\Preinscripcion\Censo::estadoDePersona($enviada, $censo, false));
+});
+
+prueba('cambiar la cédula de alguien SÍ es una corrección', function (): void {
+    // Es el dato con el que se cruza todo el sistema: una cédula distinta no
+    // puede pasar por un cambio menor.
+    $censo = ['nombres' => 'Juan', 'apellidos' => 'Pérez', 'numero_documento' => '111', 'tipo_documento' => 1, 'parentesco' => 1, 'genero' => 1];
+    $enviada = array_merge($censo, ['numero_documento' => '222']);
+
+    afirmarIgual('CORREGIDA', App\Preinscripcion\Censo::estadoDePersona($enviada, $censo, false));
+});
+
+prueba('el listado del hogar acepta lo que una familia real puede dejar', function (): void {
+    $r = App\Preinscripcion\Validador::revisar([
+        'personas' => [
+            ['nombres' => 'Martha', 'apellidos' => 'Londoño', 'numero_documento' => '16.844.290'],
+            // Sin cédula ni fecha: un menor de edad, y no se le puede exigir.
+            ['nombres' => 'Sara', 'apellidos' => 'Londoño'],
+            // Vacía: quedó de pulsar «Agregar otra persona» y arrepentirse.
+            ['nombres' => '', 'apellidos' => ''],
+        ],
+    ]);
+
+    afirmar(! isset($r['errores']['personas']), 'no debería protestar por un listado corriente');
+    afirmarIgual(2, count($r['datos']['personas']), 'la fila vacía se descarta sin ruido');
+    afirmarIgual('16844290', $r['datos']['personas'][0]['numero_documento'], 'la cédula se guarda solo en dígitos');
+});
+
+prueba('una persona sin nombre no pasa, y una fecha imposible tampoco', function (): void {
+    $sinNombre = App\Preinscripcion\Validador::revisar([
+        'personas' => [['nombres' => '', 'apellidos' => 'Londoño']],
+    ]);
+    afirmar(isset($sinNombre['errores']['personas']), 'un apellido suelto no es una persona');
+
+    $futuro = App\Preinscripcion\Validador::revisar([
+        'personas' => [['nombres' => 'Ana', 'apellidos' => 'Mina', 'fecha_nacimiento' => '2099-01-01']],
+    ]);
+    afirmar(isset($futuro['errores']['personas']), 'nadie nace en 2099');
+});
+
+prueba('un listado desmesurado se rechaza', function (): void {
+    // La ruta es pública: sin tope, un envío puede traer diez mil personas.
+    $muchas = array_fill(0, 40, ['nombres' => 'A', 'apellidos' => 'B']);
+    $r = App\Preinscripcion\Validador::revisar(['personas' => $muchas]);
+
+    afirmar(isset($r['errores']['personas']), 'debe haber un tope');
+});
+
+prueba('sin listado, la solicitud sigue siendo válida', function (): void {
+    // Quien llega por su cuenta y no tenía ficha no manda personas. Ese camino
+    // no puede romperse por añadir esto.
+    $r = App\Preinscripcion\Validador::revisar([]);
+
+    afirmarIgual([], $r['datos']['personas'], 'sin personas es una lista vacía, no un error');
+    afirmar(! isset($r['errores']['personas']), 'y no protesta');
+});
+
 grupo('El canal de WhatsApp consultando el censo');
+
+/**
+ * El código de `verificar()`, y solo el suyo.
+ *
+ * Se corta hasta el siguiente método y no hasta uno concreto por nombre: al
+ * añadir `datosCenso()` justo después, el corte viejo se tragaba dos métodos y
+ * la prueba de «una sola respuesta» empezó a contar la del vecino.
+ */
+function cuerpoDeVerificar(string $raiz): string
+{
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $desde = (int) strpos($php, 'public function verificar(Request $req): void');
+    $siguiente = strpos($php, '    public ', $desde + 20);
+
+    return substr($php, $desde, $siguiente === false ? null : $siguiente - $desde);
+}
+
 
 /**
  * Atajo para leer el plan de límites con el estilo de las pruebas de al lado.
@@ -2720,10 +2840,7 @@ prueba('la respuesta es la misma venga por donde venga', function () use ($raiz)
     // día alguien añadiera una respuesta distinta para el canal —«no estás en
     // el censo, pero sí en este otro listado»— este endpoint dejaría de ser un
     // booleano y pasaría a ser un buscador de damnificados.
-    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
-    $desde = strpos($php, 'public function verificar(Request $req): void');
-    $hasta = strpos($php, 'public static function planDeLimites', (int) $desde);
-    $cuerpo = substr($php, (int) $desde, (int) $hasta - (int) $desde);
+    $cuerpo = cuerpoDeVerificar($raiz);
 
     afirmarIgual(
         1,
@@ -2736,10 +2853,7 @@ prueba('el formato de la cédula se comprueba antes de gastar cubeta', function 
     // Un «12ab» no llega a preguntarle nada al censo. Cobrárselo solo servía
     // para que quien se equivoca tecleando se quedara sin intentos. Enumerar
     // sigue costando igual: para eso hay que mandar cédulas bien formadas.
-    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
-    $desde = (int) strpos($php, 'public function verificar(Request $req): void');
-    $hasta = (int) strpos($php, 'public static function planDeLimites', $desde);
-    $cuerpo = substr($php, $desde, $hasta - $desde);
+    $cuerpo = cuerpoDeVerificar($raiz);
 
     afirmar(
         strpos($cuerpo, 'pareceCedula') < strpos($cuerpo, 'planDeLimites'),
@@ -3347,6 +3461,13 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         // y uno de 30 segundos pesa unos 3 MB, así que no cabe de una vez.
         'POST /preinscripcion/cargas/{carga}/videos',
         'POST /preinscripcion/cargas/{carga}/videos/{id}/trozos',
+        // Los datos que el censo ya tiene de ese hogar. Es la MÁS delicada de
+        // todas: devuelve nombre, teléfono, dirección y quién vive en la casa.
+        // Está aquí porque el ciudadano no tiene sesión, y lo que la sostiene no
+        // es la sesión sino el coste: exige haber subido la foto de la cédula en
+        // esa misma carga, y esa imagen queda guardada atada al intento. Ver
+        // PreinscripcionController::datosCenso.
+        'POST /preinscripcion/datos-censo',
         // La puerta del formulario: responde sí o no sobre una cédula, porque
         // la pre-inscripción continúa el censo y no es un formulario abierto.
         // Es la más delicada de la lista —mirada de cerca, dice si alguien está

@@ -3,6 +3,7 @@ import type {
 	ProfesionalInspeccion
 } from '$lib/inspeccion-form/tipos';
 import type { DetalleInspeccion } from '$lib/inspeccion-form/detalle';
+import type { HogarCenso } from '$lib/preinscripcion/hogar';
 import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
 import type {
@@ -326,6 +327,12 @@ export const preinscripcionApi = {
 	catalogos: () =>
 		api.get<{
 			corregimientos: string[];
+			// Listas fijas para el listado del hogar. No son datos de nadie: son
+			// las mismas que ve el funcionario en el censo.
+			parentescos: Record<string, string>;
+			generos: Record<string, string>;
+			tipos_documento: Record<string, string>;
+			parentesco_jefe: number;
 			zonas: string[];
 			/** Las señales de daño que el ciudadano puede reconocer a ojo. */
 			senales: { codigo: string; etiqueta: string; ayuda: string; icono: string }[];
@@ -363,6 +370,21 @@ export const preinscripcionApi = {
 		api.post<{ habilitado: boolean; linea_atencion: string }>(
 			'/preinscripcion/verificacion',
 			{ documento },
+			false
+		),
+
+	/**
+	 * Lo que el censo ya sabe de ese hogar.
+	 *
+	 * Exige `carga`: el servidor comprueba que en esa carga haya una foto de
+	 * cédula ya subida antes de contestar. La de arriba responde un booleano
+	 * porque preguntarle es gratis; esta enseña nombre, teléfono, dirección y
+	 * quién vive en la casa, así que preguntar tiene que costar algo.
+	 */
+	datosCenso: (documento: string, carga: string) =>
+		api.post<{ hogar: HogarCenso | null }>(
+			'/preinscripcion/datos-censo',
+			{ documento, carga },
 			false
 		),
 
@@ -600,6 +622,33 @@ export type PreinscripcionDetalle = {
 		mime: string;
 		/** Falso cuando el archivo ya se purgó al decidir la solicitud. */
 		disponible: boolean;
+	}[];
+	/**
+	 * El hogar que dejó el ciudadano, con lo que decía el censo al lado.
+	 *
+	 * Vacío en las solicitudes que no se precargaron: quien llegó sin ficha, o
+	 * sin señal para traerla, no manda listado.
+	 */
+	hogar: {
+		id: number;
+		estado: 'IGUAL' | 'CORREGIDA' | 'NUEVA' | 'NO_VIVE_AQUI';
+		nombres: string;
+		apellidos: string;
+		numero_documento: string;
+		tipo_documento: string;
+		parentesco: string;
+		genero: string;
+		fecha_nacimiento: string;
+		/** Cómo lo tenía el censo. `null` cuando la persona no venía de él. */
+		censo: {
+			nombres: string;
+			apellidos: string;
+			numero_documento: string;
+			tipo_documento: string;
+			parentesco: string;
+			genero: string;
+			fecha_nacimiento: string;
+		} | null;
 	}[];
 	historial: { estado: string; nota: string | null; usuario_email: string | null; creado_en: string }[];
 };

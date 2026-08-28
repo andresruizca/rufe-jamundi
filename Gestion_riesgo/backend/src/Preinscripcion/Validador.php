@@ -14,9 +14,15 @@ use App\Rufe\Catalogos as Rufe;
  * un motivo para abandonar el formulario a la mitad. Lo imprescindible es poder
  * llegar a la casa y poder llamar a alguien.
  *
- * Nada de datos sensibles —ni género, ni pertenencia étnica, ni composición del
- * hogar—: eso lo levanta el funcionario en la visita, con el aviso de la Ley
- * 1581 explicado de viva voz. Aquí solo se recoge lo mínimo para asignar turno.
+ * No se PIDE nada sensible: ni género, ni pertenencia étnica, ni composición
+ * del hogar. Eso lo levanta el funcionario en la visita, con el aviso de la Ley
+ * 1581 explicado de viva voz.
+ *
+ * Con una excepción que no rompe la regla: cuando la cédula está en el censo,
+ * el formulario le ENSEÑA a la persona el hogar que un funcionario ya levantó y
+ * le deja decir qué cambió. Ahí no se está recogiendo un dato nuevo —ya estaba
+ * en el sistema— sino dándole a la familia la oportunidad de corregirlo. Y lo
+ * que deje es una propuesta: `rufe_personas` no cambia por esto.
  *
  * Este validador MANDA. El navegador valida lo mismo para dar respuesta
  * inmediata, pero lo que decide es esto: la ruta es pública y cualquiera puede
@@ -26,6 +32,15 @@ final class Validador
 {
     /** @var list<string> */
     public const ZONAS = ['URBANA', 'RURAL'];
+
+    /**
+     * Tope de personas en el listado del hogar.
+     *
+     * Generoso: hay hogares extensos de verdad, y quedarse corto le impide a una
+     * familia real decir quiénes son. Pero un tope tiene que haber: sin él, una
+     * ruta pública acepta un envío con diez mil personas.
+     */
+    private const MAX_PERSONAS = 30;
 
     /** @var array<string,string> */
     private array $errores = [];
@@ -43,6 +58,7 @@ final class Validador
 
         $v->identificacion($e);
         $v->ubicacion($e);
+        $v->hogar($e);
         $v->estadoVivienda($e);
         $v->relato($e);
         $v->autorizacion($e);
@@ -85,6 +101,104 @@ final class Validador
         } else {
             $this->datos['correo'] = mb_strtolower($correo);
         }
+    }
+
+    /**
+     * Las personas del hogar, cuando el formulario las precargó del censo.
+     *
+     * Todo es opcional salvo el nombre: quien llegó por su cuenta y no tenía
+     * ficha no manda nada, y quien la tenía puede haber dejado el listado tal
+     * como venía. Un formulario ciudadano no puede exigir la fecha de
+     * nacimiento del cuñado para dejar pedir una inspección.
+     *
+     * Lo que NO se acepta aquí es el `estado` de cada persona —igual,
+     * corregida, nueva—: eso lo calcula el servidor comparando contra el censo.
+     * Si lo mandara el navegador, bastaría con mentir en una casilla para que
+     * una corrección entrara como «igual» y ningún funcionario la mirara.
+     *
+     * @param  array<string,mixed>  $e
+     */
+    private function hogar(array $e): void
+    {
+        $this->datos['personas'] = [];
+
+        $crudas = $e['personas'] ?? [];
+
+        if (! is_array($crudas) || $crudas === []) {
+            return;
+        }
+
+        if (count($crudas) > self::MAX_PERSONAS) {
+            $this->errores['personas'] = 'Son demasiadas personas para este formulario. Llame a la línea de atención.';
+
+            return;
+        }
+
+        $limpias = [];
+
+        foreach (array_values($crudas) as $i => $cruda) {
+            if (! is_array($cruda)) {
+                continue;
+            }
+
+            $nombres = trim($this->texto($cruda, 'nombres'));
+            $apellidos = trim($this->texto($cruda, 'apellidos'));
+
+            // Una fila del todo vacía se descarta sin protestar: es la que queda
+            // cuando alguien pulsa «Agregar otra persona» y se arrepiente.
+            if ($nombres === '' && $apellidos === '') {
+                continue;
+            }
+
+            if ($nombres === '' || $apellidos === '') {
+                $this->errores['personas'] = 'A alguien del listado le falta el nombre o los apellidos.';
+
+                return;
+            }
+
+            $documento = preg_replace('/\D+/', '', $this->texto($cruda, 'numero_documento')) ?? '';
+            $nacimiento = trim($this->texto($cruda, 'fecha_nacimiento'));
+
+            if ($nacimiento !== '' && ! $this->esFechaValida($nacimiento)) {
+                $this->errores['personas'] = 'Revise una fecha de nacimiento del listado.';
+
+                return;
+            }
+
+            $limpias[] = [
+                'orden' => $i + 1,
+                'nombres' => mb_substr($nombres, 0, 120),
+                'apellidos' => mb_substr($apellidos, 0, 120),
+                'tipo_documento' => $this->codigo($cruda, 'tipo_documento', Rufe::TIPOS_DOCUMENTO),
+                'numero_documento' => $documento === '' ? null : mb_substr($documento, 0, 30),
+                'parentesco' => $this->codigo($cruda, 'parentesco', Rufe::PARENTESCOS),
+                'genero' => $this->codigo($cruda, 'genero', Rufe::GENEROS),
+                'fecha_nacimiento' => $nacimiento === '' ? null : $nacimiento,
+                // De qué persona del censo salió. Se acepta como pista y el
+                // controlador la comprueba contra la ficha de verdad: sin esa
+                // comprobación, alguien podría atribuirse una persona de otro
+                // hogar.
+                'rufe_persona_id' => (int) ($cruda['rufe_persona_id'] ?? 0) ?: null,
+                'no_vive_aqui' => ! empty($cruda['no_vive_aqui']),
+            ];
+        }
+
+        $this->datos['personas'] = $limpias;
+    }
+
+    /** Un código de catálogo, o null si no viene o no se reconoce. */
+    private function codigo(array $cruda, string $clave, array $catalogo): ?int
+    {
+        $valor = (int) ($cruda[$clave] ?? 0);
+
+        return isset($catalogo[$valor]) ? $valor : null;
+    }
+
+    private function esFechaValida(string $valor): bool
+    {
+        $d = \DateTimeImmutable::createFromFormat('!Y-m-d', $valor);
+
+        return $d !== false && $d->format('Y-m-d') === $valor && $d <= new \DateTimeImmutable('today');
     }
 
     /** @param array<string,mixed> $e */

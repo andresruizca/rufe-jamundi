@@ -179,6 +179,14 @@ final class PreinscripcionController
         Response::ok([
             'corregimientos' => Rufe::CORREGIMIENTOS,
             'zonas'          => Validador::ZONAS,
+            // Para el listado del hogar: sin ellos, el formulario no puede
+            // dibujar «hijo(a)», «mujer» ni «tarjeta de identidad» y la persona
+            // tendría que escribirlos a mano. No son datos de nadie: son las
+            // mismas listas fijas que ve el funcionario en el censo.
+            'parentescos'    => Rufe::PARENTESCOS,
+            'generos'        => Rufe::GENEROS,
+            'tipos_documento' => Rufe::TIPOS_DOCUMENTO,
+            'parentesco_jefe' => Rufe::PARENTESCO_JEFE,
             // Las señales de daño que el ciudadano puede reconocer a ojo. Van
             // en el catálogo y no escritas en la pantalla para que el servidor
             // y el formulario no puedan discrepar sobre qué códigos existen.
@@ -278,6 +286,68 @@ final class PreinscripcionController
             'habilitado' => Censo::estaInscrito($documento),
             'linea_atencion' => self::LINEA_ATENCION,
         ]);
+    }
+
+    /**
+     * Los datos que el censo ya tiene del hogar de esta cédula.
+     *
+     * Solo se llega aquí **después de subir la foto de la cédula**, y eso es
+     * toda la protección de esta ruta. La de arriba responde un booleano porque
+     * es gratis preguntarle; esta enseña nombre, teléfono, dirección y quién
+     * vive en la casa, así que preguntar tiene que costar algo.
+     *
+     * Lo que cuesta: subir una imagen por cada cédula que se pruebe, y que esa
+     * imagen quede guardada en el servidor atada al intento. Una imagen se
+     * falsifica —esto no es una verificación de identidad— pero convierte un
+     * recorrido gratuito y silencioso del censo en uno caro y con rastro.
+     *
+     * La foto no se desperdicia: es la misma que el formulario pedía más
+     * adelante, y viaja con la solicitud cuando se envía. Al ciudadano no se le
+     * pide nada de más, solo antes.
+     */
+    public function datosCenso(Request $req): void
+    {
+        // Las mismas dos cubetas que la verificación, con las mismas claves: sin
+        // esto, esta ruta sería la puerta de atrás del límite de la otra.
+        foreach (self::planDeLimites(
+            $req->ip(),
+            $req->cabecera('X-RUFE-Servicio'),
+            $req->cabecera('X-RUFE-Origen'),
+            (string) Config::get('rufe.servicio_secreto', ''),
+            self::llegoPorHttps()
+        ) as $l) {
+            Limite::consumir($l['accion'], $l['identidad'], $l['maximo'], $l['ventana'], $l['mensaje']);
+        }
+
+        $documento = Censo::normalizar($req->texto('documento'));
+
+        if (! Censo::pareceCedula($documento)) {
+            throw HttpError::validacion([
+                'documento' => 'Escriba su número de cédula, sin puntos ni espacios.',
+            ]);
+        }
+
+        $carga = Archivos::hashDeCarga((string) $req->texto('carga', ''));
+
+        $foto = Db::first(
+            'SELECT id FROM rufe_evidencias
+              WHERE carga_hash = :c AND tipo = :t AND reporte_id IS NULL
+              LIMIT 1',
+            ['c' => $carga, 't' => 'PRE_CEDULA']
+        );
+
+        if ($foto === null) {
+            throw HttpError::validacion([
+                'foto' => 'Suba primero la foto de su cédula para que podamos mostrarle sus datos.',
+            ]);
+        }
+
+        $hogar = Censo::hogarDe($documento);
+
+        // Mismo cuerpo cuando no hay ficha que cuando la hay vacía: esta ruta no
+        // debe servir para distinguir casos que la de arriba ya resolvió con un
+        // booleano.
+        Response::ok(['hogar' => $hogar]);
     }
 
     /**
@@ -732,6 +802,71 @@ final class PreinscripcionController
     }
 
     /**
+     * Guarda el hogar que dejó el ciudadano, y en qué cambió respecto del censo.
+     *
+     * ── Por qué el censo se vuelve a leer aquí ───────────────────────────────
+     *
+     * El navegador manda un `rufe_persona_id` por cada persona que precargó.
+     * Eso es una PISTA, no una autoridad: aceptarla tal cual dejaría que
+     * alguien atribuyera a su solicitud a una persona de otro hogar, o que
+     * marcara como «igual» una fila que cambió entera.
+     *
+     * Así que se relee la ficha por la cédula del solicitante y solo cuentan
+     * los ids que de verdad pertenecen a ESE hogar. Lo que no case se guarda
+     * como persona nueva, que es lo honesto: alguien que el censo no tenía.
+     *
+     * @param  array<string,mixed>  $datos
+     */
+    private function guardarHogar(int $id, array $datos): void
+    {
+        $personas = $datos['personas'] ?? [];
+
+        if ($personas === []) {
+            return;
+        }
+
+        $hogar = Censo::hogarDe((string) $datos['documento']);
+        $delCenso = [];
+
+        if ($hogar !== null) {
+            foreach ($hogar['personas'] as $p) {
+                $delCenso[(int) $p['id']] = $p;
+            }
+
+            Db::exec(
+                'UPDATE preinscripciones SET rufe_reporte_id = :r WHERE id = :i',
+                ['r' => $hogar['reporte_id'], 'i' => $id]
+            );
+        }
+
+        foreach ($personas as $p) {
+            $origen = $delCenso[(int) ($p['rufe_persona_id'] ?? 0)] ?? null;
+
+            Db::exec(
+                'INSERT INTO preinscripcion_personas
+                    (preinscripcion_id, orden, rufe_persona_id, nombres, apellidos,
+                     tipo_documento, numero_documento, parentesco, genero,
+                     fecha_nacimiento, estado)
+                 VALUES (:p, :orden, :rufe, :nombres, :apellidos, :tipo, :doc,
+                         :parentesco, :genero, :nacimiento, :estado)',
+                [
+                    'p' => $id,
+                    'orden' => $p['orden'],
+                    'rufe' => $origen === null ? null : (int) $origen['id'],
+                    'nombres' => $p['nombres'],
+                    'apellidos' => $p['apellidos'],
+                    'tipo' => $p['tipo_documento'],
+                    'doc' => $p['numero_documento'],
+                    'parentesco' => $p['parentesco'],
+                    'genero' => $p['genero'],
+                    'nacimiento' => $p['fecha_nacimiento'],
+                    'estado' => Censo::estadoDePersona($p, $origen, (bool) $p['no_vive_aqui']),
+                ]
+            );
+        }
+    }
+
+    /**
      * Abre una carga para las fotos de una solicitud, sin sesión.
      *
      * El token no se guarda en ninguna tabla: solo su SHA-256 acompaña a cada
@@ -1089,6 +1224,8 @@ final class PreinscripcionController
 
             $id = Db::lastId();
 
+            $this->guardarHogar($id, $datos);
+
             // La etiqueta se copia tal como se le mostró a la persona: si algún
             // día se reescribe un texto del catálogo, el expediente tiene que
             // seguir diciendo qué fue lo que marcó.
@@ -1413,12 +1550,71 @@ final class PreinscripcionController
                 )
             ),
             'videos' => Videos::deSolicitud($id),
+            // El hogar que dejó el ciudadano, con lo que decía el censo al lado
+            // cuando cambió. Sin esa comparación, «corregida» no le dice nada a
+            // quien tiene que decidir: lo que necesita ver es qué decía antes y
+            // qué dice ahora.
+            'hogar' => $this->hogarDeSolicitud($id),
             'historial' => Db::all(
                 'SELECT estado, nota, usuario_email, creado_en FROM preinscripcion_historial
                   WHERE preinscripcion_id = :i ORDER BY id',
                 ['i' => $id]
             ),
         ]);
+    }
+
+    /**
+     * El hogar de una solicitud, con lo que decía el censo al lado.
+     *
+     * `rufe_personas` se lee por el id que se guardó, no por la cédula: si el
+     * ciudadano corrigió justamente la cédula, buscar por ella no encontraría
+     * nada y la corrección más importante sería la única invisible.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function hogarDeSolicitud(int $id): array
+    {
+        $filas = Db::all(
+            'SELECT pp.id, pp.orden, pp.estado, pp.rufe_persona_id,
+                    pp.nombres, pp.apellidos, pp.tipo_documento, pp.numero_documento,
+                    pp.parentesco, pp.genero, pp.fecha_nacimiento,
+                    rp.nombres AS censo_nombres, rp.apellidos AS censo_apellidos,
+                    rp.numero_documento AS censo_documento,
+                    rp.tipo_documento AS censo_tipo_documento,
+                    rp.parentesco AS censo_parentesco, rp.genero AS censo_genero,
+                    rp.fecha_nacimiento AS censo_nacimiento
+               FROM preinscripcion_personas pp
+               LEFT JOIN rufe_personas rp ON rp.id = pp.rufe_persona_id
+              WHERE pp.preinscripcion_id = :i
+              ORDER BY pp.orden ASC, pp.id ASC',
+            ['i' => $id]
+        );
+
+        return array_map(
+            static fn (array $f): array => [
+                'id' => (int) $f['id'],
+                'estado' => (string) $f['estado'],
+                'nombres' => (string) $f['nombres'],
+                'apellidos' => (string) $f['apellidos'],
+                'numero_documento' => (string) ($f['numero_documento'] ?? ''),
+                'tipo_documento' => Rufe::TIPOS_DOCUMENTO[(int) $f['tipo_documento']] ?? '',
+                'parentesco' => Rufe::PARENTESCOS[(int) $f['parentesco']] ?? '',
+                'genero' => Rufe::GENEROS[(int) $f['genero']] ?? '',
+                'fecha_nacimiento' => (string) ($f['fecha_nacimiento'] ?? ''),
+                // Solo cuando hay algo con qué comparar. En una persona nueva
+                // esto va nulo y la pantalla no dibuja una columna vacía.
+                'censo' => $f['rufe_persona_id'] === null ? null : [
+                    'nombres' => (string) ($f['censo_nombres'] ?? ''),
+                    'apellidos' => (string) ($f['censo_apellidos'] ?? ''),
+                    'numero_documento' => (string) ($f['censo_documento'] ?? ''),
+                    'tipo_documento' => Rufe::TIPOS_DOCUMENTO[(int) $f['censo_tipo_documento']] ?? '',
+                    'parentesco' => Rufe::PARENTESCOS[(int) $f['censo_parentesco']] ?? '',
+                    'genero' => Rufe::GENEROS[(int) $f['censo_genero']] ?? '',
+                    'fecha_nacimiento' => (string) ($f['censo_nacimiento'] ?? ''),
+                ],
+            ],
+            $filas
+        );
     }
 
     /** Una foto de la solicitud. Vive fuera del docroot y exige sesión. */

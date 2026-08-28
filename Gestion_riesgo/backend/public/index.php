@@ -125,6 +125,11 @@ $router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
 // Por POST y no por GET: una cédula en la barra de direcciones acaba en el
 // registro de accesos de Apache y en el historial del navegador.
 $router->post('/preinscripcion/verificacion', [$preinscripcion, 'verificar']);
+// Los datos que el censo ya tiene de ese hogar. Pública como la de arriba, pero
+// no gratuita: exige haber subido la foto de la cédula en esa misma carga. La
+// de arriba responde un booleano porque preguntarle es gratis; esta enseña
+// nombre, teléfono, dirección y quién vive en la casa.
+$router->post('/preinscripcion/datos-censo', [$preinscripcion, 'datosCenso']);
 // La misma consulta para el bot de WhatsApp, que firma el cuerpo en vez de
 // mandar un secreto en una cabecera: sus herramientas no pueden añadir
 // cabeceras propias. Responde 404 mientras `rufe.bot_secreto` esté vacío, así

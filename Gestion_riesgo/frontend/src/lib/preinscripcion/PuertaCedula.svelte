@@ -19,9 +19,20 @@
 	//     es un dígito mal tecleado, y la segunda, que la casa quedara censada a
 	//     nombre de otra persona del hogar.
 
-	import { CircleAlert, LoaderCircle, Phone, SendHorizontal, ShieldCheck } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		CircleAlert,
+		IdCard,
+		LoaderCircle,
+		Phone,
+		SendHorizontal,
+		ShieldCheck
+	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi, sinCensoApi } from '$lib/api/servicios';
+	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import type { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
+	import type { HogarCenso } from './hogar';
 	import { erroresSolicitud, solicitudVacia, ZONAS, type ZonaSinCenso } from '$lib/sin-censo/solicitud';
 	import { LINEA_ATENCION, normalizar, revisarCedula } from './puerta';
 
@@ -31,8 +42,14 @@
 	type CatalogosPuerta = { corregimientos: string[]; aviso_version: string } | null;
 
 	type Props = {
-		/** Se llama con la cédula ya normalizada cuando el censo la reconoce. */
-		onEntrar: (documento: string) => void;
+		/**
+		 * Se llama con la cédula ya normalizada cuando el censo la reconoce.
+		 *
+		 * `hogar` llega con lo que el censo sabe de esa casa cuando la persona
+		 * subió la foto de su cédula, y en `null` cuando decidió seguir sin
+		 * traer sus datos o no había señal para subirla.
+		 */
+		onEntrar: (documento: string, hogar?: HogarCenso | null) => void;
 		/** Se enciende cuando se entró sin haber podido verificar, por no haber red. */
 		entroSinVerificar?: (sinVerificar: boolean) => void;
 		/**
@@ -42,9 +59,35 @@
 		 * mandar un corregimiento inventado o un consentimiento sin versión.
 		 */
 		catalogos?: CatalogosPuerta;
+		/**
+		 * El gestor de archivos de la página, para la foto de la cédula.
+		 *
+		 * Es el MISMO que usa el resto del formulario: la foto que se sube aquí
+		 * es la que la solicitud llevaba de todos modos, solo que antes. A la
+		 * persona no se le pide nada de más.
+		 */
+		evidencias?: GestorEvidencias | null;
 	};
 
-	let { onEntrar, entroSinVerificar, catalogos = null }: Props = $props();
+	let { onEntrar, entroSinVerificar, catalogos = null, evidencias = null }: Props = $props();
+
+	/**
+	 * En qué pantalla de la puerta se está.
+	 *
+	 * `foto` existe porque la de al lado —la que devuelve nombre, teléfono,
+	 * dirección y quién vive en la casa— no puede ser gratuita. Preguntar por
+	 * una cédula ajena tiene que costar subir una imagen que queda guardada
+	 * atada al intento.
+	 */
+	let fase = $state<'cedula' | 'foto'>('cedula');
+	let verificada = $state('');
+	let trayendo = $state(false);
+	let errorFoto = $state('');
+
+	/** La foto ya está EN EL SERVIDOR, no solo elegida en el teléfono. */
+	const fotoSubida = $derived(
+		(evidencias?.archivosDe('PRE_CEDULA') ?? []).some((a) => a.estado === 'listo')
+	);
 
 	$effect(() => {
 		entroSinVerificar?.(sinRed);
@@ -79,7 +122,18 @@
 			const r = await preinscripcionApi.verificar(documento);
 
 			if (r.habilitado) {
-				onEntrar(documento);
+				// Sin gestor de archivos —la página todavía carga, o no hubo red
+				// para abrir la carga— no se puede pedir la foto. Se entra sin
+				// precargar: el formulario en blanco funciona igual y nadie se
+				// queda fuera por una pantalla que es una comodidad.
+				if (evidencias === null) {
+					onEntrar(documento, null);
+
+					return;
+				}
+
+				verificada = documento;
+				fase = 'foto';
 
 				return;
 			}
@@ -108,6 +162,34 @@
 			}
 		} finally {
 			consultando = false;
+		}
+	}
+
+	async function traerDatos() {
+		if (trayendo) return;
+
+		trayendo = true;
+		errorFoto = '';
+
+		try {
+			const { hogar } = await preinscripcionApi.datosCenso(verificada, evidencias?.carga ?? '');
+			onEntrar(verificada, hogar);
+		} catch (e) {
+			// Que no se puedan traer los datos NO puede dejar a nadie fuera de su
+			// propio formulario: se entra igual, en blanco. Lo que se pierde es
+			// una comodidad, no el trámite.
+			if (e instanceof ApiError && e.status === 0) {
+				onEntrar(verificada, null);
+
+				return;
+			}
+
+			errorFoto =
+				e instanceof ApiError
+					? e.message
+					: 'No pudimos traer sus datos. Puede continuar y escribirlos usted.';
+		} finally {
+			trayendo = false;
 		}
 	}
 
@@ -371,6 +453,67 @@
 			</form>
 		{/if}
 	</section>
+{:else if fase === 'foto' && evidencias}
+	<!--
+		Segunda puerta: la foto de la cédula.
+
+		No es un trámite de más. La pantalla siguiente enseña el nombre, el
+		teléfono, la dirección y quiénes viven en esa casa —datos de una familia
+		damnificada—, y una pantalla pública no puede repartir eso a quien acierte
+		un número. Subir una imagen que queda guardada junto al intento convierte
+		recorrer el censo en algo caro y con rastro.
+
+		Y no se le pide nada de más a la familia: es la misma foto que el
+		formulario pedía en el paso 1, solo que antes.
+	-->
+	<section class="tarjeta puerta">
+		<IdCard size={30} aria-hidden="true" />
+		<h2 class="puerta__titulo">Su cédula está registrada</h2>
+
+		<p class="puerta__texto">
+			Tome una foto de su cédula y le mostramos los datos que ya tenemos de su vivienda, para que
+			usted los revise y corrija lo que haga falta.
+		</p>
+
+		<div class="puerta__subida">
+			<SubidaEvidencias
+				gestor={evidencias}
+				tipo="PRE_CEDULA"
+				titulo="Foto de su cédula"
+				ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. La foto se reduce en su celular antes de enviarse, y queda con su solicitud."
+				textoCamara="Tomar foto de la cédula"
+			/>
+		</div>
+
+		{#if errorFoto}<p class="campo__error" role="alert">{errorFoto}</p>{/if}
+
+		<button
+			type="button"
+			class="boton puerta__continuar"
+			disabled={!fotoSubida || trayendo}
+			onclick={traerDatos}
+		>
+			{#if trayendo}
+				<LoaderCircle size={16} class="girando" aria-hidden="true" /> Trayendo sus datos…
+			{:else}
+				Ver mis datos
+			{/if}
+		</button>
+
+		<!--
+			La salida. Sin señal la foto no llega al servidor y el botón de arriba
+			nunca se habilita: sin esto, la puerta que se abrió para ayudar sería
+			un muro para quien peor conexión tiene.
+		-->
+		<button type="button" class="puerta__saltar" onclick={() => onEntrar(verificada, null)}>
+			Continuar sin traer mis datos
+		</button>
+
+		<button type="button" class="puerta__saltar" onclick={() => { fase = 'cedula'; verificada = ''; }}>
+			<ArrowLeft size={13} aria-hidden="true" />
+			Escribir otra cédula
+		</button>
+	</section>
 {:else}
 	<section class="tarjeta puerta">
 		<ShieldCheck size={30} aria-hidden="true" />
@@ -436,6 +579,30 @@
 		margin: 0;
 		max-width: 34rem;
 		line-height: 1.55;
+	}
+
+	.puerta__subida {
+		width: 100%;
+		text-align: left;
+	}
+
+	/* Las salidas: visibles, pero por debajo de lo que se espera que haga la
+	   mayoría. Quien tiene señal sube la foto; quien no, tiene por dónde salir. */
+	.puerta__saltar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: none;
+		background: none;
+		color: var(--color-muted);
+		font-size: 0.83rem;
+		text-decoration: underline;
+		cursor: pointer;
+		padding: 0.35rem;
+	}
+
+	.puerta__saltar:hover {
+		color: var(--color-text);
 	}
 
 	.puerta__pista {

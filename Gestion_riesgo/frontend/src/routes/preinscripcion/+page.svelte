@@ -38,6 +38,13 @@
 	import SelectorSenales from '$lib/preinscripcion/SelectorSenales.svelte';
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
 	import PuertaCedula from '$lib/preinscripcion/PuertaCedula.svelte';
+	import ListaHogar from '$lib/preinscripcion/ListaHogar.svelte';
+	import {
+		desdeCenso,
+		personasParaEnviar,
+		type HogarCenso,
+		type PersonaHogar
+	} from '$lib/preinscripcion/hogar';
 	import BotonInstalar from '$lib/components/layout/BotonInstalar.svelte';
 	import {
 		bloqueoDeAvance,
@@ -127,8 +134,40 @@
 	 */
 	let sinVerificar = $state(false);
 
-	function entrarConCedula(documento: string) {
+	/**
+	 * Lo que el censo ya sabe de esta casa, si la persona lo trajo.
+	 *
+	 * Se guarda tal cual para poder decir, junto a cada campo, «esto lo trajimos
+	 * del censo» y para marcar en pantalla lo que la persona está cambiando.
+	 */
+	let hogarCenso = $state<HogarCenso | null>(null);
+	let personas = $state<PersonaHogar[]>([]);
+
+	function entrarConCedula(documento: string, hogar: HogarCenso | null = null) {
 		datos.documento = documento;
+		hogarCenso = hogar;
+
+		if (hogar) {
+			// Solo se rellena lo que está VACÍO. Si la persona ya venía
+			// escribiendo —volvió a la puerta a corregir su cédula— pisarle lo
+			// escrito sería el peor momento para hacerlo.
+			if (datos.telefono.trim() === '') datos.telefono = hogar.telefono;
+			if (datos.direccion.trim() === '') datos.direccion = hogar.direccion;
+			if (datos.zona === '') datos.zona = hogar.zona;
+			if (datos.corregimiento.trim() === '') datos.corregimiento = hogar.corregimiento;
+			if (datos.vereda.trim() === '') datos.vereda = hogar.vereda;
+
+			// El nombre sale de la persona que está escribiendo, no del jefe de
+			// hogar: quien hace el trámite puede ser el hijo mayor de edad.
+			const yo = hogar.personas.find((p) => p.id === hogar.persona_id);
+
+			if (yo && datos.nombre_completo.trim() === '') {
+				datos.nombre_completo = `${yo.nombres} ${yo.apellidos}`.trim();
+			}
+
+			personas = desdeCenso(hogar.personas);
+		}
+
 		habilitado = true;
 	}
 
@@ -136,6 +175,8 @@
 	function cambiarCedula() {
 		habilitado = false;
 		datos.documento = '';
+		hogarCenso = null;
+		personas = [];
 		errores = {};
 		errorEnvio = '';
 		indice = 0;
@@ -342,6 +383,7 @@
 				...paraEnviar(datos),
 				envio_id: envioId,
 				aviso_version: catalogos.aviso_version,
+				...(personas.length > 0 ? { personas: personasParaEnviar(personas) } : {}),
 				// El servidor adopta las fotos de esta carga al recibir la
 				// solicitud; sin el token quedarían huérfanas hasta caducar.
 				...(evidencias?.carga ? { carga: evidencias.carga } : {})
@@ -431,6 +473,7 @@
 		</div>
 	{:else if !habilitado}
 		<PuertaCedula
+			evidencias={evidencias}
 			onEntrar={entrarConCedula}
 			entroSinVerificar={(v) => (sinVerificar = v)}
 			{catalogos}
@@ -631,6 +674,17 @@
 					<p class="ubicacion__estado" role="status" aria-live="polite">{avisoUbicacion ?? ''}</p>
 				</div>
 			</section>
+
+			<!--
+				El hogar, solo cuando el censo lo trajo.
+
+				Quien llegó sin ficha —o sin señal para traerla— no ve esta sección:
+				pedirle a mano la composición de su hogar sería justo lo que este
+				formulario decidió no hacer. Ver `Preinscripcion\Validador`.
+			-->
+			{#if hogarCenso && catalogos}
+				<ListaHogar bind:personas censo={hogarCenso.personas} {catalogos} />
+			{/if}
 
 			{#if evidencias}
 				<!-- La cédula va aquí y no al final: es un dato de identidad, y este
