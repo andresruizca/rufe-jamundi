@@ -82,6 +82,16 @@
 		sesion.autenticado && !sesion.verificada && !funcionaSinConexion(ruta)
 	);
 
+	/**
+	 * Cada cuánto se le pregunta al navegador si hay una versión nueva.
+	 *
+	 * Quince minutos: lo bastante seguido para que un arreglo urgente llegue a
+	 * las operadoras dentro de la misma jornada, y lo bastante espaciado para
+	 * que no sea una petición constante desde una vereda con mala señal.
+	 */
+	const MINUTOS_ENTRE_COMPROBACIONES = 15;
+	let ultimaComprobacion = 0;
+
 	onMount(() => {
 		void sesion.restaurar();
 
@@ -99,6 +109,48 @@
 		};
 		navigator.serviceWorker?.addEventListener('message', alMensaje);
 
+		// ── Y preguntar si la hay ────────────────────────────────────────────
+		//
+		// El aviso de arriba solo llega cuando el navegador descubre por su
+		// cuenta que hay un Service Worker nuevo, y eso ocurre al navegar o, si
+		// no, una vez al día. Una pestaña que se queda abierta no navega: la
+		// operadora del call center la deja puesta toda la jornada y trabaja
+		// dentro sin recargar nunca.
+		//
+		// El resultado era que un despliegue no le llegaba. Pasó de verdad: se
+		// corrigió el buscador, se desplegó, y la pantalla siguió enseñando la
+		// versión anterior sin decir nada — ni el aviso salía, porque nadie
+		// había preguntado.
+		//
+		// `update()` es una comprobación barata contra un archivo que se sirve
+		// con `no-cache`: si no cambió, el navegador no hace nada.
+		const buscarVersionNueva = () => {
+			const ahora = Date.now();
+
+			// Con freno: entre el temporizador, volver a la pestaña y recuperar
+			// la señal, esto se llamaría muchas más veces de las necesarias.
+			if (ahora - ultimaComprobacion < MINUTOS_ENTRE_COMPROBACIONES * 60_000) return;
+
+			ultimaComprobacion = ahora;
+
+			void navigator.serviceWorker
+				?.getRegistration()
+				.then((registro) => registro?.update())
+				.catch(() => {
+					// Sin señal, o el navegador no quiere. Se reintenta al rato.
+				});
+		};
+
+		// Volver a la pestaña es el momento más probable de que haya algo nuevo,
+		// y además cubre la pestaña que el navegador había dormido.
+		const alVolverAVerla = () => {
+			if (document.visibilityState === 'visible') buscarVersionNueva();
+		};
+
+		document.addEventListener('visibilitychange', alVolverAVerla);
+
+		const reloj = setInterval(buscarVersionNueva, 5 * 60_000);
+
 		// Al recuperar la señal, lo primero es confirmar la sesión: mientras siga
 		// sin verificar, el sistema tiene medio menú cerrado, y quien acaba de
 		// llegar al casco urbano no tiene por qué recargar a mano para recuperarlo.
@@ -107,6 +159,7 @@
 		const alVolverLaRed = () => {
 			void sesion.restaurar();
 			navigator.serviceWorker?.controller?.postMessage({ tipo: 'enviar-pendientes' });
+			buscarVersionNueva();
 		};
 		window.addEventListener('online', alVolverLaRed);
 
@@ -119,6 +172,8 @@
 		return () => {
 			navigator.serviceWorker?.removeEventListener('message', alMensaje);
 			window.removeEventListener('online', alVolverLaRed);
+			document.removeEventListener('visibilitychange', alVolverAVerla);
+			clearInterval(reloj);
 		};
 	});
 
