@@ -62,7 +62,6 @@
 	let vistaPrevia = $state<string | null>(null);
 	let grabado = $state<Blob | null>(null);
 
-	let contenedorCamara = $state<HTMLElement | null>(null);
 	let video = $state<HTMLVideoElement | null>(null);
 	let flujo: MediaStream | null = null;
 	let grabadora: MediaRecorder | null = null;
@@ -118,6 +117,18 @@
 	async function abrirCamara() {
 		error = '';
 
+		// LO PRIMERO, antes de cualquier `await`.
+		//
+		// Pantalla completa solo se concede mientras dure la «activación
+		// transitoria» del toque que llamó a esta función. El `await` de
+		// `getUserMedia` abre el diálogo de permiso de la cámara y para cuando
+		// vuelve esa activación ya se gastó: la petición se rechazaba en
+		// silencio y la pantalla se quedaba de pie.
+		//
+		// No se espera el resultado: que la pantalla gire es una comodidad, y
+		// hacer esperar a la cámara por ella sería poner lo accesorio delante.
+		void pedirApaisado();
+
 		if (!formatoSoportado()) {
 			error = 'Este teléfono no permite grabar desde el navegador. Puede continuar sin el video.';
 
@@ -126,14 +137,6 @@
 
 		try {
 			flujo = await navigator.mediaDevices.getUserMedia(RESTRICCIONES);
-
-			// La pantalla se pone apaisada sola donde el navegador sabe hacerlo:
-			// así la persona solo tiene que girar el aparato para verla derecha.
-			// Va DESPUÉS de conseguir la cámara —no tiene sentido girar una
-			// pantalla que se va a quedar sin video— y antes de dibujarla, para
-			// que no se vea saltar. Donde no se pueda, queda el aviso de girar.
-			await tick();
-			if (contenedorCamara) await pedirApaisado(contenedorCamara);
 		} catch {
 			error =
 				'No se pudo abrir la cámara. Revise que le haya dado permiso al navegador y vuelva a intentarlo.';
@@ -343,13 +346,7 @@
 	un recuadro pequeño no funciona, y el video que sale de ahí tampoco.
 -->
 {#if enPantallaCompleta}
-	<div
-		bind:this={contenedorCamara}
-		class="camara"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Grabar {categoria.nombre}"
-	>
+	<div class="camara" role="dialog" aria-modal="true" aria-label="Grabar {categoria.nombre}">
 		<!-- svelte-ignore a11y_media_has_caption -->
 		<video class="camara__vista" bind:this={video} muted playsinline autoplay></video>
 

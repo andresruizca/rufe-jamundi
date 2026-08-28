@@ -18,6 +18,7 @@
 
 	import { Camera, Check, ImagePlus, Trash2 } from '@lucide/svelte';
 	import CamaraCedula from '$lib/camara/CamaraCedula.svelte';
+	import { pedirApaisado } from '$lib/camara/orientacion.svelte';
 	import type { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import type { TipoEvidencia } from '$lib/rufe-form/tipos';
 
@@ -47,6 +48,21 @@
 
 	/** Qué cara se está fotografiando, si hay alguna cámara abierta. */
 	let capturando = $state<Cara | null>(null);
+
+	/**
+	 * Abrir la cámara, y de paso poner la pantalla apaisada.
+	 *
+	 * El giro se pide AQUÍ y no dentro de la cámara: pantalla completa solo se
+	 * concede mientras dure la activación que deja este toque, y dentro de la
+	 * cámara ya se ha esperado al permiso del aparato. Es una comodidad, así que
+	 * no se espera el resultado ni se comprueba: si falla, la cámara se abre
+	 * igual y queda el aviso de girar.
+	 */
+	function abrirCamara(cara: Cara) {
+		void pedirApaisado();
+		capturando = cara;
+	}
+
 	let entradas = $state<Record<string, HTMLInputElement | null>>({});
 
 	function fotoDe(tipo: TipoEvidencia) {
@@ -117,7 +133,7 @@
 			<p class="cara__pista">{cara.pista}</p>
 
 			<div class="cara__acciones">
-				<button type="button" class="boton boton--suave" onclick={() => (capturando = cara)}>
+				<button type="button" class="boton boton--suave" onclick={() => abrirCamara(cara)}>
 					<Camera size={16} aria-hidden="true" />
 					{foto ? 'Repetir la foto' : 'Tomar la foto'}
 				</button>

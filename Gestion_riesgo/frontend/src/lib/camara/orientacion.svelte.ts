@@ -90,13 +90,28 @@ export function usarOrientacion(): { readonly actual: Orientacion } {
  * queda la pantalla como estaba y el aviso hace su trabajo. Por eso todo va
  * envuelto y ningún fallo se propaga.
  *
- * @param elemento el contenedor de la cámara, que es lo que va a pantalla completa
+ * ── Hay que llamarla DESDE EL TOQUE, antes de cualquier `await` ─────────────
+ *
+ * Pantalla completa solo se concede con «activación transitoria»: el permiso
+ * que deja un toque reciente de la persona. La primera versión la pedía después
+ * de `getUserMedia`, y ese `await` abre el diálogo de permiso de la cámara —
+ * para cuando volvía, la activación se había gastado y la petición se rechazaba
+ * en silencio. La pantalla se quedaba de pie y el aviso de girar no servía de
+ * nada, que es exactamente lo que se veía en el teléfono.
+ *
+ * Por eso se pide sobre `documentElement` y no sobre el contenedor de la
+ * cámara: ese contenedor todavía no existe en el momento del toque —se dibuja
+ * cuando la cámara se abre— y esperar a que exista es volver a perder la
+ * activación.
+ *
  * @return si de verdad se consiguió el apaisado
  */
-export async function pedirApaisado(elemento: HTMLElement): Promise<boolean> {
+export async function pedirApaisado(elemento?: HTMLElement): Promise<boolean> {
+	const destino = elemento ?? document.documentElement;
+
 	try {
-		if (document.fullscreenElement === null && elemento.requestFullscreen) {
-			await elemento.requestFullscreen({ navigationUI: 'hide' });
+		if (document.fullscreenElement === null && destino.requestFullscreen) {
+			await destino.requestFullscreen({ navigationUI: 'hide' });
 		}
 	} catch {
 		// Sin pantalla completa se puede intentar el bloqueo igual: algunos
@@ -108,6 +123,8 @@ export async function pedirApaisado(elemento: HTMLElement): Promise<boolean> {
 
 		return true;
 	} catch {
+		// Safari de iOS no lo implementa, y un navegador dentro de otra
+		// aplicación puede tenerlo restringido. No es un error: queda el aviso.
 		return false;
 	}
 }
