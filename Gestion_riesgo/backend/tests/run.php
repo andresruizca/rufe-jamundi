@@ -4748,16 +4748,64 @@ prueba('el mensaje va por WhatsApp y no por SMS', function (): void {
     afirmarIgual('Aleida Pérez', $c['content']['templateVariables']['1'], 'el nombre va en la variable 1');
 });
 
-prueba('dos clics el mismo día son un solo mensaje', function (): void {
-    // Es el fallo más probable de un botón que tarda dos segundos en responder.
+prueba('dos clics seguidos son un solo mensaje, pero un reintento sale', function (): void {
+    // El doble clic es el fallo más probable de un botón que tarda dos segundos.
+    // Pero la clave NO puede ser por día: con granularidad diaria el proveedor
+    // devolvía siempre el envío anterior, y un fallo quedaba congelado hasta el
+    // día siguiente aunque se arreglara la causa.
     $w = 'App\\CallCenter\\Whatsapp';
 
     $a = $w::cuerpoDelMensaje('+573001112233', 'Aleida Pérez', 42);
     $b = $w::cuerpoDelMensaje('+573001112233', 'Aleida Pérez', 42);
-    afirmarIgual($a['idempotencyKey'], $b['idempotencyKey'], 'misma clave para el mismo hogar y día');
+    afirmarIgual($a['idempotencyKey'], $b['idempotencyKey'], 'dos pulsaciones seguidas: una sola clave');
 
     $otro = $w::cuerpoDelMensaje('+573009998877', 'Otro Hogar', 43);
     afirmar($a['idempotencyKey'] !== $otro['idempotencyKey'], 'hogares distintos, claves distintas');
+
+    afirmar(
+        preg_match('/^rufe-42-\\d{12}$/', $a['idempotencyKey']) === 1,
+        'la clave llega al minuto (12 dígitos), no al día'
+    );
+});
+
+prueba('un 2xx no significa que el mensaje saliera', function (): void {
+    // El proveedor acepta con 202 y `queued`, y si Meta lo rechaza lo marca
+    // `failed` menos de un segundo después. Darlo por bueno dejaría el hogar
+    // registrado como contactado sin que le llegara nada, y la operadora no
+    // volvería a llamarlo.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    $r = $w::interpretarRespuesta(202, ['message' => [
+        'id' => 'abc', 'status' => 'failed',
+        'errorMessage' => 'Template no aprobada por Meta.',
+    ]]);
+
+    afirmar(! $r['ok'], 'status failed manda por encima del código HTTP');
+    afirmarIgual('Template no aprobada por Meta.', $r['error'], 'y se muestra el motivo del proveedor');
+});
+
+prueba('el error que ve la operadora nunca es un JSON crudo', function (): void {
+    // Volcar el objeto entero llena la pantalla de llaves, se corta a la mitad
+    // y no dice qué pasó — que es lo único que ella necesita saber mientras
+    // tiene a alguien esperando.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    $r = $w::interpretarRespuesta(400, ['message' => [
+        'id' => 'abc', 'status' => 'failed', 'errorCode' => 'SEND_ERROR',
+        'to' => '+573001112233', 'from' => '+573106173887',
+    ]]);
+
+    afirmar(! $r['ok'], 'un 400 es un fallo');
+    afirmar(! str_contains((string) $r['error'], '{'), 'sin llaves: no puede ser JSON');
+    afirmar(str_contains((string) $r['error'], 'SEND_ERROR'), 'pero sí dice el código del proveedor');
+});
+
+prueba('un encolado sin fallo se acepta', function (): void {
+    $w = 'App\\CallCenter\\Whatsapp';
+    $r = $w::interpretarRespuesta(202, ['message' => ['id' => 'abc', 'status' => 'queued']]);
+
+    afirmar($r['ok'], 'queued sin error es aceptación');
+    afirmarIgual('abc', $r['id'], 'y se conserva el id para poder confirmarlo');
 });
 
 prueba('sin token configurado el envío no existe', function (): void {
