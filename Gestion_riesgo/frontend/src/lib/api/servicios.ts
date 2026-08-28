@@ -7,6 +7,7 @@ import type { HogarCenso } from '$lib/preinscripcion/hogar';
 import { api, API_BASE, leerToken } from './client';
 import type { Actualizaciones, InfoSistema, RolCatalogo, Usuario } from './tipos';
 import type {
+	EnvioWhatsapp,
 	GestionLlamada,
 	AtencionEnCurso,
 	GuionVigente,
@@ -241,15 +242,25 @@ export const callCenterApi = {
 	 * servidor y es él quien envía. Un token en el navegador es un token público,
 	 * y con él cualquiera manda WhatsApp desde el número de la Alcaldía.
 	 *
-	 * Puede fallar con 409 si ya se le envió hoy, con 422 si el hogar no tiene
-	 * celular y con 502 si el proveedor lo rechaza — en los tres casos el mensaje
-	 * del servidor está escrito para mostrarse tal cual.
+	 * Puede fallar con 409 si ya se le envió hace poco, con 422 si el hogar no
+	 * tiene celular y con 502 si el proveedor lo rechaza — en los tres casos el
+	 * mensaje del servidor está escrito para mostrarse tal cual.
+	 *
+	 * `repetir` es la respuesta de la operadora al 409: sí, mándaselo otra vez.
+	 * No sirve para saltarse el freno de los dos minutos, que existe contra el
+	 * doble clic y no contra una decisión.
 	 */
-	enviarWhatsapp: (id: number) =>
-		api.post<{ enviado: boolean; telefono: string; nombre: string }>(
-			`/callcenter/hogares/${id}/whatsapp`,
-			{}
-		),
+	enviarWhatsapp: (id: number, repetir = false) =>
+		api.post<{
+			enviado: boolean;
+			telefono: string;
+			nombre: string;
+			envios: EnvioWhatsapp[];
+		}>(`/callcenter/hogares/${id}/whatsapp`, repetir ? { repetir: '1' } : {}),
+
+	/** Los WhatsApp que se le han mandado a este hogar, con fecha y hora. */
+	enviosWhatsapp: (id: number) =>
+		api.get<{ envios: EnvioWhatsapp[] }>(`/callcenter/hogares/${id}/whatsapp`),
 
 	atenciones: () =>
 		api.get<{ atenciones: AtencionEnCurso[]; minutos: number }>('/callcenter/atenciones'),

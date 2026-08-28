@@ -31,7 +31,7 @@
 	import CompartirPreinscripcion from '$lib/components/CompartirPreinscripcion.svelte';
 	import { almacenGuion } from './guionStore.svelte';
 	import { leerGuion } from './guion';
-	import type { GestionLlamada, HogarParaLlamar } from './tipos';
+	import type { EnvioWhatsapp, GestionLlamada, HogarParaLlamar } from './tipos';
 
 	let {
 		hogar,
@@ -61,6 +61,16 @@
 	let enviandoWa = $state(false);
 	let waAviso = $state<{ texto: string; ok: boolean } | null>(null);
 
+	/**
+	 * Los WhatsApp que ya se le mandaron a este hogar.
+	 *
+	 * Se cargan al abrir la llamada, no al desplegar nada: es lo que sustituyó
+	 * al bloqueo de 24 horas. Con tres operadoras sobre la misma lista, el freno
+	 * útil no es prohibir el reenvío, sino que se vea lo que ya se mandó —y
+	 * quién lo mandó— antes de volver a mandarlo.
+	 */
+	let envios = $state<EnvioWhatsapp[]>([]);
+
 	let historial = $state<GestionLlamada[]>([]);
 	let historialAbierto = $state(false);
 	let historialPedido = $state(false);
@@ -77,6 +87,10 @@
 		// mientras siga abierta, porque el aviso caduca solo a los seis.
 		avisar();
 		latido = setInterval(avisar, 60_000);
+
+		// Sin `await`: que la lista de envíos tarde no puede retrasar el resto de
+		// la pantalla, que es lo que la operadora necesita para empezar a hablar.
+		void cargarEnvios();
 	});
 
 	onDestroy(() => {
@@ -86,6 +100,38 @@
 
 	function avisar() {
 		void callCenterApi.atender(hogar.id).catch(() => {});
+	}
+
+	async function cargarEnvios() {
+		try {
+			envios = (await callCenterApi.enviosWhatsapp(hogar.id)).envios;
+		} catch {
+			// Sin señal o sin permiso: se queda la lista vacía. Es información de
+			// apoyo, y no puede impedir que la operadora atienda la llamada.
+		}
+	}
+
+	/**
+	 * «hoy a las 9:09», «ayer a las 18:40», «el 26/08 a las 9:41».
+	 *
+	 * Con la hora, y no solo la fecha como la `cuando()` del historial: entre
+	 * tres operadoras que trabajan la misma lista a la vez, saber que el mensaje
+	 * salió «hoy» no basta para decidir si repetirlo. Saber que salió hace diez
+	 * minutos, sí.
+	 */
+	function fechaYHora(iso: string): string {
+		const d = new Date(iso.replace(' ', 'T'));
+		if (Number.isNaN(d.getTime())) return iso;
+
+		const hora = d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' });
+		const dias = Math.round(
+			(new Date(hoy).getTime() - new Date(d.toISOString().slice(0, 10)).getTime()) / 86_400_000
+		);
+
+		if (dias === 0) return `hoy a las ${hora}`;
+		if (dias === 1) return `ayer a las ${hora}`;
+
+		return `el ${d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })} a las ${hora}`;
 	}
 
 	async function copiar() {
@@ -116,18 +162,26 @@
 	 * mientras dura, porque el proveedor tarda un par de segundos y el segundo
 	 * clic sería un segundo mensaje.
 	 */
-	async function enviarWhatsapp() {
+	async function enviarWhatsapp(repetir = false) {
 		if (enviandoWa || !hogar.telefono) return;
 
 		const quien = hogar.nombre ?? 'este hogar';
-		if (!confirm(`¿Enviarle el enlace del formulario por WhatsApp a ${quien}?`)) return;
+
+		if (!repetir && !confirm(`¿Enviarle el enlace del formulario por WhatsApp a ${quien}?`)) {
+			return;
+		}
 
 		enviandoWa = true;
 		waAviso = null;
 
 		try {
-			const r = await callCenterApi.enviarWhatsapp(hogar.id);
+			const r = await callCenterApi.enviarWhatsapp(hogar.id, repetir);
 			waAviso = { texto: `Enviado a ${r.nombre}`, ok: true };
+			// El servidor devuelve el reporte ya actualizado: la operadora ve su
+			// propio envío en la lista en el mismo momento en que le confirmamos
+			// que salió. Sin esto dudaría, y volvería a pulsar.
+			envios = r.envios ?? envios;
+
 			// El envío ES una gestión: si el historial está abierto, que se vea.
 			historialPedido = false;
 			if (historialAbierto) {
@@ -135,11 +189,29 @@
 				await verHistorial();
 			}
 		} catch (e) {
-			const err = e as { errors?: Record<string, string>; message?: string };
-			waAviso = {
-				texto: err.errors?.telefono ?? err.message ?? 'No se pudo enviar el WhatsApp.',
-				ok: false
-			};
+			const err = e as { errors?: Record<string, string>; message?: string; status?: number };
+
+			// 409 con envíos previos es «ya se le mandó, ¿seguro?». Se pregunta
+			// una vez, con lo que dice el servidor, y si contesta que sí se
+			// repite. El freno de los dos minutos también responde 409 pero no
+			// admite `repetir`, así que ahí volverá a negarse — y con razón.
+			if (err.status === 409 && !repetir) {
+				const texto = err.message ?? 'A este hogar ya se le envió el WhatsApp.';
+
+				if (confirm(`${texto}\n\n¿Enviárselo otra vez de todos modos?`)) {
+					enviandoWa = false;
+					await enviarWhatsapp(true);
+
+					return;
+				}
+
+				waAviso = { texto, ok: false };
+			} else {
+				waAviso = {
+					texto: err.errors?.telefono ?? err.message ?? 'No se pudo enviar el WhatsApp.',
+					ok: false
+				};
+			}
 		} finally {
 			enviandoWa = false;
 		}
@@ -296,7 +368,7 @@
 				<button
 					type="button"
 					class="telefono__wa"
-					onclick={enviarWhatsapp}
+					onclick={() => enviarWhatsapp()}
 					disabled={enviandoWa}
 				>
 					{#if enviandoWa}
@@ -304,12 +376,51 @@
 						Enviando
 					{:else}
 						<MessageCircle size={14} aria-hidden="true" />
-						Enviar por WhatsApp
+						{envios.some((e) => e.ok) ? 'Reenviar por WhatsApp' : 'Enviar por WhatsApp'}
 					{/if}
 				</button>
 			</div>
 			{#if waAviso}
 				<p class="waaviso" class:waaviso--mal={!waAviso.ok} role="status">{waAviso.texto}</p>
+			{/if}
+
+			<!--
+				El reporte de envíos, debajo del número y siempre a la vista.
+
+				Sustituye al bloqueo de 24 horas que había antes. Prohibir el
+				reenvío era negarle a la operadora un remedio que a veces hace
+				falta —el mensaje no llegó, la persona lo borró, cambió de
+				teléfono— y a la vez no resolvía el problema de fondo, que es que
+				tres personas trabajan la misma lista sin verse. Esto sí lo
+				resuelve: se ve qué se mandó, cuándo y quién.
+			-->
+			{#if envios.length > 0}
+				<div class="envios">
+					<h4 class="envios__titulo">
+						WhatsApp enviados
+						<span class="envios__cuenta">{envios.length}</span>
+					</h4>
+					<ul class="envios__lista">
+						{#each envios as e (e.cuando + (e.quien ?? ''))}
+							<li class="envio" class:envio--mal={!e.ok}>
+								<span class="envio__marca" aria-hidden="true">
+									{#if e.ok}
+										<Check size={13} />
+									{:else}
+										<TriangleAlert size={13} />
+									{/if}
+								</span>
+								<span class="envio__texto">
+									<span class="envio__cuando">
+										{e.ok ? 'Enviado' : 'Falló'} {fechaYHora(e.cuando)}
+									</span>
+									{#if e.quien}<span class="envio__quien">por {e.quien}</span>{/if}
+									{#if e.error}<span class="envio__error">{e.error}</span>{/if}
+								</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
 			{/if}
 		{:else}
 			<p class="sintel">
@@ -729,6 +840,81 @@
 	.telefono__wa:disabled {
 		opacity: 0.6;
 		cursor: progress;
+	}
+
+	/* ── El reporte de envíos ───────────────────────────────────────────── */
+	.envios {
+		margin-top: 0.7rem;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		padding: 0.6rem 0.7rem;
+		background: var(--color-surface-alt);
+	}
+
+	.envios__titulo {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0 0 0.45rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted);
+	}
+
+	.envios__cuenta {
+		border-radius: 999px;
+		padding: 0.05rem 0.4rem;
+		background: var(--color-surface);
+		font-size: 0.72rem;
+		letter-spacing: 0;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.envios__lista {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.envio {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+		font-size: 0.82rem;
+		line-height: 1.35;
+		color: var(--color-success);
+	}
+
+	.envio--mal {
+		color: var(--color-danger);
+	}
+
+	.envio__marca {
+		flex: none;
+		margin-top: 0.12rem;
+	}
+
+	.envio__texto {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.15rem 0.4rem;
+		min-width: 0;
+	}
+
+	.envio__cuando {
+		font-weight: 600;
+	}
+
+	/* Quién y por qué falló se apagan: lo primero que hay que leer es cuándo. */
+	.envio__quien,
+	.envio__error {
+		color: var(--color-muted);
+		overflow-wrap: anywhere;
 	}
 
 	.waaviso {

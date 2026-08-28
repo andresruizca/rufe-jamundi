@@ -278,6 +278,7 @@ $router->post('/callcenter/hogares/{id}/gestiones', [$callCenter, 'registrar'], 
 // Le manda a UN hogar el enlace del formulario por WhatsApp. Mismo rol que el
 // resto del módulo: quien puede llamar, puede escribir. No hay versión masiva
 // a propósito — ver el comentario de `enviarWhatsapp()`.
+$router->get('/callcenter/hogares/{id}/whatsapp', [$callCenter, 'enviosDeWhatsapp'], Auth::CALL_CENTER);
 $router->post('/callcenter/hogares/{id}/whatsapp', [$callCenter, 'enviarWhatsapp'], Auth::CALL_CENTER);
 // Quién está llamando a quién, entre las tres operadoras. Va aparte de la lista
 // porque se refresca cada pocos segundos y recargar la lista entera borraría lo

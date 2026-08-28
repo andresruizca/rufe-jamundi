@@ -3259,6 +3259,9 @@ prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function 
         'GET /callcenter/resumen',
         'GET /callcenter/hogares',
         'GET /callcenter/hogares/{id}/gestiones',
+        // El reporte de WhatsApp que se dibuja debajo del número. Es de solo
+        // lectura y del mismo hogar que ya puede ver: no amplía lo que alcanza.
+        'GET /callcenter/hogares/{id}/whatsapp',
         'POST /callcenter/hogares/{id}/gestiones',
         // Le manda a un hogar el enlace del formulario por WhatsApp. Mismo rol
         // que llamar: es la misma gestión por otro canal, y quien puede hablar
@@ -3474,6 +3477,97 @@ prueba('el resumen cuenta viviendas inspeccionadas, no formularios llenados', fu
     afirmar(
         substr_count($resumen, 'EN_CAMPANA') >= 3,
         'las cifras de la campaña siguen contando por preinscripción y no por inspección'
+    );
+});
+
+grupo('Reenviar el WhatsApp');
+
+/**
+ * El cuerpo de un método, hasta donde empieza el siguiente.
+ *
+ * Recortar por número de caracteres es lo que hizo fallar estas pruebas la
+ * primera vez: la ventana se quedaba corta o se metía en el método de al lado,
+ * y el resultado no decía nada del código.
+ */
+function metodoDe(string $php, string $firma): string
+{
+    $desde = strpos($php, $firma);
+    if ($desde === false) {
+        return '';
+    }
+
+    $siguiente = preg_match('/\n    (?:public|private|protected) (?:static )?function /', $php, $m, PREG_OFFSET_CAPTURE, $desde + strlen($firma));
+
+    return $siguiente === 1 ? substr($php, $desde, $m[0][1] - $desde) : substr($php, $desde);
+}
+
+prueba('repetir el envío se avisa, ya no se prohíbe', function () use ($raiz): void {
+    // Antes era un muro de 24 horas. Hay motivos buenos para repetirlo —el
+    // primero no llegó, la persona lo borró, cambió de teléfono— y quien tiene
+    // a la familia al aparato sabe cuál es el caso. Ahora el sistema pregunta y
+    // la operadora decide.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $metodo = metodoDe($php, 'public function enviarWhatsapp(');
+
+    afirmar(
+        str_contains($metodo, "\$req->texto('repetir') !== '1'"),
+        'no hay forma de confirmar el reenvío: volvió a ser un muro'
+    );
+    afirmar(
+        ! str_contains($metodo, 'Espere '.'24'.' horas'),
+        'sigue diciéndole a la operadora que espere en vez de preguntarle'
+    );
+});
+
+prueba('el doble clic sí sigue siendo un muro', function () use ($raiz): void {
+    // Esto no es una política, es un seguro: dos operadoras pulsando el mismo
+    // botón en el mismo segundo mandan dos mensajes idénticos a una familia que
+    // acaba de perder parte de su casa. Nadie decide eso.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $metodo = metodoDe($php, 'public function enviarWhatsapp(');
+
+    afirmar(
+        str_contains($metodo, 'MINUTOS_ANTIRREBOTE'),
+        'sin antirrebote, el doble clic manda dos WhatsApp'
+    );
+
+    // Y la CONDICIÓN del antirrebote no puede mencionar `repetir`: si se pudiera
+    // saltar confirmando, dejaría de proteger justo del caso para el que existe.
+    preg_match('/if \(\$hace < self::MINUTOS_ANTIRREBOTE\)/', $metodo, $m);
+
+    afirmar(
+        isset($m[0]),
+        'el antirrebote ya no compara contra MINUTOS_ANTIRREBOTE a secas: se puede estar saltando'
+    );
+});
+
+prueba('el reporte de envíos dice cuándo, quién y si falló', function () use ($raiz): void {
+    // Es lo que sustituye al bloqueo. Con tres operadoras sobre la misma lista,
+    // el freno útil no es prohibir: es que se vea lo que ya se mandó antes de
+    // volver a mandarlo — y quién lo mandó, para no tener que preguntarlo en
+    // voz alta por la oficina.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $metodo = metodoDe($php, 'private function enviosWhatsapp(');
+
+    foreach (["'cuando'", "'ok'", "'quien'", "'error'"] as $campo) {
+        afirmar(str_contains($metodo, $campo), "el reporte de envíos no trae {$campo}");
+    }
+
+    afirmar(
+        str_contains($metodo, "'c' => 'WHATSAPP'"),
+        'el reporte mezcla las llamadas con los WhatsApp'
+    );
+});
+
+prueba('el envío devuelve el reporte ya actualizado', function () use ($raiz): void {
+    // Sin esto la operadora confirma el envío y no lo ve en la lista hasta
+    // recargar, que es justo cuando dudaría y volvería a pulsar.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $metodo = metodoDe($php, 'public function enviarWhatsapp(');
+
+    afirmar(
+        str_contains($metodo, "'envios' => \$this->enviosWhatsapp(\$id)"),
+        'la respuesta del envío no trae el reporte actualizado'
     );
 });
 

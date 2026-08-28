@@ -186,14 +186,32 @@ final class CallCenterController
     ];
 
     /**
-     * Horas que deben pasar antes de volver a mandarle WhatsApp al mismo hogar.
+     * A partir de cuántas horas repetir el WhatsApp deja de necesitar aviso.
      *
-     * No es una preferencia de estilo. Son familias que acaban de perder parte
-     * de su casa: recibir tres veces el mismo mensaje automático de la Alcaldía
-     * es maltrato. Y con tres operadoras trabajando la misma lista, sin este
-     * freno pasa el primer día.
+     * No es un muro: es el punto en que el sistema pregunta «ya se le envió
+     * hace un rato, ¿seguro?». La operadora puede repetirlo igual, porque hay
+     * motivos buenos —el primero no llegó, la persona lo borró, cambió de
+     * teléfono— y quien tiene a la familia al aparato sabe cuál es el caso.
+     *
+     * Antes era un bloqueo duro de 24 horas. La razón escrita entonces sigue
+     * siendo cierta y por eso el aviso se queda: son familias que acaban de
+     * perder parte de su casa, y recibir tres veces el mismo mensaje automático
+     * de la Alcaldía es maltrato. Lo que cambió es quién decide. El freno de
+     * verdad ahora es que se VEA: debajo del número está la lista de envíos con
+     * su fecha y su hora, así que las tres operadoras saben lo que ya se mandó
+     * en vez de descubrirlo chocando.
      */
     private const HORAS_ENTRE_WHATSAPP = 24;
+
+    /**
+     * Minutos en que un segundo envío no se acepta ni pidiéndolo.
+     *
+     * Esto sí es un muro, y no es una política: es un seguro contra el doble
+     * clic y contra dos operadoras pulsando el botón en el mismo segundo sobre
+     * la misma fila. Ninguna de las dos cosas es una decisión de nadie, y las
+     * dos mandan dos mensajes idénticos a la misma familia.
+     */
+    private const MINUTOS_ANTIRREBOTE = 2;
 
     /**
      * El cruce con las preinscripciones, que es el corazón del módulo.
@@ -398,6 +416,51 @@ final class CallCenterController
     }
 
     /** El historial de llamadas de un hogar. Del más reciente al más antiguo. */
+    /**
+     * Los WhatsApp que se le han mandado a este hogar, con fecha y hora.
+     *
+     * Va aparte del historial completo porque se dibuja en otro sitio y en otro
+     * momento: debajo del número, nada más abrir la llamada, sin que la
+     * operadora tenga que desplegar nada.
+     *
+     * Es lo que sustituye al bloqueo de 24 horas. Con tres operadoras sobre la
+     * misma lista, el freno útil no es prohibir: es que se vea lo que ya se
+     * mandó antes de volver a mandarlo.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function enviosWhatsapp(int $id): array
+    {
+        return array_map(
+            static fn (array $g): array => [
+                'cuando'    => $g['creado_en'],
+                'ok'        => $g['resultado'] === 'WHATSAPP_ENVIADO',
+                // Quién lo mandó: entre tres operadoras, «ya se le envió» sin
+                // decir quién obliga a preguntar en voz alta por la oficina.
+                'quien'     => $g['usuario_email'],
+                // Por qué falló, si falló. Un número que no existe en WhatsApp
+                // hay que saberlo, no reintentarlo cinco veces.
+                'error'     => $g['nota'],
+            ],
+            Db::all(
+                'SELECT resultado, nota, usuario_email, creado_en
+                   FROM rufe_gestiones
+                  WHERE reporte_id = :r AND canal = :c
+                  ORDER BY creado_en DESC, id DESC
+                  LIMIT 20',
+                ['r' => $id, 'c' => 'WHATSAPP']
+            )
+        );
+    }
+
+    public function enviosDeWhatsapp(Request $req): void
+    {
+        $id = (int) $req->param('id');
+        $this->exigirHogar($id);
+
+        Response::ok(['envios' => $this->enviosWhatsapp($id)]);
+    }
+
     public function historial(Request $req): void
     {
         $id = (int) $req->param('id');
@@ -526,21 +589,36 @@ final class CallCenterController
             ]);
         }
 
-        // ── No repetir ───────────────────────────────────────────────────
+        // ── Repetir: se avisa, no se prohíbe ─────────────────────────────
         $ultimo = Db::first(
             'SELECT creado_en FROM rufe_gestiones
               WHERE reporte_id = :r AND canal = :c AND resultado = :res
-                AND creado_en > (NOW() - INTERVAL '.self::HORAS_ENTRE_WHATSAPP.' HOUR)
               ORDER BY creado_en DESC LIMIT 1',
             ['r' => $id, 'c' => 'WHATSAPP', 'res' => 'WHATSAPP_ENVIADO']
         );
 
         if ($ultimo !== null) {
-            throw new HttpError(
-                'A este hogar ya se le envió el WhatsApp el '.$ultimo['creado_en'].'. '
-                .'Espere '.self::HORAS_ENTRE_WHATSAPP.' horas antes de repetirlo.',
-                409
-            );
+            $hace = (time() - strtotime((string) $ultimo['creado_en'])) / 60;
+
+            // El seguro contra el doble clic. No se puede saltar: nadie decide
+            // mandar dos veces el mismo mensaje con dos minutos de diferencia.
+            if ($hace < self::MINUTOS_ANTIRREBOTE) {
+                throw new HttpError(
+                    'Se le acaba de enviar el WhatsApp a este hogar, hace menos de '
+                    .self::MINUTOS_ANTIRREBOTE.' minutos. Espere un momento.',
+                    409
+                );
+            }
+
+            // Dentro de las horas de cortesía se pregunta una vez. Con
+            // `repetir` la operadora ya contestó que sí.
+            if ($hace < self::HORAS_ENTRE_WHATSAPP * 60 && $req->texto('repetir') !== '1') {
+                throw new HttpError(
+                    'A este hogar ya se le envió el WhatsApp el '.$ultimo['creado_en'].'. '
+                    .'Confirme si quiere enviárselo otra vez.',
+                    409
+                );
+            }
         }
 
         $nombre = Whatsapp::nombreParaSaludo($hogar['jefe_nombres'] ?? null, $hogar['jefe_apellidos'] ?? null);
@@ -579,6 +657,10 @@ final class CallCenterController
             'enviado' => true,
             'telefono' => $telefono,
             'nombre' => $nombre,
+            // El reporte actualizado viaja de vuelta: la pantalla lo dibuja sin
+            // una segunda petición, y así la operadora ve su propio envío en la
+            // lista en el mismo momento en que le confirmamos que salió.
+            'envios' => $this->enviosWhatsapp($id),
         ]);
     }
 

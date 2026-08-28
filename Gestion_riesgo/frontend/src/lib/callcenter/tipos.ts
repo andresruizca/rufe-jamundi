@@ -215,3 +215,22 @@ export function porcentaje(parte: number, total: number): string {
 
 	return `${Math.round((parte / total) * 100)}%`;
 }
+
+
+/**
+ * Un WhatsApp que se le mandó a un hogar.
+ *
+ * Se dibuja debajo del número, nada más abrir la llamada. Es lo que sustituyó
+ * al bloqueo de 24 horas: con tres operadoras sobre la misma lista, el freno
+ * útil no es prohibir el reenvío, es que se vea lo que ya se mandó antes de
+ * volver a mandarlo.
+ */
+export type EnvioWhatsapp = {
+	cuando: string;
+	/** Salió de verdad. `false` es un intento que el proveedor rechazó. */
+	ok: boolean;
+	/** Quién lo mandó. Entre tres operadoras, «ya se envió» sin decir quién obliga a preguntar. */
+	quien: string | null;
+	/** Por qué falló. Un número que no existe en WhatsApp hay que saberlo, no reintentarlo cinco veces. */
+	error: string | null;
+};
