@@ -258,7 +258,49 @@ final class CallCenterController
                 'paginas'    => (int) ceil($total / $porPagina),
             ],
             'resultados' => self::RESULTADOS,
+            'en_otras_listas' => $this->enOtrasListas($req, $estado, $total),
         ]);
+    }
+
+    /**
+     * Cuántos hogares encuentra esta búsqueda FUERA de la pestaña abierta.
+     *
+     * ── El fallo que esto cierra ─────────────────────────────────────────────
+     *
+     * La búsqueda estaba encerrada en la pestaña. Una operadora en «Falta
+     * llamar» escribía una cédula, no salía nada, y la conclusión natural
+     * —«esta familia no está en el censo»— era falsa: el hogar estaba ahí, en
+     * «Ya se preinscribieron», que es justo la respuesta que ella necesitaba
+     * darle a quien tenía al teléfono.
+     *
+     * Pasó de verdad el 28 de agosto de 2026 con la cédula 16844290: la ficha
+     * existía, la búsqueda la encontraba en «Todos» y devolvía cero en la
+     * pestaña abierta. Es el error más caro de esta pantalla, porque no se
+     * parece a un error: se parece a una respuesta.
+     *
+     * ── Por qué avisar y no ampliar la búsqueda ──────────────────────────────
+     *
+     * Ignorar la pestaña cuando hay texto haría que buscar signifique una cosa
+     * distinta según lo escrito, y la operadora perdería la lista en la que
+     * estaba trabajando. Se prefiere respetar la pestaña y decir en voz alta lo
+     * que hay fuera, con un camino para ir a verlo.
+     *
+     * Solo cuesta una consulta más, y solo cuando de verdad se está buscando.
+     */
+    private function enOtrasListas(Request $req, string $estado, int $enEsta): int
+    {
+        if (trim((string) ($req->query('q') ?? '')) === '' || $estado === 'todos') {
+            return 0;
+        }
+
+        [$filtro, $params] = $this->filtros($req, 'todos');
+
+        $enTodas = (int) (Db::first(
+            'SELECT COUNT(*) AS t FROM rufe_reportes r '.self::CRUCE.$filtro,
+            $params
+        )['t'] ?? 0);
+
+        return max(0, $enTodas - $enEsta);
     }
 
     /**

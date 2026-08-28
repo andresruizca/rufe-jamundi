@@ -21,6 +21,7 @@
 		ClipboardCopy,
 		Clock,
 		Headphones,
+		Info,
 		LoaderCircle,
 		PhoneForwarded,
 		PhoneOff,
@@ -49,6 +50,16 @@
 	let hogares = $state<HogarParaLlamar[]>([]);
 	let resultados = $state<Record<string, string>>({});
 	let total = $state(0);
+	/**
+	 * Cuántos hogares encuentra esta búsqueda en las OTRAS listas.
+	 *
+	 * La búsqueda respeta la pestaña abierta, y eso hacía daño en silencio: la
+	 * operadora buscaba una cédula en «Falta llamar», no salía nada, y la
+	 * conclusión natural —«esta familia no está en el censo»— era falsa. El
+	 * hogar estaba en «Ya se preinscribieron», que era justo lo que tenía que
+	 * decirle a quien tenía al teléfono.
+	 */
+	let enOtrasListas = $state(0);
 	let pagina = $state(1);
 	let paginas = $state(1);
 
@@ -186,6 +197,7 @@
 			hogares = l.hogares;
 			resultados = l.resultados;
 			total = l.paginacion.total;
+			enOtrasListas = l.en_otras_listas ?? 0;
 			paginas = l.paginacion.paginas;
 		} catch (e) {
 			if (mia !== ultimaPeticion) return;
@@ -440,6 +452,31 @@
 		</p>
 	{/if}
 
+	<!--
+		Lo que la búsqueda encontró FUERA de esta pestaña.
+
+		Sin esto, buscar una cédula en «Falta llamar» y no ver nada se lee como
+		«esta familia no está en el censo», que es la respuesta más cara que
+		puede dar esta pantalla — y la que más se parece a una respuesta buena.
+	-->
+	{#if enOtrasListas > 0 && !cargando}
+		<p class="aviso aviso--info" role="status">
+			<Info size={15} aria-hidden="true" />
+			<span>
+				{#if hogares.length === 0}
+					Aquí no hay coincidencias, pero
+				{:else}
+					Además de {total === 1 ? 'este' : 'estos'}, hay
+				{/if}
+				<strong>{enOtrasListas} {enOtrasListas === 1 ? 'hogar' : 'hogares'}</strong>
+				en otras listas con lo que buscó.
+			</span>
+			<button type="button" class="ver-todos" onclick={() => cambiarPestana('todos')}>
+				Buscar en todas
+			</button>
+		</p>
+	{/if}
+
 	{#if cargando}
 		<p class="cargando">
 			<LoaderCircle size={18} class="girando" aria-hidden="true" />
@@ -449,9 +486,13 @@
 		<p class="vacio">
 			<Check size={24} aria-hidden="true" />
 			<span>
-				{estado === 'pendiente'
-					? 'No queda nadie por llamar en esta lista.'
-					: 'No hay hogares en esta lista.'}
+				{#if busqueda !== ''}
+					No hay coincidencias en esta lista.
+				{:else if estado === 'pendiente'}
+					No queda nadie por llamar en esta lista.
+				{:else}
+					No hay hogares en esta lista.
+				{/if}
 			</span>
 		</p>
 	{:else}
@@ -862,6 +903,25 @@
 	.buscador .campo__control {
 		flex: 1;
 		min-width: 0;
+	}
+
+	/* El aviso lleva un botón porque decirle a la operadora que hay resultados
+	   en otra lista y dejarla buscar la pestaña a mano es media solución. */
+	.ver-todos {
+		flex: none;
+		margin-left: auto;
+		border: 1px solid currentColor;
+		background: none;
+		color: inherit;
+		border-radius: 999px;
+		padding: 0.25rem 0.7rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.ver-todos:hover {
+		background: rgb(255 255 255 / 0.08);
 	}
 
 	.conteo {

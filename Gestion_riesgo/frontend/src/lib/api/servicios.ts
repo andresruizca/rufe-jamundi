@@ -207,6 +207,14 @@ export const callCenterApi = {
 			hogares: HogarParaLlamar[];
 			paginacion: { pagina: number; por_pagina: number; total: number; paginas: number };
 			resultados: Record<string, string>;
+			/**
+			 * Cuántos hogares encuentra esta búsqueda fuera de la pestaña abierta.
+			 *
+			 * Cero cuando no se está buscando. Existe para que un «no hay nadie»
+			 * no se lea como «esta familia no está en el censo»: ver
+			 * `CallCenterController::enOtrasListas`.
+			 */
+			en_otras_listas: number;
 		}>(`/callcenter/hogares${q ? `?${q}` : ''}`);
 	},
 

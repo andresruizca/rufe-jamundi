@@ -3317,6 +3317,36 @@ prueba('el operador no está en las listas que abren el censo', function (): voi
 
 grupo('El buscador del call center');
 
+prueba('una búsqueda sin resultados dice si los hay en otra lista', function () use ($raiz): void {
+    // El 28 de agosto de 2026: se creó una ficha RUFE con la cédula 16844290 y
+    // al buscarla en «Falta llamar» no salía nada. La ficha existía —el hogar
+    // estaba en «Ya se preinscribieron», porque esa cédula ya había llenado el
+    // formulario— pero la búsqueda estaba encerrada en la pestaña abierta.
+    //
+    // «No hay coincidencias» se lee como «esta familia no está en el censo». Es
+    // la respuesta más cara que puede dar esta pantalla, y la que más se parece
+    // a una respuesta buena: nadie la vuelve a comprobar.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    afirmar(
+        str_contains($php, "'en_otras_listas' => \$this->enOtrasListas("),
+        'la lista ya no dice cuántos hogares hay fuera de la pestaña'
+    );
+
+    // Y que no cueste una consulta de más en cada tecleo cuando no hace falta.
+    preg_match('/private function enOtrasListas\(.*?\n    \}/s', $php, $m);
+    afirmar(isset($m[0]), 'no se encontró enOtrasListas()');
+
+    afirmar(
+        str_contains($m[0], "=== ''") && str_contains($m[0], "\$estado === 'todos'"),
+        'enOtrasListas debe cortar sin búsqueda y en la pestaña «todos»'
+    );
+    afirmar(
+        strpos($m[0], 'return 0;') < strpos($m[0], 'SELECT COUNT'),
+        'el corte tiene que ir ANTES de la consulta, no después'
+    );
+});
+
 prueba('un teléfono se encuentra escrito como sea', function (): void {
     // El fallo que esto cierra: se comparaba el texto tal cual contra la
     // columna. La ficha guarda el teléfono como lo escribió el funcionario que
