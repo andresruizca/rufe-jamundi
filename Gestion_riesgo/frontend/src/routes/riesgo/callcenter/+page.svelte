@@ -215,6 +215,11 @@
 	 * escribir y además oprimir un botón le cuesta un segundo de silencio en
 	 * cada llamada, trescientas veces al día.
 	 *
+	 * Busca por nombre, cédula, teléfono y radicado. Los dos primeros los
+	 * resuelve el servidor comparando CIFRAS, no texto: da igual que el número
+	 * se escriba con espacios, con guiones o con el +57 delante. Ver
+	 * `CallCenterController::condicionDeBusqueda`.
+	 *
 	 * Los 300 ms son para no mandar una consulta por tecla, y el número de orden
 	 * es para que una respuesta lenta de «312» no pise a la de «3127» —que llega
 	 * después pero se pidió más tarde—. Sin él, la lista muestra el resultado de
@@ -419,7 +424,7 @@
 			id="cc-buscar"
 			class="campo__control"
 			type="search"
-			placeholder="Nombre, teléfono o radicado"
+			placeholder="Nombre, cédula, teléfono o radicado"
 			bind:value={busqueda}
 			oninput={alTeclear}
 		/>

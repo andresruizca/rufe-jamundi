@@ -50,6 +50,19 @@ final class CallCenterController
     private const MINUTOS_ATENCION = 6;
 
     /**
+     * Cuántas cifras hay que escribir antes de buscar por número.
+     *
+     * Con una sola, «1» casaría con casi todos los teléfonos y todas las cédulas
+     * del censo: la primera tecla llenaría la pantalla de ruido y la operadora
+     * tendría que esperar a que se dibujaran mil filas para nada. Con tres ya se
+     * parece a algo que alguien busca de verdad.
+     *
+     * Por debajo de eso no se deja de buscar: se busca por nombre y por
+     * radicado, que es lo que un texto tan corto puede querer decir.
+     */
+    private const MIN_DIGITOS_BUSQUEDA = 3;
+
+    /**
      * Por qué el ingeniero descartó una solicitud, y qué hace el call center.
      *
      * Los dos primeros motivos son subsanables: la familia SÍ tiene que volver
@@ -639,13 +652,11 @@ final class CallCenterController
                 break;
         }
 
-        $q = trim((string) ($req->query('q') ?? ''));
-        if ($q !== '') {
-            $where[] = "(CONCAT_WS(' ', jefe.nombres, jefe.apellidos) LIKE :q
-                         OR r.contacto_telefono LIKE :q
-                         OR jefe.telefono LIKE :q
-                         OR r.radicado LIKE :q)";
-            $params['q'] = '%'.$q.'%';
+        [$busqueda, $paramsBusqueda] = self::condicionDeBusqueda((string) ($req->query('q') ?? ''));
+
+        if ($busqueda !== '') {
+            $where[] = $busqueda;
+            $params += $paramsBusqueda;
         }
 
         $zona = strtoupper(trim((string) ($req->query('zona') ?? '')));
@@ -661,6 +672,138 @@ final class CallCenterController
         }
 
         return [' WHERE '.implode(' AND ', $where), $params];
+    }
+
+    /**
+     * Qué se compara cuando la operadora escribe en el buscador.
+     *
+     * ── Por qué no basta un LIKE sobre la columna ────────────────────────────
+     *
+     * Antes se comparaba el texto tal cual contra el teléfono guardado. Un
+     * teléfono se escribe de cinco maneras —`3136416997`, `313 641 6997`,
+     * `+57 313 641 6997`, con guiones, con paréntesis— y la ficha guarda la que
+     * escribió el funcionario que visitó la casa. La operadora escribía el
+     * número que le acababan de dictar y no salía nada, aunque estuviera ahí.
+     *
+     * Peor todavía: la lista MUESTRA el número agrupado en tres bloques. Quien
+     * copiaba lo que veía y lo pegaba en el buscador tampoco encontraba nada.
+     *
+     * Ahora se comparan cifras contra cifras: se le quitan los separadores a lo
+     * escrito y también a la columna. Lo mismo vale para la cédula, que la gente
+     * dicta con puntos («dieciséis punto doscientos treinta y cuatro…»).
+     *
+     * ── Y por qué la cédula de cualquiera de la casa ─────────────────────────
+     *
+     * Quien contesta el teléfono no siempre es el jefe de hogar: es el hijo, o
+     * la nuera. Si dice su cédula y el buscador solo mirara la del jefe, la
+     * operadora concluiría que esa familia no está en el censo, que es
+     * justamente el error que más caro sale en esta pantalla. El teléfono va en
+     * la misma bolsa por lo mismo: el número de la ficha puede ser el del hijo.
+     *
+     * ── Nombre y radicado se comparan tal cual ───────────────────────────────
+     *
+     * Llevan letras, y el radicado lleva además guiones que SÍ son parte del
+     * dato: `RUFE-2026-ZZ3C191Q`. Quitárselos rompería la única búsqueda que
+     * hoy funciona sin margen de error.
+     *
+     * Es `public static` y sin base de datos a propósito: así una prueba puede
+     * fijar qué se compara y con qué, que es lo único que decide si una familia
+     * aparece o no cuando la operadora la busca.
+     *
+     * @return array{0:string,1:array<string,string>}  la condición y sus valores.
+     *                                                 Condición vacía si no hay
+     *                                                 nada que buscar.
+     */
+    public static function condicionDeBusqueda(string $q): array
+    {
+        $q = trim($q);
+
+        if ($q === '') {
+            return ['', []];
+        }
+
+        $partes = [
+            "CONCAT_WS(' ', jefe.nombres, jefe.apellidos) LIKE :qnombre",
+            'r.radicado LIKE :qradicado',
+        ];
+
+        $params = [
+            'qnombre' => '%'.$q.'%',
+            'qradicado' => '%'.$q.'%',
+        ];
+
+        $digitos = self::digitosBuscables($q);
+
+        if (strlen($digitos) >= self::MIN_DIGITOS_BUSQUEDA) {
+            $partes[] = self::soloDigitos('r.contacto_telefono').' LIKE :qcontacto';
+
+            // La subconsulta arranca por `reporte_id`, que es la primera columna
+            // de `uq_rufe_personas_orden`: mira las personas de esa casa, no la
+            // tabla entera.
+            $partes[] = 'EXISTS (SELECT 1 FROM rufe_personas pb
+                                  WHERE pb.reporte_id = r.id
+                                    AND ('.self::soloDigitos('pb.numero_documento').' LIKE :qdocumento
+                                         OR '.self::soloDigitos('pb.telefono').' LIKE :qtelefono))';
+
+            $params['qcontacto'] = '%'.$digitos.'%';
+            $params['qdocumento'] = '%'.$digitos.'%';
+            $params['qtelefono'] = '%'.$digitos.'%';
+        }
+
+        return ['('.implode(' OR ', $partes).')', $params];
+    }
+
+    /**
+     * Las cifras de lo escrito, con el indicativo del país fuera.
+     *
+     * `+57 313 641 6997` y `313 641 6997` son el mismo teléfono, pero las
+     * fichas del censo guardan casi siempre el corto. Sin quitar el `57`, quien
+     * escribe el número completo —como lo trae WhatsApp, o como se lo dictan—
+     * no encontraba a nadie, aunque la familia estuviera ahí.
+     *
+     * Se quita solo cuando quedan doce cifras que empiezan por 57, que es
+     * exactamente un número colombiano con indicativo: fijo o celular, los dos
+     * tienen diez. Ninguna cédula colombiana llega a doce cifras, así que esto
+     * no puede comerse el principio de una.
+     */
+    private static function digitosBuscables(string $q): string
+    {
+        $digitos = (string) preg_replace('/\D+/', '', $q);
+
+        if (strlen($digitos) === 12 && str_starts_with($digitos, '57')) {
+            return substr($digitos, 2);
+        }
+
+        return $digitos;
+    }
+
+    /**
+     * La misma columna sin lo que no es una cifra.
+     *
+     * MySQL 5.7 no tiene `REGEXP_REPLACE` —llegó en la 8—, así que se encadenan
+     * `REPLACE`. Son seis separadores, los que de verdad aparecen escritos en un
+     * teléfono o en una cédula colombiana.
+     *
+     * Esto no puede usar un índice, y da igual: la comparación ya era
+     * `LIKE '%…%'`, que tampoco lo usaba, y el censo son mil cuatrocientos
+     * hogares.
+     */
+    private static function soloDigitos(string $columna): string
+    {
+        // Esta cadena entra en el SQL sin pasar por ningún marcador. Hoy solo se
+        // llama con literales de este archivo; la comprobación está para que
+        // siga siendo verdad el día que alguien la llame desde otro sitio.
+        if (preg_match('/^[a-z_]+\.[a-z_]+$/', $columna) !== 1) {
+            throw new \InvalidArgumentException('Columna no válida para la búsqueda: '.$columna);
+        }
+
+        $sql = "COALESCE($columna, '')";
+
+        foreach ([' ', '-', '.', '(', ')', '+'] as $separador) {
+            $sql = "REPLACE($sql, '$separador', '')";
+        }
+
+        return $sql;
     }
 
     /**

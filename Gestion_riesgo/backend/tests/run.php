@@ -3278,6 +3278,114 @@ prueba('el operador no está en las listas que abren el censo', function (): voi
     afirmar(in_array(Auth::OPERADOR, Auth::TODOS, true), 'sí es un usuario autenticado');
 });
 
+grupo('El buscador del call center');
+
+prueba('un teléfono se encuentra escrito como sea', function (): void {
+    // El fallo que esto cierra: se comparaba el texto tal cual contra la
+    // columna. La ficha guarda el teléfono como lo escribió el funcionario que
+    // visitó la casa —con espacios, con guiones, con +57—, y la operadora
+    // escribe el que le acaban de dictar. No coincidían casi nunca.
+    //
+    // Peor: la lista MUESTRA el número agrupado en tres bloques, así que quien
+    // copiaba lo que veía y lo pegaba tampoco encontraba nada.
+    // El +57 se quita: la ficha guarda casi siempre el número corto, y quien
+    // escribe el largo —como lo trae WhatsApp, o como se lo dictan— no
+    // encontraba a nadie.
+    foreach (['3136416997', '313 641 6997', '313-641-6997', '+57 313 641 6997', '(313) 6416997', '57 313 641 6997'] as $escrito) {
+        [, $params] = App\Controllers\CallCenterController::condicionDeBusqueda($escrito);
+
+        afirmarIgual('%3136416997%', $params['qtelefono'] ?? null, "no encontró el teléfono escrito «{$escrito}»");
+    }
+});
+
+prueba('una cédula se encuentra con puntos y sin ellos', function (): void {
+    // La gente dicta la cédula con puntos porque así la lee en su documento.
+    foreach (['16234567', '16.234.567', '16 234 567'] as $escrito) {
+        [, $params] = App\Controllers\CallCenterController::condicionDeBusqueda($escrito);
+
+        afirmarIgual('%16234567%', $params['qdocumento'] ?? null, "no encontró la cédula escrita «{$escrito}»");
+    }
+});
+
+prueba('quitar el indicativo no muerde el principio de una cédula', function (): void {
+    // Se quita solo si quedan DOCE cifras empezando por 57, que es exactamente
+    // un número colombiano con indicativo. Una cédula que empieza por 57 tiene
+    // ocho, diez, nunca doce: tiene que llegar entera.
+    [, $cedula] = App\Controllers\CallCenterController::condicionDeBusqueda('5712345');
+
+    afirmarIgual('%5712345%', $cedula['qdocumento'], 'se comió el 57 de una cédula');
+
+    [, $largo] = App\Controllers\CallCenterController::condicionDeBusqueda('573136416997');
+
+    afirmarIgual('%3136416997%', $largo['qtelefono'], 'no quitó el indicativo de un teléfono');
+});
+
+prueba('se busca la cédula de cualquiera de la casa, no solo la del jefe', function (): void {
+    // Quien contesta el teléfono es el hijo o la nuera. Si el buscador solo
+    // mirara la cédula del jefe de hogar, la operadora concluiría que esa
+    // familia no está en el censo — el error más caro de esta pantalla.
+    [$sql] = App\Controllers\CallCenterController::condicionDeBusqueda('16234567');
+
+    afirmar(str_contains($sql, 'FROM rufe_personas pb'), 'no mira a las personas del hogar');
+    afirmar(str_contains($sql, 'pb.reporte_id = r.id'), 'no se limita a las personas de ESA casa');
+    afirmar(str_contains($sql, 'pb.numero_documento'), 'no compara la cédula');
+    afirmar(str_contains($sql, 'pb.telefono'), 'no compara el teléfono de la persona');
+});
+
+prueba('el nombre y el radicado se comparan tal cual', function (): void {
+    // El radicado lleva guiones que SÍ son parte del dato: RUFE-2026-ZZ3C191Q.
+    // Quitárselos rompería la única búsqueda que hoy no falla nunca.
+    [, $params] = App\Controllers\CallCenterController::condicionDeBusqueda('RUFE-2026-ZZ3C191Q');
+
+    afirmarIgual('%RUFE-2026-ZZ3C191Q%', $params['qradicado'], 'al radicado se le tocaron los guiones');
+
+    [, $porNombre] = App\Controllers\CallCenterController::condicionDeBusqueda('Aleida Perez');
+
+    afirmarIgual('%Aleida Perez%', $porNombre['qnombre'], 'al nombre se le tocó algo');
+});
+
+prueba('un texto sin cifras no busca por número', function (): void {
+    // Buscar «Perez» dentro de los teléfonos no encuentra nada y hace trabajar
+    // a la base de datos por gusto en cada tecla.
+    [, $params] = App\Controllers\CallCenterController::condicionDeBusqueda('Perez');
+
+    afirmar(! isset($params['qtelefono']), 'buscó un nombre dentro de los teléfonos');
+    afirmar(! isset($params['qdocumento']), 'buscó un nombre dentro de las cédulas');
+});
+
+prueba('una o dos cifras todavía no buscan por número', function (): void {
+    // Con «1», casi todos los teléfonos y todas las cédulas del censo casarían:
+    // la primera tecla llenaría la pantalla de ruido.
+    foreach (['1', '31'] as $corto) {
+        [, $params] = App\Controllers\CallCenterController::condicionDeBusqueda($corto);
+
+        afirmar(! isset($params['qtelefono']), "«{$corto}» no debería buscar por número todavía");
+    }
+
+    [, $tres] = App\Controllers\CallCenterController::condicionDeBusqueda('313');
+
+    afirmarIgual('%313%', $tres['qtelefono'] ?? null, 'con tres cifras ya debería buscar por número');
+});
+
+prueba('el buscador vacío no filtra nada', function (): void {
+    [$sql, $params] = App\Controllers\CallCenterController::condicionDeBusqueda('   ');
+
+    afirmarIgual('', $sql, 'un buscador vacío estaba filtrando');
+    afirmarIgual([], $params, 'un buscador vacío estaba mandando valores');
+});
+
+prueba('cada marcador del buscador se nombra una sola vez', function (): void {
+    // PDO va con `ATTR_EMULATE_PREPARES => false`: las sentencias las prepara
+    // MySQL, y un marcador repetido es un «Invalid parameter number» al
+    // prepararla — la pantalla entera se cae, no la búsqueda sola.
+    [$sql, $params] = App\Controllers\CallCenterController::condicionDeBusqueda('3136416997');
+
+    preg_match_all('/:([a-z]+)/', $sql, $m);
+
+    afirmarIgual(count($m[1]), count(array_unique($m[1])), 'hay un marcador repetido en la búsqueda');
+    afirmarIgual(count($params), count(array_unique($m[1])), 'sobran o faltan valores para los marcadores');
+});
+
 prueba('el cruce del call center da UNA fila por hogar, pase lo que pase', function () use ($raiz): void {
     // El fallo que esto cierra: el cruce con `preinscripciones` era un JOIN
     // directo. Una persona puede pre-inscribirse más de una vez —el esquema lo
