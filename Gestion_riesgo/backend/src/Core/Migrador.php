@@ -56,6 +56,9 @@ final class Migrador
         // después de callcenter_01.sql y de preinscripcion_01.sql: añade una
         // columna a `preinscripciones` y apunta a `rufe_reportes`.
         'callcenter_02.sql',
+        // El canal de la gestión y el envío del enlace por WhatsApp. Va después
+        // de callcenter_01.sql, que es quien crea `rufe_gestiones`.
+        'callcenter_03_whatsapp.sql',
         // Solicitudes de quien no aparece en el censo. Va al final: apunta a
         // `rufe_reportes`, que ya existe mucho antes.
         'sincenso_01.sql',

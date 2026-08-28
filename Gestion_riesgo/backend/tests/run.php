@@ -1119,6 +1119,14 @@ function ensanchaUnEnum(string $sentencia): bool
 const ENUMS_QUE_PUEDEN_CRECER = [
     'rol'  => ['ADMINISTRADOR', 'GESTOR', 'VISUALIZACION'],
     'tipo' => ['DOCUMENTO', 'DANO'],
+    // Cómo terminó una gestión del call center. Creció para dar cabida al
+    // envío del enlace por WhatsApp, que no es una llamada pero sí una
+    // gestión. Los seis de aquí son los que existían cuando solo se llamaba:
+    // la comprobación de arriba impide que una migración futura pierda alguno.
+    'resultado' => [
+        'CONTACTADO', 'NO_CONTESTA', 'NUMERO_ERRADO',
+        'VOLVER_A_LLAMAR', 'NO_INTERESA', 'YA_DILIGENCIO',
+    ],
 ];
 
 prueba('la excepción del ENUM no vale para recortarlo', function (): void {
@@ -3215,6 +3223,10 @@ prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function 
         'GET /callcenter/hogares',
         'GET /callcenter/hogares/{id}/gestiones',
         'POST /callcenter/hogares/{id}/gestiones',
+        // Le manda a un hogar el enlace del formulario por WhatsApp. Mismo rol
+        // que llamar: es la misma gestión por otro canal, y quien puede hablar
+        // con un ciudadano puede escribirle. No existe versión masiva.
+        'POST /callcenter/hogares/{id}/whatsapp',
         // Que las tres operadoras no llamen a la misma familia. Solo mueve
         // nombres de operadora, nada del censo.
         'GET /callcenter/atenciones',
@@ -4222,3 +4234,132 @@ foreach ($fallos as $f) {
 }
 echo "\n";
 exit(1);
+
+// ── El botón de WhatsApp del Call Center ────────────────────────────────────
+
+prueba('un móvil colombiano de diez dígitos recibe su indicativo', function (): void {
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    afirmarIgual('+573001112233', $w::normalizarTelefono('3001112233'), 'diez dígitos');
+    afirmarIgual('+573001112233', $w::normalizarTelefono('300 111 2233'), 'con espacios');
+    afirmarIgual('+573001112233', $w::normalizarTelefono('300-111-2233'), 'con guiones');
+});
+
+prueba('un número que ya trae indicativo no se toca', function (): void {
+    // Añadirle otro 57 lo convierte en un número inventado, y el mensaje se va
+    // a un desconocido. En un censo de damnificados eso es entregarle a un
+    // tercero el dato de que alguien reportó daños.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    afirmarIgual('+573001112233', $w::normalizarTelefono('573001112233'), 'ya venía con 57');
+    afirmarIgual('+573001112233', $w::normalizarTelefono('+57 300 111 2233'), 'con + y espacios');
+});
+
+prueba('un fijo no recibe WhatsApp', function (): void {
+    // WhatsApp es de móviles. Mandarle la plantilla a un fijo la cobra igual y
+    // no llega a nadie.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    afirmarIgual(null, $w::normalizarTelefono('6025190969'), 'fijo de Cali/Jamundí');
+    afirmarIgual(null, $w::normalizarTelefono(''), 'vacío');
+    afirmarIgual(null, $w::normalizarTelefono(null), 'nulo');
+    afirmarIgual(null, $w::normalizarTelefono('123'), 'demasiado corto');
+});
+
+prueba('el saludo usa un nombre y un apellido, capitalizados', function (): void {
+    // «MARIA FERNANDA DE LOS SANTOS PEREZ GOMEZ» en un saludo suena a base de
+    // datos, y en mayúsculas sostenidas suena a grito.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    afirmarIgual('Maria Perez', $w::nombreParaSaludo('MARIA FERNANDA', 'PEREZ GOMEZ'), 'primer nombre y primer apellido');
+    afirmarIgual('Aleida Pérez', $w::nombreParaSaludo('Aleida', 'Pérez'), 'respeta los acentos');
+    afirmarIgual('Juan', $w::nombreParaSaludo('juan', null), 'sin apellido');
+});
+
+prueba('sin nombre se saluda neutro, nunca vacío', function (): void {
+    // Meta rechaza una variable vacía, y «Hola, .» es peor que no personalizar.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    afirmarIgual('ciudadano', $w::nombreParaSaludo(null, null), 'sin datos');
+    afirmarIgual('ciudadano', $w::nombreParaSaludo('   ', '  '), 'solo espacios');
+});
+
+prueba('el mensaje va por WhatsApp y no por SMS', function (): void {
+    // Si se omite `channel`, el proveedor manda un SMS y no hay ningún error
+    // que lo delate: solo un SMS cobrado que nadie esperaba.
+    $w = 'App\\CallCenter\\Whatsapp';
+    $c = $w::cuerpoDelMensaje('+573001112233', 'Aleida Pérez', 42);
+
+    afirmarIgual('whatsapp', $c['channel'], 'el canal debe ser explícito');
+    afirmarIgual('template', $c['messageType'], 'se manda la plantilla, no texto libre');
+    afirmarIgual('Aleida Pérez', $c['content']['templateVariables']['1'], 'el nombre va en la variable 1');
+});
+
+prueba('dos clics el mismo día son un solo mensaje', function (): void {
+    // Es el fallo más probable de un botón que tarda dos segundos en responder.
+    $w = 'App\\CallCenter\\Whatsapp';
+
+    $a = $w::cuerpoDelMensaje('+573001112233', 'Aleida Pérez', 42);
+    $b = $w::cuerpoDelMensaje('+573001112233', 'Aleida Pérez', 42);
+    afirmarIgual($a['idempotencyKey'], $b['idempotencyKey'], 'misma clave para el mismo hogar y día');
+
+    $otro = $w::cuerpoDelMensaje('+573009998877', 'Otro Hogar', 43);
+    afirmar($a['idempotencyKey'] !== $otro['idempotencyKey'], 'hogares distintos, claves distintas');
+});
+
+prueba('sin token configurado el envío no existe', function (): void {
+    // Mientras nadie ponga un token en config.php, el sistema se comporta como
+    // si este código no estuviera.
+    afirmar(! App\CallCenter\Whatsapp::configurado(), 'sin token, no configurado');
+});
+
+prueba('una operadora no puede marcar a mano un WhatsApp como enviado', function () use ($raiz): void {
+    // Los dos resultados de WhatsApp los escribe enviarWhatsapp() cuando el
+    // proveedor confirma. Aceptarlos en el formulario de la llamada dejaría
+    // marcar como enviado un mensaje que nunca salió, y el hogar quedaría
+    // esperando un enlace que nadie le mandó.
+    $c = 'App\\Controllers\\CallCenterController';
+
+    afirmar(! in_array('WHATSAPP_ENVIADO', $c::RESULTADOS_DE_LLAMADA, true), 'no es un resultado de llamada');
+    afirmar(! in_array('WHATSAPP_FALLIDO', $c::RESULTADOS_DE_LLAMADA, true), 'tampoco el fallido');
+    afirmar(isset($c::RESULTADOS['WHATSAPP_ENVIADO']), 'pero el historial sabe nombrarlo');
+
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    afirmar(
+        str_contains($php, 'in_array($resultado, self::RESULTADOS_DE_LLAMADA, true)'),
+        'registrar() debe validar contra los resultados de llamada, no contra todos'
+    );
+});
+
+prueba('un WhatsApp no cuenta como intento de llamada', function () use ($raiz): void {
+    // El módulo da el hogar por agotado a los cinco intentos. Si un envío
+    // sumara ahí, un hogar al que nadie ha llamado saldría de la cola sin que
+    // nadie hubiera hablado con él — y la cifra de avance que se le reporta a
+    // la Alcaldía quedaría inflada, como ya pasó con el JOIN que duplicaba.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    afirmar(
+        str_contains($php, "gc.canal = \\'LLAMADA\\') AS intentos"),
+        'el conteo de intentos debe excluir los WhatsApp'
+    );
+    afirmar(
+        str_contains($php, "g2.canal = \\'LLAMADA\\'"),
+        'el último resultado mostrado tampoco puede ser un WhatsApp'
+    );
+});
+
+prueba('la migración del canal es aditiva e idempotente', function () use ($raiz): void {
+    // El hosting no tiene consola: las migraciones se aplican por web y pueden
+    // repetirse. Y DEFAULT LLAMADA es lo que deja bien marcadas las filas
+    // anteriores, en las que toda gestión era una llamada.
+    $sql = (string) file_get_contents($raiz.'/database/callcenter_03_whatsapp.sql');
+
+    afirmar(str_contains($sql, 'information_schema.COLUMNS'), 'comprueba antes de añadir');
+    afirmar(str_contains($sql, "DEFAULT ''LLAMADA''"), 'las filas anteriores quedan como llamada');
+    afirmar(! str_contains($sql, 'DROP '), 'una migración de esta campaña no borra nada');
+    afirmar(
+        in_array('callcenter_03_whatsapp.sql', App\Core\Migrador::ARCHIVOS, true),
+        'debe estar registrada en el Migrador, o no se aplica nunca'
+    );
+});
+

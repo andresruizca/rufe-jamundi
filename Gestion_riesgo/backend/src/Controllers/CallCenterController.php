@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\CallCenter\Guion;
+use App\CallCenter\Whatsapp;
 use App\Core\Auditoria;
 use App\Core\Auth;
 use App\Core\Db;
@@ -115,7 +116,28 @@ final class CallCenterController
         'NUMERO_ERRADO'   => 'El número no corresponde',
         'NO_INTERESA'     => 'No quiere continuar',
         'YA_DILIGENCIO'   => 'Dice que ya lo diligenció',
+        // Los dos de WhatsApp no los elige la operadora en el formulario de la
+        // llamada: los escribe `enviarWhatsapp()`. Están aquí para que el
+        // historial sepa nombrarlos.
+        'WHATSAPP_ENVIADO' => 'Se le envió el formulario por WhatsApp',
+        'WHATSAPP_FALLIDO' => 'No se pudo enviar el WhatsApp',
     ];
+
+    /** Los resultados que una operadora puede registrar a mano. */
+    public const RESULTADOS_DE_LLAMADA = [
+        'CONTACTADO', 'VOLVER_A_LLAMAR', 'NO_CONTESTA',
+        'NUMERO_ERRADO', 'NO_INTERESA', 'YA_DILIGENCIO',
+    ];
+
+    /**
+     * Horas que deben pasar antes de volver a mandarle WhatsApp al mismo hogar.
+     *
+     * No es una preferencia de estilo. Son familias que acaban de perder parte
+     * de su casa: recibir tres veces el mismo mensaje automático de la Alcaldía
+     * es maltrato. Y con tres operadoras trabajando la misma lista, sin este
+     * freno pasa el primer día.
+     */
+    private const HORAS_ENTRE_WHATSAPP = 24;
 
     /**
      * El cruce con las preinscripciones, que es el corazón del módulo.
@@ -158,7 +180,7 @@ final class CallCenterController
                              ORDER BY p2.creado_en DESC, p2.id DESC LIMIT 1)
         LEFT JOIN rufe_gestiones g
                ON g.id = (SELECT g2.id FROM rufe_gestiones g2
-                           WHERE g2.reporte_id = r.id
+                           WHERE g2.reporte_id = r.id AND g2.canal = \'LLAMADA\'
                            ORDER BY g2.creado_en DESC, g2.id DESC LIMIT 1)
         LEFT JOIN rufe_atenciones aten
                ON aten.reporte_id = r.id
@@ -195,7 +217,8 @@ final class CallCenterController
                     aten.actualizado_en AS atendida_en,
                     g.resultado AS ultimo_resultado, g.creado_en AS ultimo_en,
                     g.proxima_llamada, g.nota AS ultima_nota, g.usuario_email AS ultimo_por,
-                    (SELECT COUNT(*) FROM rufe_gestiones gc WHERE gc.reporte_id = r.id) AS intentos
+                    (SELECT COUNT(*) FROM rufe_gestiones gc
+                      WHERE gc.reporte_id = r.id AND gc.canal = \'LLAMADA\') AS intentos
                FROM rufe_reportes r '.self::CRUCE.$filtro.'
               ORDER BY '.$this->orden($estado).'
               LIMIT :limite OFFSET :salto',
@@ -272,7 +295,7 @@ final class CallCenterController
 
         Response::ok([
             'gestiones' => Db::all(
-                'SELECT id, resultado, nota, proxima_llamada, enlace_enviado,
+                'SELECT id, canal, resultado, nota, proxima_llamada, enlace_enviado,
                         usuario_email, creado_en
                    FROM rufe_gestiones
                   WHERE reporte_id = :r
@@ -299,7 +322,11 @@ final class CallCenterController
         $resultado = strtoupper(trim($req->texto('resultado')));
         $errores = [];
 
-        if (! isset(self::RESULTADOS[$resultado])) {
+        // Solo los de llamada. Los dos de WhatsApp los escribe
+        // `enviarWhatsapp()` cuando el proveedor confirma; aceptarlos aquí
+        // dejaría marcar como enviado un mensaje que nunca salió, y el hogar
+        // quedaría esperando un enlace que nadie le mandó.
+        if (! in_array($resultado, self::RESULTADOS_DE_LLAMADA, true)) {
             $errores['resultado'] = 'Indique cómo terminó la llamada.';
         }
 
@@ -337,6 +364,112 @@ final class CallCenterController
         Auditoria::registrar($req, 'callcenter.gestion', $actor, 'rufe_gestiones', (string) $id, $resultado);
 
         Response::ok(['gestion' => ['id' => Db::lastId(), 'resultado' => $resultado]], 201);
+    }
+
+    /**
+     * Le manda a este hogar, por WhatsApp, el enlace del formulario.
+     *
+     * Un botón, un hogar, una pulsación. No existe versión masiva a propósito:
+     * mandarle a mil trescientas familias un mensaje automático sin que nadie
+     * mire caso por caso es la clase de decisión que no debe caber en un clic.
+     *
+     * Manda la PLANTILLA aprobada, no texto libre — ver `CallCenter\Whatsapp`
+     * para por qué WhatsApp no permite otra cosa con quien no te ha escrito.
+     *
+     * Registra SIEMPRE la gestión, salga bien o mal. Un envío que falla y no
+     * deja rastro hace que la siguiente operadora lo repita sin saber que ya
+     * falló, y que nadie se entere de que ese número está mal.
+     */
+    public function enviarWhatsapp(Request $req): void
+    {
+        $actor = Auth::exigirUsuario($req);
+        $id = (int) $req->param('id');
+        $this->exigirHogar($id);
+
+        // Con el token vacío esta función no existe. 503 y no 500: no es un
+        // fallo, es que falta configurarla.
+        if (! Whatsapp::configurado()) {
+            throw new HttpError('El envío por WhatsApp no está configurado en este servidor.', 503);
+        }
+
+        $hogar = Db::first(
+            'SELECT r.id, r.contacto_telefono,
+                    jefe.nombres AS jefe_nombres, jefe.apellidos AS jefe_apellidos,
+                    jefe.telefono AS jefe_telefono
+               FROM rufe_reportes r
+               LEFT JOIN rufe_personas jefe
+                      ON jefe.id = (SELECT j2.id FROM rufe_personas j2
+                                     WHERE j2.reporte_id = r.id AND j2.parentesco = :jefe
+                                     ORDER BY j2.orden ASC LIMIT 1)
+              WHERE r.id = :i',
+            ['i' => $id, 'jefe' => Catalogos::PARENTESCO_JEFE]
+        );
+
+        // El del jefe de hogar primero: es la persona a la que va dirigido el
+        // mensaje. El de contacto puede ser el de un vecino que reportó.
+        $telefono = Whatsapp::normalizarTelefono($hogar['jefe_telefono'] ?? null)
+            ?? Whatsapp::normalizarTelefono($hogar['contacto_telefono'] ?? null);
+
+        if ($telefono === null) {
+            throw HttpError::validacion([
+                'telefono' => 'Este hogar no tiene un número de celular al que enviarle WhatsApp.',
+            ]);
+        }
+
+        // ── No repetir ───────────────────────────────────────────────────
+        $ultimo = Db::first(
+            'SELECT creado_en FROM rufe_gestiones
+              WHERE reporte_id = :r AND canal = :c AND resultado = :res
+                AND creado_en > (NOW() - INTERVAL '.self::HORAS_ENTRE_WHATSAPP.' HOUR)
+              ORDER BY creado_en DESC LIMIT 1',
+            ['r' => $id, 'c' => 'WHATSAPP', 'res' => 'WHATSAPP_ENVIADO']
+        );
+
+        if ($ultimo !== null) {
+            throw new HttpError(
+                'A este hogar ya se le envió el WhatsApp el '.$ultimo['creado_en'].'. '
+                .'Espere '.self::HORAS_ENTRE_WHATSAPP.' horas antes de repetirlo.',
+                409
+            );
+        }
+
+        $nombre = Whatsapp::nombreParaSaludo($hogar['jefe_nombres'] ?? null, $hogar['jefe_apellidos'] ?? null);
+        $envio = Whatsapp::enviar(Whatsapp::cuerpoDelMensaje($telefono, $nombre, $id));
+
+        Db::exec(
+            'INSERT INTO rufe_gestiones
+                (reporte_id, canal, resultado, nota, enlace_enviado, usuario_id, usuario_email)
+             VALUES (:r, :c, :res, :nota, :enlace, :uid, :email)',
+            [
+                'r' => $id,
+                'c' => 'WHATSAPP',
+                'res' => $envio['ok'] ? 'WHATSAPP_ENVIADO' : 'WHATSAPP_FALLIDO',
+                // El motivo del fallo se guarda para que se vea en el historial.
+                // El teléfono NO: ya está en la ficha del hogar y repetirlo aquí
+                // lo esparce por una tabla más.
+                'nota' => $envio['ok'] ? null : mb_substr((string) $envio['error'], 0, 500),
+                'enlace' => $envio['ok'] ? 1 : 0,
+                'uid' => $actor['id'],
+                'email' => $actor['email'],
+            ]
+        );
+
+        Auditoria::registrar(
+            $req, 'callcenter.whatsapp', $actor, 'rufe_gestiones', (string) $id,
+            $envio['ok'] ? 'WHATSAPP_ENVIADO' : 'WHATSAPP_FALLIDO'
+        );
+
+        if (! $envio['ok']) {
+            // 502 y no 500: el fallo es del proveedor, no de este sistema. La
+            // gestión ya quedó registrada arriba.
+            throw new HttpError('No se pudo enviar el WhatsApp: '.$envio['error'], 502);
+        }
+
+        Response::ok([
+            'enviado' => true,
+            'telefono' => $telefono,
+            'nombre' => $nombre,
+        ]);
     }
 
     /**

@@ -226,6 +226,23 @@ export const callCenterApi = {
 	 * entera para refrescar un aviso borraría lo que la operadora esté
 	 * escribiendo en su anotación —y eso pasa justo mientras habla.
 	 */
+	/**
+	 * Le manda a este hogar el enlace del formulario por WhatsApp.
+	 *
+	 * Un hogar por pulsación. El token del proveedor NO vive aquí: lo guarda el
+	 * servidor y es él quien envía. Un token en el navegador es un token público,
+	 * y con él cualquiera manda WhatsApp desde el número de la Alcaldía.
+	 *
+	 * Puede fallar con 409 si ya se le envió hoy, con 422 si el hogar no tiene
+	 * celular y con 502 si el proveedor lo rechaza — en los tres casos el mensaje
+	 * del servidor está escrito para mostrarse tal cual.
+	 */
+	enviarWhatsapp: (id: number) =>
+		api.post<{ enviado: boolean; telefono: string; nombre: string }>(
+			`/callcenter/hogares/${id}/whatsapp`,
+			{}
+		),
+
 	atenciones: () =>
 		api.get<{ atenciones: AtencionEnCurso[]; minutos: number }>('/callcenter/atenciones'),
 

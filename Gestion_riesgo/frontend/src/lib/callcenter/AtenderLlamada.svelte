@@ -23,6 +23,7 @@
 		ClipboardCopy,
 		Headphones,
 		LoaderCircle,
+		MessageCircle,
 		PhoneOff,
 		TriangleAlert
 	} from '@lucide/svelte';
@@ -53,6 +54,12 @@
 	let guardando = $state(false);
 	let errores = $state<Record<string, string>>({});
 	let copiado = $state(false);
+
+	// El envío del enlace por WhatsApp. `aviso` guarda el mensaje del servidor
+	// tal cual: está escrito para leerse —«ya se le envió el 27/08 a las 18:40»,
+	// «este hogar no tiene celular»— y traducirlo aquí solo lo empeoraría.
+	let enviandoWa = $state(false);
+	let waAviso = $state<{ texto: string; ok: boolean } | null>(null);
 
 	let historial = $state<GestionLlamada[]>([]);
 	let historialAbierto = $state(false);
@@ -99,6 +106,43 @@
 		const d = telefono.replace(/\D+/g, '');
 
 		return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : telefono;
+	}
+
+	/**
+	 * Le manda a esta persona el enlace del formulario por WhatsApp.
+	 *
+	 * Pide confirmación antes: es un mensaje real a una familia que acaba de
+	 * perder parte de su casa, no una acción reversible. Y el botón se bloquea
+	 * mientras dura, porque el proveedor tarda un par de segundos y el segundo
+	 * clic sería un segundo mensaje.
+	 */
+	async function enviarWhatsapp() {
+		if (enviandoWa || !hogar.telefono) return;
+
+		const quien = hogar.nombre ?? 'este hogar';
+		if (!confirm(`¿Enviarle el enlace del formulario por WhatsApp a ${quien}?`)) return;
+
+		enviandoWa = true;
+		waAviso = null;
+
+		try {
+			const r = await callCenterApi.enviarWhatsapp(hogar.id);
+			waAviso = { texto: `Enviado a ${r.nombre}`, ok: true };
+			// El envío ES una gestión: si el historial está abierto, que se vea.
+			historialPedido = false;
+			if (historialAbierto) {
+				historialAbierto = false;
+				await verHistorial();
+			}
+		} catch (e) {
+			const err = e as { errors?: Record<string, string>; message?: string };
+			waAviso = {
+				texto: err.errors?.telefono ?? err.message ?? 'No se pudo enviar el WhatsApp.',
+				ok: false
+			};
+		} finally {
+			enviandoWa = false;
+		}
 	}
 
 	async function verHistorial() {
@@ -249,7 +293,24 @@
 						Copiar
 					{/if}
 				</button>
+				<button
+					type="button"
+					class="telefono__wa"
+					onclick={enviarWhatsapp}
+					disabled={enviandoWa}
+				>
+					{#if enviandoWa}
+						<LoaderCircle size={14} class="girando" aria-hidden="true" />
+						Enviando
+					{:else}
+						<MessageCircle size={14} aria-hidden="true" />
+						Enviar por WhatsApp
+					{/if}
+				</button>
 			</div>
+			{#if waAviso}
+				<p class="waaviso" class:waaviso--mal={!waAviso.ok} role="status">{waAviso.texto}</p>
+			{/if}
 		{:else}
 			<p class="sintel">
 				<PhoneOff size={15} aria-hidden="true" />
@@ -644,6 +705,42 @@
 	.telefono__copiar:hover {
 		color: var(--color-text);
 		border-color: var(--color-border-strong);
+	}
+
+	/* Comparte la forma del botón de copiar, no su discreción: este manda un
+	   mensaje real a una familia, así que se ve que es una acción. */
+	.telefono__wa {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
+		color: var(--color-text);
+		border-radius: 7px;
+		padding: 0.32rem 0.6rem;
+		font-size: 0.78rem;
+		cursor: pointer;
+	}
+
+	.telefono__wa:hover:not(:disabled) {
+		border-color: var(--color-accent, var(--color-border-strong));
+	}
+
+	.telefono__wa:disabled {
+		opacity: 0.6;
+		cursor: progress;
+	}
+
+	.waaviso {
+		margin: 0.45rem 0 0;
+		font-size: 0.82rem;
+		color: var(--color-muted);
+	}
+
+	/* El fallo se lee distinto: la operadora tiene a alguien esperando y no
+	   puede quedarse con la duda de si el mensaje salió. */
+	.waaviso--mal {
+		color: var(--color-danger, #b42318);
 	}
 
 	.sintel {

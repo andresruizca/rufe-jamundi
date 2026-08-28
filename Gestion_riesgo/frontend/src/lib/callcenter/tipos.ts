@@ -32,6 +32,13 @@ export type ResumenCallCenter = {
 
 export type GestionLlamada = {
 	id: number;
+	/**
+	 * Por qué vía se hizo. `LLAMADA` en todo lo anterior al botón de WhatsApp.
+	 *
+	 * Importa para el historial: un envío no es una llamada, y contarlo como
+	 * tal daría por agotado un hogar con el que nadie ha hablado.
+	 */
+	canal: 'LLAMADA' | 'WHATSAPP';
 	resultado: string;
 	nota: string | null;
 	proxima_llamada: string | null;

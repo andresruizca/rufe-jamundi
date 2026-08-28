@@ -119,6 +119,28 @@ return [
         'bot_secreto' => '',
     ],
 
+    // ── WhatsApp saliente por Zavu, desde el Call Center ────────────────────
+    //
+    // Con `api_token` vacío el botón responde 503 y NO sale a internet: la
+    // función no existe hasta que alguien la habilite a conciencia.
+    //
+    // El token vive SOLO aquí, en el servidor. Nunca puede viajar al navegador:
+    // un token en el frontend es un token público, y con él cualquiera manda
+    // WhatsApp desde el número oficial de la Alcaldía.
+    'zavu' => [
+        // zv_live_… del panel de Zavu. El valor real va solo en config.php.
+        'api_token' => '',
+        'base_url' => 'https://api.zavu.dev/v1',
+        // El número +57 310 617 3887 en Zavu.
+        'sender_id' => 'kd74xhwdx91gf1d2wfcfzydgmd8d843y',
+        // Plantilla `registro_afectacion_vivienda`, aprobada por Meta. Su
+        // texto NO se toca desde el código: cambiarlo exige nueva aprobación.
+        'plantilla_id' => 'ks7bwsg7hnfefcaeqsg227rvcs8dbv5g',
+        // Zavu retarda el despacho unos segundos a propósito. Corto de más, un
+        // envío que SÍ salió da error y la operadora lo repite.
+        'timeout' => 15,
+    ],
+
     'geocodificacion' => [
         // Clave de la API de Geocoding de Google. VACÍA por omisión: mientras lo
         // esté, el sistema ubica las direcciones solo con OpenStreetMap, que es
