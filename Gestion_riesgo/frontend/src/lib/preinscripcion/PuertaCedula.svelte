@@ -30,7 +30,7 @@
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi, sinCensoApi } from '$lib/api/servicios';
-	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
+	import CedulaDosCaras from './CedulaDosCaras.svelte';
 	import type { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import type { HogarCenso } from './hogar';
 	import { erroresSolicitud, solicitudVacia, ZONAS, type ZonaSinCenso } from '$lib/sin-censo/solicitud';
@@ -84,9 +84,20 @@
 	let trayendo = $state(false);
 	let errorFoto = $state('');
 
-	/** La foto ya está EN EL SERVIDOR, no solo elegida en el teléfono. */
+	/**
+	 * La foto ya está EN EL SERVIDOR, no solo elegida en el teléfono.
+	 *
+	 * Basta la cara de delante, que es la que el servidor exige para contestar.
+	 * La de atrás se pide igual —y se sube a la misma carga— pero esperar a las
+	 * dos dejaría en pantalla un botón apagado sin decir por qué a quien acaba
+	 * de tomar una foto.
+	 */
 	const fotoSubida = $derived(
 		(evidencias?.archivosDe('PRE_CEDULA') ?? []).some((a) => a.estado === 'listo')
+	);
+
+	const reversoSubido = $derived(
+		(evidencias?.archivosDe('PRE_CEDULA_REVERSO') ?? []).some((a) => a.estado === 'listo')
 	);
 
 	$effect(() => {
@@ -471,19 +482,17 @@
 		<h2 class="puerta__titulo">Su cédula está registrada</h2>
 
 		<p class="puerta__texto">
-			Tome una foto de su cédula y le mostramos los datos que ya tenemos de su vivienda, para que
-			usted los revise y corrija lo que haga falta.
+			Tome una foto de las dos caras de su cédula y le mostramos los datos que ya tenemos de su
+			vivienda, para que usted los revise y corrija lo que haga falta.
 		</p>
 
 		<div class="puerta__subida">
-			<SubidaEvidencias
-				gestor={evidencias}
-				tipo="PRE_CEDULA"
-				titulo="Foto de su cédula"
-				ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. La foto se reduce en su celular antes de enviarse, y queda con su solicitud."
-				textoCamara="Tomar foto de la cédula"
-			/>
+			<CedulaDosCaras gestor={evidencias} />
 		</div>
+
+		{#if fotoSubida && !reversoSubido}
+			<p class="puerta__pista">Falta la cara de atrás. Puede continuar, pero conviene subirla.</p>
+		{/if}
 
 		{#if errorFoto}<p class="campo__error" role="alert">{errorFoto}</p>{/if}
 

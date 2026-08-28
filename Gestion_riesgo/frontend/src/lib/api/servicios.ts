@@ -340,6 +340,7 @@ export const preinscripcionApi = {
 			limites: {
 				fotos_dano: number;
 				fotos_cedula: number;
+				fotos_cedula_reverso: number;
 				bytes_archivo: number;
 				bytes_carga: number;
 				objetivo_bytes_foto: number;

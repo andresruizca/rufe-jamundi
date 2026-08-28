@@ -21,6 +21,8 @@
 		CheckCircle2, LoaderCircle, RotateCcw, Square, TriangleAlert, Video, X
 	} from '@lucide/svelte';
 	import { ErrorDeVideo, RESTRICCIONES, formatoSoportado, mimeBase, subirVideo } from './video';
+	import GirarTelefono from '$lib/camara/GirarTelefono.svelte';
+	import { usarOrientacion } from '$lib/camara/orientacion.svelte';
 
 	type Categoria = {
 		id: number;
@@ -68,6 +70,16 @@
 	let reloj: ReturnType<typeof setInterval> | null = null;
 
 	const soportado = formatoSoportado() !== null;
+
+	/**
+	 * De pie o acostado.
+	 *
+	 * Los ingenieros pidieron los videos apaisados, y tienen razón: de pie cabe
+	 * una franja de la fachada; acostado, la fachada entera. Un video vertical de
+	 * una casa agrietada obliga a moverse hacia atrás hasta que la grieta deja de
+	 * verse.
+	 */
+	const orientacion = usarOrientacion();
 
 	/** Mientras no llegue al mínimo, terminar dejaría un video inservible. */
 	const faltanSegundos = $derived(Math.max(0, categoria.segundos_min - segundos));
@@ -331,6 +343,16 @@
 
 		{#if categoria.instruccion && fase === 'camara'}
 			<p class="camara__instruccion">{categoria.instruccion}</p>
+		{/if}
+
+		<!--
+			Solo mientras se encuadra. Ponerlo también durante la cuenta atrás o la
+			grabación taparía el video justo cuando la persona necesita ver lo que
+			está grabando, y ya no serviría de nada: girar a mitad de grabación
+			produce un video que empieza de pie y termina acostado.
+		-->
+		{#if fase === 'camara' && orientacion.actual === 'vertical'}
+			<GirarTelefono texto="Gire el teléfono: acostado cabe la casa entera en el video" />
 		{/if}
 
 		{#if fase === 'cuenta'}
@@ -632,5 +654,68 @@
 		background: rgb(255 255 255 / 25%);
 		border-color: transparent;
 		color: #fff;
+	}
+	/* ── Apaisado ────────────────────────────────────────────────────────────
+	   Acostado hay poco alto, y los controles apilados abajo se comen la mitad
+	   del visor — que es justo donde la persona mira para encuadrar. Se van a
+	   una columna en el costado derecho, sobre el video.
+
+	   Va al final de la hoja a propósito: estas reglas tienen la misma
+	   especificidad que las de arriba y solo ganan por orden. Puestas antes, no
+	   se aplicaba ninguna y el bloque parecía no existir.
+
+	   Se exige `orientation: landscape` Y poco alto: una tableta acostada tiene
+	   sitio de sobra y no necesita nada de esto. */
+	@media (orientation: landscape) and (max-height: 32rem) {
+		.camara__abajo {
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			left: auto;
+			width: 11.5rem;
+			margin-top: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 0.4rem;
+			padding: 0.8rem;
+			padding-right: max(0.8rem, env(safe-area-inset-right));
+			background: linear-gradient(to left, rgb(0 0 0 / 70%), transparent);
+		}
+
+		.camara__ayuda {
+			margin: 0;
+			font-size: 0.78rem;
+		}
+
+		.camara__accion {
+			width: 100%;
+		}
+
+		.camara__arriba {
+			padding: max(0.5rem, env(safe-area-inset-top)) 0.8rem 0.6rem;
+		}
+
+		.camara__titulo {
+			font-size: 0.85rem;
+		}
+
+		.camara__instruccion {
+			max-width: 58%;
+			font-size: 0.8rem;
+		}
+
+		/* A pantalla completa la cuenta atrás tapaba el encuadre entero, y se
+		   deja de ver hacia dónde se está apuntando justo antes de grabar. */
+		.camara__cuenta {
+			font-size: 4rem;
+		}
+
+		/* Apartado de la columna de botones: encima de ellos no se lee. */
+		.camara__estado {
+			margin-right: 12.5rem;
+		}
 	}
 </style>

@@ -953,7 +953,7 @@ prueba('los cupos de evidencia son uno de documento y cuatro de daño', function
     afirmarIgual(4, Catalogos::MAX_EVIDENCIAS_DANO);
     afirmarIgual(5, Catalogos::MAX_EVIDENCIAS);
     afirmarIgual(
-        ['DOCUMENTO', 'DANO', 'INSPECCION', 'PRE_CEDULA', 'PRE_DANO'],
+        ['DOCUMENTO', 'DANO', 'INSPECCION', 'PRE_CEDULA', 'PRE_CEDULA_REVERSO', 'PRE_DANO'],
         array_keys(Catalogos::TIPOS_EVIDENCIA)
     );
 
@@ -3553,12 +3553,13 @@ prueba('el cupo de fotos de una solicitud ciudadana es acotado', function (): vo
     afirmarIgual(10, App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']);
 });
 
-prueba('las once fotos de una pre-inscripción caben en el cupo de la carga', function (): void {
-    // Once archivos en el límite de 1 MiB cada uno no cabían en los 12 MiB
-    // anteriores: la última se habría rechazado con un mensaje que habla de
-    // megabytes, después de que la persona tomara las diez fotos.
+prueba('las doce fotos de una pre-inscripción caben en el cupo de la carga', function (): void {
+    // Doce archivos en el límite de 1 MiB cada uno: diez daños y las dos caras
+    // de la cédula. Si no cupieran, la última se rechazaría con un mensaje que
+    // habla de megabytes, después de que la persona tomara las diez fotos.
     $fotos = App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_DANO']['maximo']
-           + App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA']['maximo'];
+           + App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA']['maximo']
+           + App\Rufe\Catalogos::TIPOS_EVIDENCIA['PRE_CEDULA_REVERSO']['maximo'];
 
     afirmar(
         $fotos * App\Rufe\Catalogos::MAX_BYTES_ARCHIVO <= App\Rufe\Catalogos::MAX_BYTES_CARGA,
@@ -3566,10 +3567,18 @@ prueba('las once fotos de una pre-inscripción caben en el cupo de la carga', fu
     );
 });
 
-prueba('sin sesión solo se pueden subir los dos tipos de la pre-inscripción', function (): void {
+prueba('sin sesión solo se pueden subir los tres tipos de la pre-inscripción', function (): void {
     // El tipo llega en la petición. Sin lista blanca, quien quisiera podría
     // pedir el cupo de diez fotos del registro fotográfico de una inspección.
-    afirmarIgual(['PRE_CEDULA', 'PRE_DANO'], App\Rufe\Catalogos::TIPOS_PREINSCRIPCION);
+    //
+    // Las dos caras de la cédula son tipos DISTINTOS. Con dos fotos del mismo
+    // tipo nadie puede saber si la persona subió las dos caras o dos veces la
+    // misma, que es lo que pasa cuando se pide «suba 2 fotos» sin decir cuál va
+    // en cada sitio.
+    afirmarIgual(
+        ['PRE_CEDULA', 'PRE_CEDULA_REVERSO', 'PRE_DANO'],
+        App\Rufe\Catalogos::TIPOS_PREINSCRIPCION
+    );
 
     foreach (App\Rufe\Catalogos::TIPOS_PREINSCRIPCION as $t) {
         afirmar(

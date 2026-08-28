@@ -62,6 +62,9 @@ final class Migrador
         // El núcleo familiar dentro de la solicitud ciudadana. Va al final:
         // añade una columna a `preinscripciones` y una tabla que apunta a ella.
         'preinscripcion_05_hogar.sql',
+        // La cara de atrás de la cédula. Va después de evidencias_03_tipos.sql,
+        // que es quien dejó el ENUM con los cinco valores anteriores.
+        'evidencias_04_cedula_reverso.sql',
     ];
 
     /**

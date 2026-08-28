@@ -86,7 +86,11 @@ final class Catalogos
             'maximo' => InspeccionCatalogos::MAX_FOTOS,
         ],
         'PRE_CEDULA' => [
-            'etiqueta' => 'Cédula (pre-inscripción ciudadana)',
+            'etiqueta' => 'Cédula por delante (pre-inscripción ciudadana)',
+            'maximo' => 1,
+        ],
+        'PRE_CEDULA_REVERSO' => [
+            'etiqueta' => 'Cédula por detrás (pre-inscripción ciudadana)',
             'maximo' => 1,
         ],
         'PRE_DANO' => [
@@ -104,7 +108,7 @@ final class Catalogos
      *
      * @var list<string>
      */
-    public const TIPOS_PREINSCRIPCION = ['PRE_CEDULA', 'PRE_DANO'];
+    public const TIPOS_PREINSCRIPCION = ['PRE_CEDULA', 'PRE_CEDULA_REVERSO', 'PRE_DANO'];
 
     /**
      * Cuántas fotos puede adjuntar un ciudadano a su solicitud.

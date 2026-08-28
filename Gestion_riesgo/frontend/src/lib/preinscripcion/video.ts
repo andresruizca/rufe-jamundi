@@ -44,6 +44,10 @@ export const RESTRICCIONES: MediaStreamConstraints = {
 	video: {
 		width: { ideal: 854 },
 		height: { ideal: 480 },
+		// Apaisado, que es como lo pidieron los ingenieros: cabe la fachada
+		// entera en el cuadro. Es una preferencia, no una exigencia — con
+		// `exact` un teléfono que no pueda darlo se queda sin grabar nada.
+		aspectRatio: { ideal: 16 / 9 },
 		frameRate: { ideal: 24, max: 30 },
 		facingMode: { ideal: 'environment' }
 	},

@@ -223,6 +223,7 @@ final class PreinscripcionController
             'limites'        => [
                 'fotos_dano'       => Rufe::MAX_FOTOS_PREINSCRIPCION,
                 'fotos_cedula'     => 1,
+                'fotos_cedula_reverso' => 1,
                 'bytes_archivo'    => Rufe::MAX_BYTES_ARCHIVO,
                 'bytes_carga'      => Rufe::MAX_BYTES_CARGA,
                 'objetivo_bytes_foto' => Rufe::OBJETIVO_BYTES_FOTO,
@@ -902,7 +903,8 @@ final class PreinscripcionController
             'ok' => true,
             'data' => [
                 'carga' => bin2hex(random_bytes(32)),
-                'maximo_archivos' => Rufe::MAX_FOTOS_PREINSCRIPCION + 1,
+                // Los daños más las DOS caras de la cédula.
+                'maximo_archivos' => Rufe::MAX_FOTOS_PREINSCRIPCION + 2,
                 'maximo_bytes' => Rufe::MAX_BYTES_ARCHIVO,
             ],
         ], 201);

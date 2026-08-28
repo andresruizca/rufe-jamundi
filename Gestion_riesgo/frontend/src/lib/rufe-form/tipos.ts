@@ -52,16 +52,29 @@ export type Catalogos = {
  * maquinaria del censo —compresión, cola, reintento, adopción— porque es
  * exactamente el mismo trabajo; lo único distinto es el cupo y el pie de foto.
  */
-export type TipoEvidencia = 'DOCUMENTO' | 'DANO' | 'INSPECCION' | 'PRE_CEDULA' | 'PRE_DANO';
+export type TipoEvidencia =
+	| 'DOCUMENTO'
+	| 'DANO'
+	| 'INSPECCION'
+	| 'PRE_CEDULA'
+	| 'PRE_CEDULA_REVERSO'
+	| 'PRE_DANO';
 
 /**
- * Los dos que puede subir alguien SIN sesión, desde el formulario ciudadano.
+ * Los tres que puede subir alguien SIN sesión, desde el formulario ciudadano.
  *
  * Se separan de los internos porque el servidor los filtra contra su propia
  * lista blanca: sin ella, una solicitud pública podría reclamar el cupo de diez
  * fotos del registro fotográfico de una inspección.
+ *
+ * Las dos caras de la cédula son tipos DISTINTOS: con dos fotos del mismo tipo
+ * nadie puede saber si la persona subió las dos caras o dos veces la misma.
  */
-export const TIPOS_PREINSCRIPCION: TipoEvidencia[] = ['PRE_CEDULA', 'PRE_DANO'];
+export const TIPOS_PREINSCRIPCION: TipoEvidencia[] = [
+	'PRE_CEDULA',
+	'PRE_CEDULA_REVERSO',
+	'PRE_DANO'
+];
 
 export type Persona = {
 	/** Identificador local, solo para la clave de la lista. No viaja al servidor. */

@@ -39,6 +39,7 @@
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
 	import PuertaCedula from '$lib/preinscripcion/PuertaCedula.svelte';
 	import ListaHogar from '$lib/preinscripcion/ListaHogar.svelte';
+	import CedulaDosCaras from '$lib/preinscripcion/CedulaDosCaras.svelte';
 	import {
 		desdeCenso,
 		personasParaEnviar,
@@ -227,6 +228,9 @@
 				evidencias = new GestorEvidencias(
 					{
 						PRE_CEDULA: catalogos.limites.fotos_cedula,
+						// Sin esta línea el gestor da cupo cero a la cara de atrás y
+						// rechaza la foto en silencio: la persona la toma y no aparece.
+						PRE_CEDULA_REVERSO: catalogos.limites.fotos_cedula_reverso,
 						PRE_DANO: catalogos.limites.fotos_dano
 					},
 					// La clave del borrador es este envío: las fotos viven atadas a
@@ -690,13 +694,12 @@
 				<!-- La cédula va aquí y no al final: es un dato de identidad, y este
 				     es el momento en que la persona la tiene a mano. -->
 				<section class="tarjeta">
-					<SubidaEvidencias
-						gestor={evidencias}
-						tipo="PRE_CEDULA"
-						titulo="Foto de su cédula"
-						ayuda="Del lado de los datos, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que la solicitud es suya. La foto se reduce en su celular antes de enviarse."
-						textoCamara="Tomar foto de la cédula"
-					/>
+					<h3 class="cedula__titulo">Foto de su cédula</h3>
+					<p class="cedula__ayuda">
+						Las dos caras, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que
+						la solicitud es suya. Las fotos se reducen en su celular antes de enviarse.
+					</p>
+					<CedulaDosCaras gestor={evidencias} />
 				</section>
 			{/if}
 
@@ -874,6 +877,19 @@
 </div>
 
 <style>
+	.cedula__titulo {
+		margin: 0 0 0.3rem;
+		font-size: 1.05rem;
+		font-weight: 700;
+	}
+
+	.cedula__ayuda {
+		margin: 0 0 0.8rem;
+		font-size: 0.88rem;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
 	.pagina {
 		max-width: 40rem;
 		margin: 0 auto;
