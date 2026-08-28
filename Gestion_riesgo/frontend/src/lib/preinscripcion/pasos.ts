@@ -259,6 +259,22 @@ export function faltaEvidencia(paso: IdPasoPre, e: EstadoEvidencia): string {
 	return '';
 }
 
+/**
+ * En qué paso se resuelve lo que falta. `null` si no falta nada.
+ *
+ * Existe para no dejar a nadie en un callejón. El día que estas fotos pasaron a
+ * ser obligatorias, quien iba por el paso 2 con el formulario a medias se
+ * encontró un «Falta la foto de su cédula» mirando la pantalla de los daños,
+ * sin nada en ella que lo resolviera. Con esto, el aviso viene acompañado del
+ * salto al paso donde sí se puede hacer algo.
+ */
+export function dondeFalta(e: EstadoEvidencia): IdPasoPre | null {
+	if (e.cedulaFrente === 0 || e.cedulaReverso === 0) return 'datos';
+	if (e.fotosDano < MIN_FOTOS_DANO) return 'vivienda';
+
+	return null;
+}
+
 // ── Los videos que se le piden a cada persona ────────────────────────────────
 
 /** Una categoría de video como la manda el servidor. */

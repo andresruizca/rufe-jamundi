@@ -175,7 +175,9 @@ export class GestorEvidencias {
 				this.error =
 					tipo === 'DOCUMENTO'
 						? 'Ya adjuntó la foto del documento. Quítela si desea cambiarla.'
-						: `Solo puede adjuntar hasta ${limite} fotos.`;
+						: limite === 1
+							? 'Ya adjuntó esta foto. Quítela si desea cambiarla.'
+							: `Solo puede adjuntar hasta ${limite} fotos.`;
 				break;
 			}
 
@@ -316,7 +318,7 @@ export class GestorEvidencias {
 				});
 			} catch {
 				// Si no se pudo borrar en el servidor, el archivo queda en la carga
-				// y caducará solo en dos horas. No hay nada útil que decirle al
+				// y caducará solo (ver `Archivos::HORAS_CARGA`). No hay nada útil que decirle al
 				// ciudadano aquí.
 			}
 		}

@@ -75,19 +75,52 @@
 
 	let entradas = $state<Record<string, HTMLInputElement | null>>({});
 
+	/** Lo que el gestor rechazó, si rechazó algo. Ver `poner`. */
+	let aviso = $state('');
+
 	function fotoDe(tipo: TipoEvidencia) {
 		return gestor.archivosDe(tipo)[0] ?? null;
 	}
 
+	/**
+	 * Guarda la foto de esta cara, reemplazando la que hubiera.
+	 *
+	 * ── El fallo que esto corrige ────────────────────────────────────────────
+	 *
+	 * El cupo de cada cara es UNA foto. Sin quitar la anterior, el gestor
+	 * rechazaba la nueva, y lo hacía EN SILENCIO: su aviso (`gestor.error`) no
+	 * se dibuja en ningún sitio de este formulario. La persona pulsaba «Repetir
+	 * la foto», encuadraba en la silueta, disparaba, la cámara se cerraba… y
+	 * seguía viendo la foto borrosa de antes, sin que nada explicara por qué.
+	 *
+	 * Con la cédula ahora obligatoria, repetir es el gesto natural después de
+	 * una foto movida, así que era el camino más transitado del formulario.
+	 *
+	 * No se espera a `quitar`: esa función saca la foto de la lista de una vez y
+	 * solo DESPUÉS va al servidor a borrarla. Esperar esa ida y vuelta con mala
+	 * señal dejaría la casilla vacía varios segundos justo después de disparar.
+	 * Lo que aquí hace falta —que el cupo quede libre— ya ocurrió.
+	 */
+	async function poner(archivos: FileList | File[], tipo: TipoEvidencia) {
+		const anterior = fotoDe(tipo);
+		if (anterior) void gestor.quitar(anterior.uid);
+
+		gestor.error = null;
+		await gestor.agregar(archivos, tipo);
+		aviso = gestor.error ?? '';
+	}
+
 	async function alTomar(archivo: File, tipo: TipoEvidencia) {
-		await gestor.agregar([archivo], tipo);
+		await poner([archivo], tipo);
 	}
 
 	async function alElegir(evento: Event, tipo: TipoEvidencia) {
 		const entrada = evento.currentTarget as HTMLInputElement;
 
 		if (entrada.files && entrada.files.length > 0) {
-			await gestor.agregar(entrada.files, tipo);
+			// Solo la primera: son dos casillas de una cara cada una, y quien elige
+			// tres archivos de la galería no está pidiendo tres veces la misma cara.
+			await poner([entrada.files[0]], tipo);
 		}
 
 		// Sin esto, volver a elegir el MISMO archivo no dispara `change` y la
@@ -186,6 +219,13 @@
 	{/each}
 </div>
 
+<!-- Lo que el gestor rechace deja de ser invisible. Antes se guardaba en
+     `gestor.error` y no se dibujaba en ninguna parte, así que un rechazo se
+     veía como una aplicación que no responde. -->
+{#if aviso}
+	<p class="caras__aviso" role="alert">{aviso}</p>
+{/if}
+
 {#if capturando}
 	<CamaraFoto
 		titulo="Cédula — {capturando.titulo.toLowerCase()}"
@@ -194,6 +234,7 @@
 		nombreBase="cedula"
 		textoGiro="Gire el teléfono: la cédula entra completa y se lee mejor"
 		alTomar={(archivo) => alTomar(archivo, capturando!.tipo)}
+		alUsarCamaraSistema={() => entradas[capturando!.tipo]?.click()}
 		alCerrar={() => (capturando = null)}
 	/>
 {/if}
@@ -326,6 +367,13 @@
 	.cara__error {
 		margin: 0;
 		font-size: 0.8rem;
+		color: var(--color-danger);
+	}
+
+	.caras__aviso {
+		margin: 0.6rem 0 0;
+		font-size: 0.83rem;
+		line-height: 1.45;
 		color: var(--color-danger);
 	}
 

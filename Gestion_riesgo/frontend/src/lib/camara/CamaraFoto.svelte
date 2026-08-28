@@ -43,7 +43,9 @@
 		proporcion = null,
 		varias = false,
 		textoGiro = 'Gire el teléfono: así entra completo y se ve mejor',
-		nombreBase = 'foto'
+		nombreBase = 'foto',
+		cupo = null,
+		alUsarCamaraSistema = null
 	}: {
 		titulo: string;
 		ayuda: string;
@@ -62,6 +64,25 @@
 		varias?: boolean;
 		textoGiro?: string;
 		nombreBase?: string;
+		/**
+		 * Cuántas fotos más caben, o `null` si no hay tope que vigilar.
+		 *
+		 * Sin esto, con la cámara abierta para tomar varias, al llegar al cupo el
+		 * gestor rechazaba cada foto nueva —en silencio, porque su aviso queda
+		 * debajo de esta pantalla completa— mientras el contador seguía subiendo.
+		 * La persona veía «12 fotos tomadas» y solo llegaban 10.
+		 */
+		cupo?: number | null;
+		/**
+		 * Abrir la cámara del sistema, para cuando esta no se puede abrir.
+		 *
+		 * Importa desde que las fotos son obligatorias: quien negó el permiso de
+		 * la cámara una vez —y el navegador lo recuerda— no puede quedarse sin
+		 * poder mandar su solicitud. Si no se pasa, el botón solo cierra y la
+		 * salida queda en «Elegir archivo», que en Android y en iOS también
+		 * ofrece hacer una foto.
+		 */
+		alUsarCamaraSistema?: (() => void) | null;
 	} = $props();
 
 	const orientacion = usarOrientacion();
@@ -75,6 +96,9 @@
 	let tomadas = $state(0);
 	/** El destello que confirma el disparo cuando la cámara no se cierra. */
 	let destello = $state(false);
+
+	/** Ya no caben más. El disparador se apaga y se dice por qué. */
+	const sinCupo = $derived(cupo !== null && cupo <= 0);
 
 	/** Cuánto del ancho del cuadro ocupa la silueta. */
 	const ANCHO_SILUETA = 0.86;
@@ -161,7 +185,7 @@
 	 * silueta habría sido un adorno y quien revisa tendría que ampliar a mano.
 	 */
 	async function disparar() {
-		if (!video || !lista || tomando) return;
+		if (!video || !lista || tomando || sinCupo) return;
 
 		tomando = true;
 
@@ -290,9 +314,19 @@
 
 	<footer class="camara__pie">
 		{#if error}
-			<button type="button" class="boton" onclick={cerrar}>
+			<button
+				type="button"
+				class="boton"
+				onclick={() => {
+					// Se cierra ANTES: la cámara del sistema es otra aplicación y
+					// volver de ella a un visor negro encima haría creer que se
+					// perdió la foto.
+					cerrar();
+					alUsarCamaraSistema?.();
+				}}
+			>
 				<ImagePlus size={17} aria-hidden="true" />
-				Usar la cámara del teléfono
+				{alUsarCamaraSistema ? 'Usar la cámara del teléfono' : 'Volver y elegir la foto'}
 			</button>
 			<button type="button" class="camara__reintentar" onclick={() => { error = ''; void abrir(); }}>
 				<RefreshCw size={14} aria-hidden="true" />
@@ -307,7 +341,7 @@
 			<button
 				type="button"
 				class="camara__disparar"
-				disabled={!lista || tomando}
+				disabled={!lista || tomando || sinCupo}
 				onclick={disparar}
 				aria-label="Tomar la foto"
 			>
@@ -316,7 +350,13 @@
 
 			{#if varias}
 				<span class="camara__cuenta" role="status" aria-live="polite">
-					{tomadas === 0 ? 'Ninguna todavía' : `${tomadas} ${tomadas === 1 ? 'foto tomada' : 'fotos tomadas'}`}
+					{#if sinCupo}
+						Ya no caben más fotos
+					{:else}
+						{tomadas === 0
+							? 'Ninguna todavía'
+							: `${tomadas} ${tomadas === 1 ? 'foto tomada' : 'fotos tomadas'}`}
+					{/if}
 				</span>
 
 				<button type="button" class="camara__listo" onclick={cerrar}>

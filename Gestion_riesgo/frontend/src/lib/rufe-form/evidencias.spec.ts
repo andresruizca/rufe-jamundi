@@ -137,3 +137,26 @@ describe('el registro fotográfico de la inspección', () => {
 		expect(g.paraLaCola()[0].descripcion).toBeUndefined();
 	});
 });
+
+
+describe('reemplazar la foto de un cupo de uno', () => {
+	// El fallo que esto fija: la cédula del formulario ciudadano tiene cupo 1 por
+	// cara. «Repetir la foto» quitaba y volvía a agregar, y si `quitar` liberara
+	// el hueco DESPUÉS de su viaje al servidor, el `agregar` de un milisegundo
+	// después encontraría el cupo lleno y tiraría la foto nueva en silencio.
+	//
+	// `CedulaDosCaras` no espera a `quitar` a propósito —esperar la ida y vuelta
+	// con mala señal deja la casilla vacía varios segundos justo después de
+	// disparar—, así que depende de que la lista quede libre de una vez.
+	it('quitar libera el cupo antes de tocar la red, no después', () => {
+		const g = gestor([foto('borrosa', { tipo: 'DOCUMENTO', idServidor: 7 })]);
+		g.carga = 'una-carga';
+
+		expect(g.archivosDe('DOCUMENTO')).toHaveLength(1);
+
+		// Sin `await`: es exactamente como lo llama el componente.
+		void g.quitar('borrosa');
+
+		expect(g.archivosDe('DOCUMENTO')).toHaveLength(0);
+	});
+});

@@ -3,7 +3,7 @@
 // El fallo que esto fija: esta lógica vivía solo dentro del Service Worker. En
 // los navegadores sin Background Sync —Firefox, Safari y Brave— envía la propia
 // pestaña, y esa ruta mandaba el cuerpo tal cual: con el token de carga que el
-// formulario había abierto al tomar las fotos, caducado a las dos horas, y sin
+// formulario había abierto al tomar las fotos, ya caducada, y sin
 // subir ninguna evidencia. La ficha se rechazaba o entraba sin fotos.
 
 import 'fake-indexeddb/auto';

@@ -51,6 +51,7 @@
 	import {
 		bloqueoDeAvance,
 		datosVacios,
+		dondeFalta,
 		faltaEvidencia,
 		fotosUtiles,
 		paraEnviar,
@@ -485,14 +486,33 @@
 		const falta = faltaEvidencia(paso.id, estadoEvidencia);
 
 		if (falta) {
-			errorEnvio = falta;
-			subirAlInicio();
+			avisarYLlevar(falta);
 
 			return;
 		}
 
 		errorEnvio = '';
 		indice = Math.min(indice + 1, pasos.length - 1);
+		subirAlInicio();
+	}
+
+	/**
+	 * Decir qué falta y llevar a donde se resuelve.
+	 *
+	 * Un aviso solo no basta cuando lo que falta se arregla en otra pantalla.
+	 * Pasó el día que estas fotos se volvieron obligatorias: quien venía por el
+	 * paso 2 con el formulario a medias leyó «Falta la foto de su cédula»
+	 * delante de la pantalla de los daños, donde no hay ninguna cédula que
+	 * tomar. El aviso se queda en pantalla después del salto.
+	 */
+	function avisarYLlevar(aviso: string) {
+		errorEnvio = aviso;
+
+		const donde = dondeFalta(estadoEvidencia);
+		const destino = donde === null ? -1 : pasos.findIndex((p) => p.id === donde);
+
+		if (destino !== -1 && destino !== indice) indice = destino;
+
 		subirAlInicio();
 	}
 
@@ -587,8 +607,7 @@
 		const falta = faltaEvidencia('envio', estadoEvidencia);
 
 		if (falta) {
-			errorEnvio = falta;
-			subirAlInicio();
+			avisarYLlevar(falta);
 
 			return;
 		}

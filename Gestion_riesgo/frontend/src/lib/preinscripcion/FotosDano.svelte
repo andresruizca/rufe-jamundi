@@ -30,9 +30,21 @@
 	let { gestor }: { gestor: GestorEvidencias } = $props();
 
 	let capturando = $state(false);
+	/** Lo que el gestor haya rechazado. Sin esto, un rechazo es invisible. */
+	let aviso = $state('');
+	/** La zona de carga, para poder pedirle la cámara del sistema. */
+	let zona = $state<ReturnType<typeof SubidaEvidencias> | null>(null);
 
 	const cuantas = $derived(fotosUtiles(gestor.archivosDe('PRE_DANO')));
 	const faltan = $derived(Math.max(0, MIN_FOTOS_DANO - cuantas));
+	/**
+	 * Cuántas más caben.
+	 *
+	 * Va a la cámara para que el disparador se apague al llegar al tope. Sin
+	 * esto la cámara seguía contando fotos que el gestor ya estaba tirando, y
+	 * el rechazo no se veía porque queda debajo de la pantalla completa.
+	 */
+	const cupo = $derived(Math.max(0, gestor.limiteDe('PRE_DANO') - gestor.archivosDe('PRE_DANO').length));
 
 	/**
 	 * Abrir la cámara, y de paso poner la pantalla apaisada.
@@ -49,11 +61,14 @@
 	}
 
 	async function alTomar(archivo: File) {
+		gestor.error = null;
 		await gestor.agregar([archivo], 'PRE_DANO');
+		aviso = gestor.error ?? '';
 	}
 </script>
 
 <SubidaEvidencias
+	bind:this={zona}
 	{gestor}
 	tipo="PRE_DANO"
 	titulo="Fotos del daño"
@@ -61,6 +76,10 @@
 	textoCamara="Tomar fotos del daño"
 	abrirCamara={abrir}
 />
+
+{#if aviso}
+	<p class="aviso-cupo" role="alert">{aviso}</p>
+{/if}
 
 <p class="cuenta" class:cuenta--lista={faltan === 0} role="status" aria-live="polite">
 	{#if faltan === 0}
@@ -81,7 +100,9 @@
 		textoGiro="Gire el teléfono: acostado cabe el muro entero en la foto"
 		nombreBase="dano"
 		varias={true}
+		{cupo}
 		alTomar={alTomar}
+		alUsarCamaraSistema={() => zona?.abrirCamaraSistema()}
 		alCerrar={() => (capturando = false)}
 	/>
 {/if}
@@ -107,5 +128,12 @@
 
 	.cuenta :global(svg) {
 		flex: none;
+	}
+
+	.aviso-cupo {
+		margin: 0.5rem 0 0;
+		font-size: 0.83rem;
+		line-height: 1.45;
+		color: var(--color-danger);
 	}
 </style>

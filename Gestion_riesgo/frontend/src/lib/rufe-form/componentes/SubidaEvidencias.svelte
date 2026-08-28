@@ -43,6 +43,18 @@
 	let { gestor, tipo, titulo, ayuda, textoCamara, pieDeFoto, abrirCamara = null }: Props =
 		$props();
 
+	/**
+	 * Abrir la cámara del sistema desde fuera.
+	 *
+	 * La usa quien pasó `abrirCamara` y necesita una salida cuando su propia
+	 * cámara no se puede abrir —permiso negado y recordado, o un navegador sin
+	 * `getUserMedia`—. Con las fotos ya obligatorias, esa salida no puede
+	 * faltar.
+	 */
+	export function abrirCamaraSistema() {
+		entradaCamara?.click();
+	}
+
 	let entradaCamara = $state<HTMLInputElement | null>(null);
 	let entradaArchivo = $state<HTMLInputElement | null>(null);
 	let arrastrando = $state(false);

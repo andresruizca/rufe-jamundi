@@ -4,6 +4,7 @@ import {
 	bloqueoDeAvance,
 	MIN_FOTOS_DANO,
 	datosVacios,
+	dondeFalta,
 	faltaEvidencia,
 	fotosUtiles,
 	paraEnviar,
@@ -285,5 +286,40 @@ describe('la evidencia obligatoria', () => {
 		// el estado de producción hoy. Comprobar por posición y no por «el paso
 		// anterior» es lo que hace que eso no abra un hueco.
 		expect(faltaEvidencia('video', { ...todo, fotosDano: 2 })).not.toBe('');
+	});
+});
+
+
+describe('a dónde se manda a quien le falta algo', () => {
+	const todo = { cedulaFrente: 1, cedulaReverso: 1, fotosDano: MIN_FOTOS_DANO };
+
+	it('la cédula se resuelve en el paso 1 y el daño en el 2', () => {
+		expect(dondeFalta({ ...todo, cedulaReverso: 0 })).toBe('datos');
+		expect(dondeFalta({ ...todo, fotosDano: 0 })).toBe('vivienda');
+	});
+
+	it('con todo completo no manda a ninguna parte', () => {
+		expect(dondeFalta(todo)).toBeNull();
+	});
+
+	it('manda primero a la cédula cuando faltan las dos cosas', () => {
+		// Es el orden en que el formulario las pide, y el orden en que
+		// `faltaEvidencia` las nombra: el aviso y el salto tienen que coincidir o
+		// la persona lee una cosa y aterriza en otra.
+		expect(dondeFalta({ cedulaFrente: 0, cedulaReverso: 0, fotosDano: 0 })).toBe('datos');
+	});
+
+	it('coincide siempre con lo que dice el aviso', () => {
+		// La pareja aviso/salto es lo único que hace que esto no sea un callejón.
+		const casos = [
+			{ cedulaFrente: 0, cedulaReverso: 1, fotosDano: 9 },
+			{ cedulaFrente: 1, cedulaReverso: 0, fotosDano: 9 },
+			{ cedulaFrente: 1, cedulaReverso: 1, fotosDano: 2 }
+		];
+
+		for (const c of casos) {
+			expect(faltaEvidencia('envio', c)).not.toBe('');
+			expect(dondeFalta(c)).not.toBeNull();
+		}
 	});
 });
