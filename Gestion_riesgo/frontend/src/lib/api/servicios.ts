@@ -510,6 +510,76 @@ export const preinscripcionApi = {
 	}
 };
 
+/**
+ * Quien la puerta de la cédula rechazó, pero puede necesitar ayuda igual.
+ *
+ * `crear()` es pública, igual que `preinscripcionApi.enviar`: sin sesión,
+ * con las mismas defensas del lado del servidor. El resto exige sesión de
+ * lectura del censo — es el mismo tipo de dato (nombre, teléfono, ubicación
+ * de alguien que puede ser una familia damnificada) aunque todavía no tenga
+ * ficha RUFE.
+ */
+export const sinCensoApi = {
+	crear: (cuerpo: Record<string, unknown>) =>
+		api.post<{ radicado: string; recibido_en: string; reintento?: boolean }>(
+			'/sin-censo',
+			cuerpo,
+			false
+		),
+
+	listar: (estado = '') =>
+		api.get<{
+			solicitudes: {
+				id: number;
+				radicado: string;
+				nombres: string;
+				apellidos: string;
+				telefono: string;
+				zona: string;
+				corregimiento: string | null;
+				vereda_sector_barrio: string | null;
+				direccion: string | null;
+				estado: string;
+				rufe_reporte_id: number | null;
+				creado_en: string;
+			}[];
+			estados: Record<string, string>;
+		}>(`/sin-censo${estado ? `?estado=${estado}` : ''}`),
+
+	ver: (id: number) =>
+		api.get<{
+			solicitud: {
+				id: number;
+				radicado: string;
+				documento: string | null;
+				nombres: string;
+				apellidos: string;
+				telefono: string;
+				zona: string;
+				corregimiento: string | null;
+				vereda_sector_barrio: string | null;
+				direccion: string | null;
+				descripcion: string | null;
+				estado: string;
+				rufe_reporte_id: number | null;
+				/** El radicado de la ficha, ya resuelto: es lo que se enseña en pantalla. */
+				rufe_radicado: string | null;
+				creado_en: string;
+			};
+			estados: Record<string, string>;
+		}>(`/sin-censo/${id}`),
+
+	/**
+	 * `rufeRadicado` y no un id: es lo único que el funcionario tiene delante al
+	 * terminar de enviar la ficha nueva, y solo se pide al marcar CONVERTIDA.
+	 */
+	cambiarEstado: (id: number, estado: string, rufeRadicado?: string) =>
+		api.put<{ estado: string; rufe_reporte_id: number | null }>(`/sin-censo/${id}/estado`, {
+			estado,
+			rufe_radicado: rufeRadicado
+		})
+};
+
 export type PreinscripcionDetalle = {
 	preinscripcion: Record<string, string | number | null>;
 	fotos: { id: number; nombre_original: string; extension: string; tamano_bytes: number; mime: string }[];

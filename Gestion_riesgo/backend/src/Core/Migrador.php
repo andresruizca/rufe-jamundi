@@ -56,6 +56,9 @@ final class Migrador
         // después de callcenter_01.sql y de preinscripcion_01.sql: añade una
         // columna a `preinscripciones` y apunta a `rufe_reportes`.
         'callcenter_02.sql',
+        // Solicitudes de quien no aparece en el censo. Va al final: apunta a
+        // `rufe_reportes`, que ya existe mucho antes.
+        'sincenso_01.sql',
     ];
 
     /**

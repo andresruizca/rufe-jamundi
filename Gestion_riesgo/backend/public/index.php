@@ -20,6 +20,7 @@ use App\Controllers\InspeccionController;
 use App\Controllers\MapaController;
 use App\Controllers\PreinscripcionController;
 use App\Controllers\RufeController;
+use App\Controllers\SinCensoController;
 use App\Controllers\SistemaController;
 use App\Controllers\RufeCapturaController;
 use App\Controllers\UsuariosController;
@@ -98,6 +99,7 @@ $mapa = new MapaController;
 $inspeccionCaptura = new InspeccionCapturaController;
 $inspeccion = new InspeccionController;
 $preinscripcion = new PreinscripcionController;
+$sinCenso = new SinCensoController;
 $categoriasVideo = new CategoriasVideoController;
 
 // ── Públicas ─────────────────────────────────────────────────────────────
@@ -134,6 +136,14 @@ $router->delete('/preinscripcion/cargas/{carga}/archivos/{id}', [$preinscripcion
 $router->post('/preinscripcion/cargas/{carga}/videos', [$preinscripcion, 'iniciarVideo']);
 $router->post('/preinscripcion/cargas/{carga}/videos/{id}/trozos', [$preinscripcion, 'subirTrozo']);
 $router->post('/preinscripcion', [$preinscripcion, 'crear']);
+
+// A quien la puerta de arriba rechaza —la cédula no está en el censo— se le
+// da esta vía corta: dejar nombre, teléfono y una ubicación aproximada para
+// que un funcionario decida si de ahí nace una ficha RUFE. Mismas defensas
+// que la pre-inscripción, y la misma ausencia deliberada de una ruta pública
+// que devuelva lo que se manda aquí: es más delicado todavía, porque nadie
+// ha confirmado que el caso sea real. Milton, 2026-08-27.
+$router->post('/sin-censo', [$sinCenso, 'crear']);
 
 // ── Autenticadas (cualquier rol) ─────────────────────────────────────────
 $router->get('/auth/me', [$auth, 'me'], Auth::TODOS);
@@ -235,6 +245,13 @@ $router->put('/preinscripcion/fichas/{id}/estado', [$preinscripcion, 'cambiarEst
 // un DELETE con cuerpo lo descartan algunos intermediarios sin avisar.
 $router->post('/preinscripcion/fichas/eliminar-lote', [$preinscripcion, 'eliminarLote'], $soloAdmin);
 $router->delete('/preinscripcion/fichas/{id}', [$preinscripcion, 'eliminar'], $soloAdmin);
+
+// Bandeja de solicitudes sin censo. Separada de la de pre-inscripciones a
+// propósito: ninguna de estas tiene una ficha RUFE detrás todavía, y
+// mezclarlas confundiría los conteos de las dos bandejas.
+$router->get('/sin-censo', [$sinCenso, 'listar'], Auth::LECTURA_RUFE);
+$router->get('/sin-censo/{id}', [$sinCenso, 'ver'], Auth::LECTURA_RUFE);
+$router->put('/sin-censo/{id}/estado', [$sinCenso, 'cambiarEstado'], Auth::ESCRITURA);
 
 // Catálogo de categorías de video, que gestiona el administrador. Qué hay que
 // grabar de una vivienda cambia entre una emergencia y la siguiente; esperar a

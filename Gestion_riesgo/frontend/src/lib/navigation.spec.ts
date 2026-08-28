@@ -284,7 +284,8 @@ describe('rutas que funcionan sin conexión', () => {
 			'/riesgo/inspecciones',
 			'/riesgo/preinscripciones',
 			'/riesgo/mapas',
-			'/riesgo/callcenter'
+			'/riesgo/callcenter',
+			'/riesgo/sin-censo'
 		]);
 	});
 

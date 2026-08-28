@@ -19,19 +19,32 @@
 	//     es un dígito mal tecleado, y la segunda, que la casa quedara censada a
 	//     nombre de otra persona del hogar.
 
-	import { CircleAlert, LoaderCircle, Phone, ShieldCheck } from '@lucide/svelte';
+	import { CircleAlert, LoaderCircle, Phone, SendHorizontal, ShieldCheck } from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
-	import { preinscripcionApi } from '$lib/api/servicios';
+	import { preinscripcionApi, sinCensoApi } from '$lib/api/servicios';
+	import { erroresSolicitud, solicitudVacia, ZONAS, type ZonaSinCenso } from '$lib/sin-censo/solicitud';
 	import { LINEA_ATENCION, normalizar, revisarCedula } from './puerta';
+
+	const POLITICA_DATOS =
+		'https://portal.gestiondelriesgo.gov.co/Documents/Ley_Transparencia/Politica-de-Tratamiento-de-Datos-Personales.pdf';
+
+	type CatalogosPuerta = { corregimientos: string[]; aviso_version: string } | null;
 
 	type Props = {
 		/** Se llama con la cédula ya normalizada cuando el censo la reconoce. */
 		onEntrar: (documento: string) => void;
 		/** Se enciende cuando se entró sin haber podido verificar, por no haber red. */
 		entroSinVerificar?: (sinVerificar: boolean) => void;
+		/**
+		 * Corregimientos y versión del aviso, para la solicitud de quien no
+		 * aparece en el censo. Puede llegar en `null` mientras la página los
+		 * carga: mientras tanto esa vía se muestra deshabilitada en vez de dejar
+		 * mandar un corregimiento inventado o un consentimiento sin versión.
+		 */
+		catalogos?: CatalogosPuerta;
 	};
 
-	let { onEntrar, entroSinVerificar }: Props = $props();
+	let { onEntrar, entroSinVerificar, catalogos = null }: Props = $props();
 
 	$effect(() => {
 		entroSinVerificar?.(sinRed);
@@ -102,6 +115,74 @@
 		negado = false;
 		error = '';
 		cedula = '';
+		mostrarSinCenso = false;
+		radicadoSinCenso = '';
+	}
+
+	// ── Quien no aparece en el censo, pero puede necesitar ayuda igual ────────
+	//
+	// Antes esta pantalla terminaba en el teléfono de la línea de atención y
+	// nada más: si el caso era real, todo rastro de esa visita se perdía. Esto
+	// deja lo mínimo —nombre, teléfono y una ubicación aproximada— para que un
+	// funcionario decida si de ahí nace una ficha RUFE. El teléfono se queda
+	// igual, como salida principal; esto es un camino más, no un reemplazo.
+
+	let mostrarSinCenso = $state(false);
+	let sc = $state(solicitudVacia());
+	let erroresSC = $state<Record<string, string>>({});
+	let aceptaSC = $state(false);
+	let enviandoSC = $state(false);
+	let errorEnvioSC = $state('');
+	let radicadoSinCenso = $state('');
+	const envioIdSC = crypto.randomUUID();
+
+	/** El formulario, para poder desplazarlo a la vista al abrirlo. */
+	let formularioSinCensoEl = $state<HTMLFormElement | undefined>();
+
+	/**
+	 * Este enlace suele quedar pegado al borde inferior de la pantalla —es lo
+	 * último de la tarjeta del «no»—, así que el formulario que abre aparece
+	 * por debajo del área visible. Sin el scroll, tocar el enlace parece no
+	 * hacer nada.
+	 */
+	function abrirFormularioSinCenso() {
+		mostrarSinCenso = true;
+		requestAnimationFrame(() => {
+			formularioSinCensoEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		});
+	}
+
+	async function enviarSinCenso(evento: SubmitEvent) {
+		evento.preventDefault();
+		if (!catalogos) return;
+
+		const fallos = erroresSolicitud(sc);
+		if (!aceptaSC) fallos.autoriza_datos = 'Debe autorizar el tratamiento de sus datos para continuar.';
+		erroresSC = fallos;
+		if (Object.keys(fallos).length > 0) return;
+
+		enviandoSC = true;
+		errorEnvioSC = '';
+
+		try {
+			const r = await sinCensoApi.crear({
+				...sc,
+				documento: normalizar(cedula),
+				autoriza_datos: aceptaSC,
+				aviso_version: catalogos.aviso_version,
+				envio_id: envioIdSC
+			});
+
+			radicadoSinCenso = r.radicado;
+		} catch (e) {
+			erroresSC = e instanceof ApiError ? e.errors : {};
+			errorEnvioSC =
+				e instanceof ApiError
+					? e.message
+					: 'No se pudo enviar. Inténtelo de nuevo en unos minutos.';
+		} finally {
+			enviandoSC = false;
+		}
 	}
 </script>
 
@@ -139,6 +220,156 @@
 		<button type="button" class="boton boton--suave" onclick={volverAIntentar}>
 			Probar con otra cédula
 		</button>
+
+		<!-- La vía corta para quien de verdad necesita ayuda y no puede esperar a
+		     que le contesten el teléfono. Colapsada por defecto: el teléfono sigue
+		     siendo la salida principal, y no todo el mundo la necesita. -->
+		{#if radicadoSinCenso}
+			<div class="tarjeta-sc tarjeta-sc--listo">
+				<p class="puerta__texto">Quedó registrado. Un funcionario revisará su caso.</p>
+				<p class="sc__radicado">{radicadoSinCenso}</p>
+				<p class="puerta__pista">Anote este número, por si necesita mencionarlo al llamar.</p>
+			</div>
+		{:else if !mostrarSinCenso}
+			<button
+				type="button"
+				class="boton boton--principal boton-sc"
+				onclick={abrirFormularioSinCenso}
+			>
+				¿Quiere dejarnos sus datos para que lo contactemos?
+			</button>
+		{:else}
+			<form class="tarjeta-sc" bind:this={formularioSinCensoEl} onsubmit={enviarSinCenso}>
+				<h3 class="sc__titulo">Déjenos sus datos</h3>
+				<p class="puerta__pista">
+					Nombre, teléfono y más o menos dónde vive. Con eso un funcionario puede llamarlo y ver si
+					su caso necesita una ficha del censo.
+				</p>
+
+				<label class="campo">
+					<span class="campo__etiqueta">Nombres</span>
+					<input class="campo__control" bind:value={sc.nombres} disabled={enviandoSC} />
+					{#if erroresSC.nombres}
+						<span class="campo__error" role="alert">{erroresSC.nombres}</span>
+					{/if}
+				</label>
+
+				<label class="campo">
+					<span class="campo__etiqueta">Apellidos</span>
+					<input class="campo__control" bind:value={sc.apellidos} disabled={enviandoSC} />
+					{#if erroresSC.apellidos}
+						<span class="campo__error" role="alert">{erroresSC.apellidos}</span>
+					{/if}
+				</label>
+
+				<label class="campo">
+					<span class="campo__etiqueta">Teléfono</span>
+					<input
+						class="campo__control"
+						inputmode="numeric"
+						bind:value={sc.telefono}
+						disabled={enviandoSC}
+					/>
+					{#if erroresSC.telefono}
+						<span class="campo__error" role="alert">{erroresSC.telefono}</span>
+					{/if}
+				</label>
+
+				<fieldset class="campo campo--zona">
+					<legend class="campo__etiqueta">Su vivienda está en zona</legend>
+					<div class="opciones-zona">
+						{#each ZONAS as z (z)}
+							<label class="opcion-zona" class:opcion-zona--activa={sc.zona === z}>
+								<input
+									type="radio"
+									name="zona-sc"
+									value={z}
+									checked={sc.zona === z}
+									disabled={enviandoSC}
+									onchange={() => (sc.zona = z as ZonaSinCenso)}
+								/>
+								{z === 'URBANO' ? 'Urbana' : 'Rural'}
+							</label>
+						{/each}
+					</div>
+					{#if erroresSC.zona}<span class="campo__error" role="alert">{erroresSC.zona}</span>{/if}
+				</fieldset>
+
+				{#if sc.zona === 'RURAL' && catalogos}
+					<label class="campo">
+						<span class="campo__etiqueta">Corregimiento (si lo sabe)</span>
+						<select class="campo__control" bind:value={sc.corregimiento} disabled={enviandoSC}>
+							<option value="">No lo sé</option>
+							{#each catalogos.corregimientos as c (c)}
+								<option value={c}>{c}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
+
+				<label class="campo">
+					<span class="campo__etiqueta">Vereda, sector o barrio</span>
+					<input class="campo__control" bind:value={sc.vereda_sector_barrio} disabled={enviandoSC} />
+				</label>
+
+				<label class="campo">
+					<span class="campo__etiqueta">Dirección aproximada</span>
+					<input
+						class="campo__control"
+						bind:value={sc.direccion}
+						placeholder="Como se lo explicaría a alguien que va a buscarla"
+						disabled={enviandoSC}
+					/>
+					{#if erroresSC.direccion}
+						<span class="campo__error" role="alert">{erroresSC.direccion}</span>
+					{/if}
+				</label>
+
+				<label class="campo">
+					<span class="campo__etiqueta">¿Qué le pasó?</span>
+					<textarea
+						class="campo__control"
+						rows="3"
+						bind:value={sc.descripcion}
+						disabled={enviandoSC}
+					></textarea>
+					{#if erroresSC.descripcion}
+						<span class="campo__error" role="alert">{erroresSC.descripcion}</span>
+					{/if}
+				</label>
+
+				<label class="opcion-sc" class:opcion-sc--activa={aceptaSC}>
+					<input type="checkbox" bind:checked={aceptaSC} disabled={enviandoSC} />
+					<span>
+						Autorizo a la <strong>Alcaldía de Jamundí</strong> a tratar el nombre, el teléfono y la
+						ubicación que dejo aquí, para que un funcionario revise mi caso y me contacte. Es
+						voluntario, y no incluye fotos ni datos sensibles.
+					</span>
+				</label>
+				{#if erroresSC.autoriza_datos}
+					<span class="campo__error" role="alert">{erroresSC.autoriza_datos}</span>
+				{/if}
+				<a class="enlace-politica" href={POLITICA_DATOS} target="_blank" rel="noopener noreferrer">
+					Política de tratamiento de datos personales (se abre en otra pestaña)
+				</a>
+
+				{#if errorEnvioSC}<p class="campo__error" role="alert">{errorEnvioSC}</p>{/if}
+
+				<button
+					type="submit"
+					class="boton puerta__continuar"
+					disabled={enviandoSC || !catalogos}
+				>
+					{#if enviandoSC}
+						<LoaderCircle size={16} class="girando" aria-hidden="true" /> Enviando…
+					{:else if !catalogos}
+						<LoaderCircle size={16} class="girando" aria-hidden="true" /> Cargando…
+					{:else}
+						<SendHorizontal size={16} aria-hidden="true" /> Enviar mis datos
+					{/if}
+				</button>
+			</form>
+		{/if}
 	</section>
 {:else}
 	<section class="tarjeta puerta">
@@ -260,6 +491,97 @@
 
 	.linea__extension {
 		font-size: 0.82rem;
+		color: var(--color-muted);
+	}
+
+	.boton-sc {
+		margin-top: 0.4rem;
+		width: 100%;
+		max-width: 26rem;
+		justify-content: center;
+	}
+
+	.tarjeta-sc {
+		width: 100%;
+		max-width: 26rem;
+		margin-top: 0.6rem;
+		padding: 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		background: var(--color-surface-alt);
+	}
+
+	.tarjeta-sc--listo {
+		display: grid;
+		gap: 0.4rem;
+		justify-items: center;
+		text-align: center;
+	}
+
+	.sc__titulo {
+		margin: 0 0 0.3rem;
+		font-size: 1rem;
+	}
+
+	.sc__radicado {
+		margin: 0;
+		font-size: 1.15rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
+	.campo--zona {
+		border: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.opciones-zona {
+		display: flex;
+		gap: 0.6rem;
+	}
+
+	.opcion-zona {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.5rem;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		cursor: pointer;
+	}
+
+	.opcion-zona--activa {
+		border-color: var(--color-primary);
+		background: var(--color-surface);
+	}
+
+	.opcion-sc {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.6rem;
+		padding: 0.7rem;
+		border: 1px solid var(--color-border);
+		border-radius: 10px;
+		font-size: 0.86rem;
+		line-height: 1.45;
+		cursor: pointer;
+	}
+
+	.opcion-sc input {
+		margin-top: 0.2rem;
+	}
+
+	.opcion-sc--activa {
+		border-color: var(--color-primary);
+	}
+
+	.enlace-politica {
+		font-size: 0.8rem;
 		color: var(--color-muted);
 	}
 </style>
