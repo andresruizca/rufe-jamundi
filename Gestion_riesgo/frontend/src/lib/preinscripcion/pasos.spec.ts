@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	PASOS_PRE,
 	bloqueoDeAvance,
+	MIN_FOTOS_DANO,
 	datosVacios,
+	faltaEvidencia,
+	fotosUtiles,
 	paraEnviar,
 	pasosVigentes,
 	validarPaso,
@@ -231,5 +234,56 @@ describe('los videos que faltan frenan el envío', () => {
 				puedeGrabar: true
 			})
 		).toBe('');
+	});
+});
+
+
+describe('la evidencia obligatoria', () => {
+	const todo = { cedulaFrente: 1, cedulaReverso: 1, fotosDano: MIN_FOTOS_DANO };
+
+	it('no cuenta la foto que falló, y sí la que todavía no ha subido', () => {
+		// Quien llena esto en una vereda sin cobertura ya tomó su foto: está en
+		// el teléfono y subirá sola. Exigir que estuviera «guardada» convertiría
+		// la falta de señal en un muro.
+		expect(fotosUtiles([{ estado: 'pendiente' }, { estado: 'listo' }])).toBe(2);
+		expect(fotosUtiles([{ estado: 'error' }, { estado: 'subiendo' }])).toBe(1);
+	});
+
+	it('no deja salir del primer paso sin las dos caras de la cédula', () => {
+		expect(faltaEvidencia('datos', { ...todo, cedulaFrente: 0, cedulaReverso: 0 })).toContain(
+			'las dos caras'
+		);
+		expect(faltaEvidencia('datos', { ...todo, cedulaFrente: 0 })).toContain('adelante');
+		expect(faltaEvidencia('datos', { ...todo, cedulaReverso: 0 })).toContain('atrás');
+		expect(faltaEvidencia('datos', todo)).toBe('');
+	});
+
+	it('no exige las fotos del daño antes de que se hayan podido tomar', () => {
+		// En el paso 1 todavía no ha existido la pantalla que las pide. Pedirlas
+		// ahí sería un error imposible de resolver desde donde está la persona.
+		expect(faltaEvidencia('datos', { ...todo, fotosDano: 0 })).toBe('');
+	});
+
+	it('exige cinco fotos del daño para salir del segundo paso', () => {
+		expect(faltaEvidencia('vivienda', { ...todo, fotosDano: 0 })).toContain('Faltan las fotos');
+		expect(faltaEvidencia('vivienda', { ...todo, fotosDano: 4 })).toContain('Falta una foto');
+		expect(faltaEvidencia('vivienda', { ...todo, fotosDano: 3 })).toContain('Faltan 2 fotos');
+		expect(faltaEvidencia('vivienda', { ...todo, fotosDano: MIN_FOTOS_DANO })).toBe('');
+		expect(faltaEvidencia('vivienda', { ...todo, fotosDano: 10 })).toBe('');
+	});
+
+	it('vuelve a mirarlo todo al enviar, porque desde el resumen se puede volver atrás', () => {
+		// Se corrige un dato, se quita una foto de paso, y se vuelve a «Enviar».
+		// Sin esta segunda comprobación la solicitud saldría incompleta.
+		expect(faltaEvidencia('envio', { ...todo, cedulaReverso: 0 })).not.toBe('');
+		expect(faltaEvidencia('envio', { ...todo, fotosDano: 1 })).not.toBe('');
+		expect(faltaEvidencia('envio', todo)).toBe('');
+	});
+
+	it('sigue exigiendo el daño aunque el paso de video no exista', () => {
+		// El paso de video se salta cuando no hay categorías configuradas, que es
+		// el estado de producción hoy. Comprobar por posición y no por «el paso
+		// anterior» es lo que hace que eso no abra un hueco.
+		expect(faltaEvidencia('video', { ...todo, fotosDano: 2 })).not.toBe('');
 	});
 });

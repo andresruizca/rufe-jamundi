@@ -17,12 +17,22 @@
 	// interpreta mal.
 
 	import { Camera, Check, ImagePlus, Trash2 } from '@lucide/svelte';
-	import CamaraCedula from '$lib/camara/CamaraCedula.svelte';
+	import CamaraFoto from '$lib/camara/CamaraFoto.svelte';
 	import { pedirApaisado } from '$lib/camara/orientacion.svelte';
 	import type { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import type { TipoEvidencia } from '$lib/rufe-form/tipos';
 
 	let { gestor }: { gestor: GestorEvidencias } = $props();
+
+	/**
+	 * La proporción de una cédula colombiana: 85,6 × 54 mm, la ISO/IEC 7810
+	 * ID-1, la misma de cualquier tarjeta bancaria.
+	 *
+	 * Se escribe como número y no como «1.58» redondeado: la silueta de la
+	 * cámara y el recorte usan el MISMO valor, y medio milímetro de diferencia
+	 * entre los dos deja una franja negra en el borde de la foto.
+	 */
+	const PROPORCION = 85.6 / 54;
 
 	type Cara = {
 		tipo: TipoEvidencia;
@@ -177,9 +187,12 @@
 </div>
 
 {#if capturando}
-	<CamaraCedula
+	<CamaraFoto
 		titulo="Cédula — {capturando.titulo.toLowerCase()}"
 		ayuda={capturando.ayudaCamara}
+		proporcion={PROPORCION}
+		nombreBase="cedula"
+		textoGiro="Gire el teléfono: la cédula entra completa y se lee mejor"
 		alTomar={(archivo) => alTomar(archivo, capturando!.tipo)}
 		alCerrar={() => (capturando = null)}
 	/>

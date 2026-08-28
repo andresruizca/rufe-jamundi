@@ -31,7 +31,6 @@
 	import { preinscripcionApi } from '$lib/api/servicios';
 	import logo from '$lib/assets/logo-jamundi.svg';
 	import IndicadorProgreso from '$lib/rufe-form/componentes/IndicadorProgreso.svelte';
-	import SubidaEvidencias from '$lib/rufe-form/componentes/SubidaEvidencias.svelte';
 	import { GestorEvidencias, RUTAS_PUBLICAS_CARGA } from '$lib/rufe-form/evidencias.svelte';
 	import GrabadorVideo from '$lib/preinscripcion/GrabadorVideo.svelte';
 	import { formatoSoportado } from '$lib/preinscripcion/video';
@@ -41,6 +40,7 @@
 	import ListaHogar from '$lib/preinscripcion/ListaHogar.svelte';
 	import * as borradorPre from '$lib/preinscripcion/borrador';
 	import CedulaDosCaras from '$lib/preinscripcion/CedulaDosCaras.svelte';
+	import FotosDano from '$lib/preinscripcion/FotosDano.svelte';
 	import {
 		desdeCenso,
 		personasParaEnviar,
@@ -51,6 +51,8 @@
 	import {
 		bloqueoDeAvance,
 		datosVacios,
+		faltaEvidencia,
+		fotosUtiles,
 		paraEnviar,
 		pasosVigentes,
 		validarPaso,
@@ -159,30 +161,40 @@
 
 	function entrarConCedula(documento: string, hogar: HogarCenso | null = null) {
 		datos.documento = documento;
-		hogarCenso = hogar;
 
-		if (hogar) {
-			// Solo se rellena lo que está VACÍO. Si la persona ya venía
-			// escribiendo —volvió a la puerta a corregir su cédula— pisarle lo
-			// escrito sería el peor momento para hacerlo.
-			if (datos.telefono.trim() === '') datos.telefono = hogar.telefono;
-			if (datos.direccion.trim() === '') datos.direccion = hogar.direccion;
-			if (datos.zona === '') datos.zona = hogar.zona;
-			if (datos.corregimiento.trim() === '') datos.corregimiento = hogar.corregimiento;
-			if (datos.vereda.trim() === '') datos.vereda = hogar.vereda;
-
-			// El nombre sale de la persona que está escribiendo, no del jefe de
-			// hogar: quien hace el trámite puede ser el hijo mayor de edad.
-			const yo = hogar.personas.find((p) => p.id === hogar.persona_id);
-
-			if (yo && datos.nombre_completo.trim() === '') {
-				datos.nombre_completo = `${yo.nombres} ${yo.apellidos}`.trim();
-			}
-
-			personas = desdeCenso(hogar.personas);
-		}
+		if (hogar) precargarDesdeCenso(hogar);
 
 		habilitado = true;
+	}
+
+	/**
+	 * Vuelca en el formulario lo que el censo sabe de esta casa.
+	 *
+	 * Solo se rellena lo que está VACÍO. Si la persona ya venía escribiendo
+	 * —volvió a la puerta a corregir su cédula, o los datos llegaron tarde
+	 * porque la foto de la cédula se subió a mitad del paso 1— pisarle lo
+	 * escrito sería el peor momento para hacerlo.
+	 */
+	function precargarDesdeCenso(hogar: HogarCenso) {
+		hogarCenso = hogar;
+
+		if (datos.telefono.trim() === '') datos.telefono = hogar.telefono;
+		if (datos.direccion.trim() === '') datos.direccion = hogar.direccion;
+		if (datos.zona === '') datos.zona = hogar.zona;
+		if (datos.corregimiento.trim() === '') datos.corregimiento = hogar.corregimiento;
+		if (datos.vereda.trim() === '') datos.vereda = hogar.vereda;
+
+		// El nombre sale de la persona que está escribiendo, no del jefe de
+		// hogar: quien hace el trámite puede ser el hijo mayor de edad.
+		const yo = hogar.personas.find((p) => p.id === hogar.persona_id);
+
+		if (yo && datos.nombre_completo.trim() === '') {
+			datos.nombre_completo = `${yo.nombres} ${yo.apellidos}`.trim();
+		}
+
+		// Las personas solo se traen si la familia no ha tocado la lista: si ya
+		// corrigió un apellido o agregó a alguien, reemplazarla borraría eso.
+		if (personas.length === 0) personas = desdeCenso(hogar.personas);
 	}
 
 	/**
@@ -207,6 +219,7 @@
 		indice = 0;
 		recuperado = null;
 		habilitado = false;
+		pidiendoCenso = false;
 	}
 
 	/** Volver a la puerta: la cédula se cambia allí, no en el paso 1. */
@@ -218,6 +231,7 @@
 		errores = {};
 		errorEnvio = '';
 		indice = 0;
+		pidiendoCenso = false;
 	}
 
 	let indice = $state(0);
@@ -295,6 +309,63 @@
 	 * servidor.
 	 */
 	let puedeGrabar = $state(true);
+
+	/**
+	 * Cuánta evidencia hay ahora mismo, para saber si se puede pasar de paso.
+	 *
+	 * Vive aquí y no dentro de cada tarjeta porque la regla la aplica la
+	 * navegación —`siguiente()` y `enviar()`—, y la tarjeta puede ni siquiera
+	 * estar en pantalla cuando se decide.
+	 */
+	const estadoEvidencia = $derived({
+		cedulaFrente: fotosUtiles(evidencias?.archivosDe('PRE_CEDULA') ?? []),
+		cedulaReverso: fotosUtiles(evidencias?.archivosDe('PRE_CEDULA_REVERSO') ?? []),
+		fotosDano: fotosUtiles(evidencias?.archivosDe('PRE_DANO') ?? [])
+	});
+
+	/**
+	 * Traer del censo lo que no se trajo en la puerta.
+	 *
+	 * Quien pulsó «Continuar sin traer mis datos» —porque no tenía señal, o
+	 * porque no quiso pararse a fotografiar la cédula en ese momento— entró al
+	 * formulario en blanco y ahí se quedaba: teniendo la Alcaldía su dirección y
+	 * su hogar levantados en campo, le tocaba escribirlo todo a mano.
+	 *
+	 * Ahora, en cuanto la foto de la cédula llega al servidor —y ya es
+	 * obligatoria para poder pasar de este paso—, se pide sola. Solo se rellena
+	 * lo que esté VACÍO: lo que la persona ya escribió no se le pisa.
+	 *
+	 * El servidor sigue exigiendo esa foto para contestar, y eso no cambia: la
+	 * respuesta lleva nombre, teléfono, dirección y quiénes viven en una casa
+	 * damnificada. Que una pantalla pública reparta eso a quien acierte un
+	 * número de cédula es lo que la foto impide, y es también lo que hace que
+	 * recorrer el censo deje rastro. Lo que se corrige aquí es el hueco de en
+	 * medio: la foto ya se toma igual, solo que un momento después.
+	 */
+	let pidiendoCenso = false;
+
+	$effect(() => {
+		if (!evidencias || !habilitado || hogarCenso !== null || pidiendoCenso) return;
+
+		const carga = evidencias.carga;
+		const documento = datos.documento;
+		const hayFoto = evidencias.archivosDe('PRE_CEDULA').some((a) => a.estado === 'listo');
+
+		if (!carga || !hayFoto || documento.trim() === '') return;
+
+		pidiendoCenso = true;
+
+		void (async () => {
+			try {
+				const { hogar } = await preinscripcionApi.datosCenso(documento, carga);
+				if (hogar) precargarDesdeCenso(hogar);
+			} catch {
+				// Sin señal, o el censo no contesta. No se avisa: la persona no
+				// pidió esto, y lo único que pierde es escribir sus datos a mano.
+				// Se deja el candado puesto para no repetir la petición sola.
+			}
+		})();
+	});
 
 	const hayVideos = $derived(videosPedidos.length > 0);
 	const pasos = $derived(pasosVigentes(hayVideos));
@@ -408,6 +479,18 @@
 			return;
 		}
 
+		// La cédula y las fotos del daño. Va después del bloqueo de subidas —«no
+		// salga todavía, se está subiendo»— porque ese es un problema de espera y
+		// este de algo que la persona todavía tiene que hacer.
+		const falta = faltaEvidencia(paso.id, estadoEvidencia);
+
+		if (falta) {
+			errorEnvio = falta;
+			subirAlInicio();
+
+			return;
+		}
+
 		errorEnvio = '';
 		indice = Math.min(indice + 1, pasos.length - 1);
 		subirAlInicio();
@@ -493,6 +576,18 @@
 
 		if (bloqueo) {
 			errorEnvio = bloqueo;
+			subirAlInicio();
+
+			return;
+		}
+
+		// Otra vez, y no por duplicar: desde este resumen se vuelve a los pasos
+		// anteriores a corregir, y de ahí se puede quitar una foto. Lo que se
+		// comprobó al pasar de paso puede haber dejado de ser cierto.
+		const falta = faltaEvidencia('envio', estadoEvidencia);
+
+		if (falta) {
+			errorEnvio = falta;
 			subirAlInicio();
 
 			return;
@@ -836,8 +931,13 @@
 				<section class="tarjeta">
 					<h3 class="cedula__titulo">Foto de su cédula</h3>
 					<p class="cedula__ayuda">
-						Las dos caras, sobre una superficie plana y sin reflejos. Nos sirve para confirmar que
-						la solicitud es suya. Las fotos se reducen en su celular antes de enviarse.
+						<strong>Las dos caras</strong>, sobre una superficie plana y sin reflejos. Es lo único
+						que ata esta solicitud a usted, así que sin ellas no podemos continuar. Las fotos se
+						reducen en su celular antes de enviarse.
+						{#if hogarCenso === null}
+							Al tomarlas traeremos los datos que ya tenemos de su vivienda, para que usted los
+							revise.
+						{/if}
 					</p>
 					<CedulaDosCaras gestor={evidencias} />
 				</section>
@@ -876,13 +976,7 @@
 
 			{#if evidencias}
 				<section class="tarjeta">
-					<SubidaEvidencias
-						gestor={evidencias}
-						tipo="PRE_DANO"
-						titulo="Fotos del daño"
-						ayuda="Tome hasta diez: la fachada, cada muro afectado, el techo y el piso. Entre más se vea, mejor se prepara la visita. No son obligatorias —puede enviar con las que alcance— y se reducen en su celular antes de enviarse, así que gastan pocos datos."
-						textoCamara="Tomar foto del daño"
-					/>
+					<FotosDano gestor={evidencias} />
 				</section>
 			{/if}
 

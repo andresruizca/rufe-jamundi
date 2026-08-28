@@ -26,9 +26,22 @@
 		 * inspección. En el censo no existe y no se dibuja.
 		 */
 		pieDeFoto?: { etiqueta: string; marcador: string; maximo: number };
+		/**
+		 * Abrir una cámara propia en vez de la del sistema.
+		 *
+		 * Cuando se pasa, «Tomar foto» llama aquí en lugar de disparar el input
+		 * con `capture`. Existe por el formulario ciudadano, donde encima del
+		 * visor hay que dibujar cosas —la silueta de la cédula, el aviso de girar
+		 * el teléfono— y sobre la cámara del sistema no se puede dibujar nada.
+		 *
+		 * Opcional a propósito: el formulario de campo del RUFE sigue con la
+		 * cámara del sistema, que es la que el funcionario ya conoce.
+		 */
+		abrirCamara?: (() => void) | null;
 	};
 
-	let { gestor, tipo, titulo, ayuda, textoCamara, pieDeFoto }: Props = $props();
+	let { gestor, tipo, titulo, ayuda, textoCamara, pieDeFoto, abrirCamara = null }: Props =
+		$props();
 
 	let entradaCamara = $state<HTMLInputElement | null>(null);
 	let entradaArchivo = $state<HTMLInputElement | null>(null);
@@ -93,7 +106,11 @@
 			ondrop={alSoltar}
 		>
 			<div class="zona__acciones">
-				<button type="button" class="boton" onclick={() => entradaCamara?.click()}>
+				<button
+					type="button"
+					class="boton"
+					onclick={() => (abrirCamara ? abrirCamara() : entradaCamara?.click())}
+				>
 					<Camera size={17} aria-hidden="true" />
 					{textoCamara}
 				</button>

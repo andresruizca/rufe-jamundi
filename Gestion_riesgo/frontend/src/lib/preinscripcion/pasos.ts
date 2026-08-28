@@ -152,13 +152,12 @@ export function validarPaso(paso: IdPasoPre, d: DatosPre): Errores {
 		}
 	}
 
-	// 'vivienda' y 'video' no validan nada, y eso es una decisión, no un olvido.
+	// 'vivienda' y 'video' no validan CAMPOS, y eso es una decisión, no un
+	// olvido: ninguna señal es obligatoria, porque quien tiene la casa partida
+	// por la mitad puede no reconocerse en ninguno de los ocho dibujos.
 	//
-	// Ninguna señal es obligatoria: quien tiene la casa partida por la mitad
-	// puede no reconocerse en ninguno de los ocho dibujos. Ningún video lo es
-	// tampoco: quien tiene un celular viejo o está sin señal no puede quedarse
-	// sin turno por eso. Lo que falte se marca en la bandeja, para que quien
-	// revisa lo sepa.
+	// Lo que sí exigen es evidencia, y eso se comprueba aparte —en
+	// `faltaEvidencia`— porque depende de archivos y no de lo escrito.
 
 	if (paso === 'envio') {
 		if (!d.autoriza_datos) {
@@ -171,6 +170,93 @@ export function validarPaso(paso: IdPasoPre, d: DatosPre): Errores {
 	}
 
 	return e;
+}
+
+// ── La evidencia que no se puede saltar ──────────────────────────────────────
+//
+// Antes las fotos eran todas opcionales. El argumento escrito entonces era que
+// nadie debía perder su turno de inspección por un celular viejo o una señal
+// mala, y sigue valiendo para los videos —grabar exige `MediaRecorder`, que un
+// aparato puede sencillamente no tener—. Pero no vale igual para las fotos:
+// tomar una foto lo hace cualquier teléfono, y si hace falta se elige de la
+// galería.
+//
+// Y sin ellas la solicitud no sirve para lo que existe. La cédula es lo único
+// que ata la solicitud a una persona; las fotos del daño son lo que permite
+// preparar la visita y priorizar entre cientos de familias. Una solicitud sin
+// eso obliga a llamar para pedirlas, que es justo lo que el call center está
+// haciendo a mano.
+
+/**
+ * Cuántas fotos del daño se exigen como mínimo.
+ *
+ * Cinco, que es lo que pidió la Alcaldía y lo que cubre lo mínimo de una casa:
+ * la fachada, dos muros, el techo y el piso. No es un tope —el cupo son diez y
+ * la pantalla insiste en que entre más, mejor—: es el suelo por debajo del cual
+ * la visita se prepara a ciegas.
+ */
+export const MIN_FOTOS_DANO = 5;
+
+/**
+ * Cuántas de estas fotos cuentan.
+ *
+ * Cuenta la que está en el teléfono aunque todavía no haya llegado al servidor:
+ * quien llena esto desde una vereda sin cobertura ya tomó su foto y la subida
+ * ocurrirá sola cuando haya señal. Exigir que estuviera «guardada» sería
+ * convertir la falta de cobertura en un muro, que es lo contrario de lo que
+ * este formulario hace en todas partes.
+ *
+ * Lo que no cuenta es la que falló: esa no existe en ningún sitio.
+ */
+export function fotosUtiles(archivos: { estado: string }[]): number {
+	return archivos.filter((a) => a.estado !== 'error').length;
+}
+
+export type EstadoEvidencia = {
+	cedulaFrente: number;
+	cedulaReverso: number;
+	fotosDano: number;
+};
+
+/** El orden real de los pasos, para saber qué queda ya comprobado. */
+const ORDEN: IdPasoPre[] = ['datos', 'vivienda', 'video', 'envio'];
+
+/**
+ * Qué evidencia falta para salir de este paso. Cadena vacía si no falta nada.
+ *
+ * Comprueba lo de este paso Y lo de los anteriores, por dos motivos: el paso de
+ * video no siempre existe —depende de que la persona haya marcado daños con
+ * categoría—, y al enviar hay que volver a mirarlo todo, porque desde el
+ * resumen se puede volver atrás y quitar una foto.
+ */
+export function faltaEvidencia(paso: IdPasoPre, e: EstadoEvidencia): string {
+	const hasta = ORDEN.indexOf(paso);
+
+	if (hasta >= ORDEN.indexOf('datos')) {
+		if (e.cedulaFrente === 0 && e.cedulaReverso === 0) {
+			return 'Falta la foto de su cédula. Se necesitan las dos caras para confirmar que la solicitud es suya.';
+		}
+
+		if (e.cedulaFrente === 0) {
+			return 'Falta la foto de la cara de adelante de su cédula, la que lleva su foto y sus nombres.';
+		}
+
+		if (e.cedulaReverso === 0) {
+			return 'Falta la foto de la cara de atrás de su cédula, la del código de barras.';
+		}
+	}
+
+	if (hasta >= ORDEN.indexOf('vivienda') && e.fotosDano < MIN_FOTOS_DANO) {
+		const faltan = MIN_FOTOS_DANO - e.fotosDano;
+
+		return e.fotosDano === 0
+			? `Faltan las fotos del daño. Se necesitan ${MIN_FOTOS_DANO} como mínimo: la fachada, los muros afectados, el techo y el piso.`
+			: faltan === 1
+				? `Falta una foto del daño. Se necesitan ${MIN_FOTOS_DANO} como mínimo, y entre más tome, mejor se prepara la visita.`
+				: `Faltan ${faltan} fotos del daño. Se necesitan ${MIN_FOTOS_DANO} como mínimo, y entre más tome, mejor se prepara la visita.`;
+	}
+
+	return '';
 }
 
 // ── Los videos que se le piden a cada persona ────────────────────────────────

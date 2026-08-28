@@ -513,10 +513,19 @@
 			La salida. Sin señal la foto no llega al servidor y el botón de arriba
 			nunca se habilita: sin esto, la puerta que se abrió para ayudar sería
 			un muro para quien peor conexión tiene.
+
+			Y ya no pierde nada: el formulario vuelve a pedir la foto de la cédula
+			—ahora es obligatoria para poder enviar— y en cuanto llegue trae estos
+			mismos datos. Salir por aquí retrasa la precarga, no la cancela.
 		-->
 		<button type="button" class="puerta__saltar" onclick={() => onEntrar(verificada, null)}>
-			Continuar sin traer mis datos
+			Continuar y tomar la foto más adelante
 		</button>
+
+		<p class="puerta__pista">
+			Sus datos aparecerán igual: el formulario le vuelve a pedir la foto de la cédula, y al
+			tomarla los traemos.
+		</p>
 
 		<button type="button" class="puerta__saltar" onclick={() => { fase = 'cedula'; verificada = ''; }}>
 			<ArrowLeft size={13} aria-hidden="true" />

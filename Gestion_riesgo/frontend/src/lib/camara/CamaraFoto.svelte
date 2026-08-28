@@ -1,17 +1,26 @@
 <script lang="ts">
-	// La cámara para fotografiar una cédula, con la silueta encima.
+	// La cámara de la página, con la silueta encima cuando hace falta.
 	//
 	// ── Por qué no vale el `capture` del navegador ────────────────────────────
 	//
 	// Un `<input type="file" capture>` abre la cámara del sistema, y encima de
 	// esa cámara no se puede dibujar nada: es una aplicación aparte. La persona
 	// queda sola frente a un cuadro vacío, y lo que llega son cédulas torcidas,
-	// de lejos, con media cara del documento fuera.
+	// de lejos, con media cara del documento fuera. Tampoco se le puede pedir
+	// que gire el teléfono, porque la cámara del sistema hace lo que quiere.
 	//
 	// Con `getUserMedia` el video es un elemento de la página, así que encima
-	// cabe una silueta con la proporción exacta del documento y un aviso de que
-	// gire el teléfono. Quien encuadra dentro de la silueta manda una foto que
-	// se lee.
+	// cabe una silueta con la proporción exacta del documento, un aviso de que
+	// gire el aparato, y un contador de cuántas fotos lleva.
+	//
+	// ── Sirve para dos cosas distintas ───────────────────────────────────────
+	//
+	//  • La cédula: `proporcion` puesta, se dibuja la silueta y se RECORTA a
+	//    ella. Una foto por gesto, y al disparar se cierra.
+	//  • Los daños de la vivienda: sin silueta, el cuadro entero, y `varias`
+	//    para poder tomar una detrás de otra sin salir y volver a entrar. Los
+	//    ingenieros las quieren apaisadas por lo mismo que los videos: de pie
+	//    cabe una franja de la fachada, acostado cabe la fachada.
 	//
 	// ── Y por qué sigue existiendo el camino de antes ────────────────────────
 	//
@@ -22,7 +31,7 @@
 	// busca.
 
 	import { onDestroy } from 'svelte';
-	import { Camera, ImagePlus, RefreshCw, TriangleAlert, X } from '@lucide/svelte';
+	import { Camera, Check, ImagePlus, RefreshCw, TriangleAlert, X } from '@lucide/svelte';
 	import GirarTelefono from './GirarTelefono.svelte';
 	import { soltarApaisado, usarOrientacion } from './orientacion.svelte';
 
@@ -30,13 +39,29 @@
 		titulo,
 		ayuda,
 		alTomar,
-		alCerrar
+		alCerrar,
+		proporcion = null,
+		varias = false,
+		textoGiro = 'Gire el teléfono: así entra completo y se ve mejor',
+		nombreBase = 'foto'
 	}: {
 		titulo: string;
 		ayuda: string;
 		/** La foto ya recortada, lista para el gestor de evidencias. */
 		alTomar: (archivo: File) => void;
 		alCerrar: () => void;
+		/**
+		 * La proporción de la silueta, o `null` para fotografiar el cuadro entero.
+		 *
+		 * Con silueta se recorta a ella. Sin silueta no se recorta nada: en una
+		 * foto de un muro agrietado no hay ningún encuadre que el formulario sepa
+		 * mejor que quien está mirando la grieta.
+		 */
+		proporcion?: number | null;
+		/** Deja la cámara abierta después de disparar, para tomar varias seguidas. */
+		varias?: boolean;
+		textoGiro?: string;
+		nombreBase?: string;
 	} = $props();
 
 	const orientacion = usarOrientacion();
@@ -46,18 +71,12 @@
 	let error = $state('');
 	let lista = $state(false);
 	let tomando = $state(false);
+	/** Cuántas lleva tomadas en esta sesión de cámara. Solo con `varias`. */
+	let tomadas = $state(0);
+	/** El destello que confirma el disparo cuando la cámara no se cierra. */
+	let destello = $state(false);
 
-	/**
-	 * La proporción de una cédula colombiana: 85,6 × 54 mm, la ISO/IEC 7810
-	 * ID-1, la misma de cualquier tarjeta bancaria.
-	 *
-	 * Se escribe como número y no como «1.58» redondeado: la silueta y el
-	 * recorte usan el MISMO valor, y medio milímetro de diferencia entre los dos
-	 * deja una franja negra en el borde de la foto.
-	 */
-	const PROPORCION = 85.6 / 54;
-
-	/** Cuánto del ancho de la pantalla ocupa la silueta. */
+	/** Cuánto del ancho del cuadro ocupa la silueta. */
 	const ANCHO_SILUETA = 0.86;
 
 	$effect(() => {
@@ -65,6 +84,25 @@
 	});
 
 	onDestroy(cerrarFlujo);
+
+	/**
+	 * La cámara está lista en cuanto el primer cuadro tiene medidas.
+	 *
+	 * Antes esto esperaba a que se resolviera `video.play()`, y esa promesa no
+	 * se resuelve cuando empieza a verse imagen: se resuelve cuando el navegador
+	 * da por arrancada la reproducción, que en un Android de gama media son
+	 * varios segundos DESPUÉS de que la persona ya está viendo su casa en la
+	 * pantalla. Todo ese rato el visor mostraba «Abriendo la cámara…» encima de
+	 * una imagen perfectamente buena y el disparador seguía apagado.
+	 *
+	 * `loadedmetadata` llega con `videoWidth` ya puesto, que es lo único que el
+	 * recorte necesita. Se engancha además a `playing` y se comprueba a mano al
+	 * conectar el flujo, por si el evento se disparó antes de que hubiera nadie
+	 * escuchando.
+	 */
+	function marcarLista() {
+		if (video && video.videoWidth > 0) lista = true;
+	}
 
 	async function abrir() {
 		if (flujo !== null) return;
@@ -74,8 +112,9 @@
 				video: {
 					facingMode: { ideal: 'environment' },
 					// Se pide resolución alta porque de la foto hay que poder LEER
-					// un número de cédula. El gestor la reduce después; lo que no
-					// se puede es recuperar detalle que la cámara no capturó.
+					// un número de cédula, o distinguir una grieta de una junta. El
+					// gestor la reduce después; lo que no se puede es recuperar
+					// detalle que la cámara no capturó.
 					width: { ideal: 1920 },
 					height: { ideal: 1080 }
 				},
@@ -84,8 +123,15 @@
 
 			if (video) {
 				video.srcObject = flujo;
-				await video.play();
-				lista = true;
+
+				// No se espera: `play()` puede tardar en resolver mucho después de
+				// que ya se vea imagen, y de esa espera dependía el disparador.
+				void video.play().catch(() => {
+					// `autoplay` y `muted` ya lo arrancan en la práctica. Si el
+					// navegador lo rechaza, los eventos de abajo siguen valiendo.
+				});
+
+				marcarLista();
 			}
 		} catch {
 			// Permiso negado, cámara ocupada, o un navegador sin getUserMedia. En
@@ -107,12 +153,12 @@
 	}
 
 	/**
-	 * Recorta lo que hay dentro de la silueta y lo entrega como archivo.
+	 * Toma la foto y la entrega como archivo.
 	 *
-	 * Se recorta AQUÍ y no se manda el cuadro entero: la silueta le prometió a
-	 * la persona que lo que quedara dentro era lo que iba a mandar. Si después
-	 * llegara la foto completa con la mesa y el suelo, la silueta habría sido un
-	 * adorno y quien revisa tendría que ampliar a mano.
+	 * Con silueta se recorta a ella y no se manda el cuadro entero: la silueta
+	 * le prometió a la persona que lo que quedara dentro era lo que iba a
+	 * mandar. Si después llegara la foto completa con la mesa y el suelo, la
+	 * silueta habría sido un adorno y quien revisa tendría que ampliar a mano.
 	 */
 	async function disparar() {
 		if (!video || !lista || tomando) return;
@@ -123,18 +169,23 @@
 			const anchoFuente = video.videoWidth;
 			const altoFuente = video.videoHeight;
 
-			// La silueta se dibuja sobre el video TAL COMO SE VE, y el video se
-			// muestra con `object-fit: cover`: si la cámara entrega un cuadro más
-			// alto o más ancho que el hueco, sobra por algún lado. Hay que recortar
-			// en las coordenadas de la fuente, no en las de la pantalla.
-			const recorteAncho = Math.round(anchoFuente * ANCHO_SILUETA);
-			const recorteAlto = Math.round(recorteAncho / PROPORCION);
+			let ancho = anchoFuente;
+			let alto = altoFuente;
 
-			// Si la cámara entrega un cuadro más estrecho que alto —un teléfono de
-			// pie— la silueta no cabe a lo ancho: se ajusta por el alto.
-			const cabe = recorteAlto <= altoFuente;
-			const ancho = cabe ? recorteAncho : Math.round(altoFuente * ANCHO_SILUETA * PROPORCION);
-			const alto = cabe ? recorteAlto : Math.round(altoFuente * ANCHO_SILUETA);
+			if (proporcion !== null) {
+				// La silueta se dibuja sobre el video TAL COMO SE VE, y el video se
+				// muestra con `object-fit: cover`: si la cámara entrega un cuadro
+				// más alto o más ancho que el hueco, sobra por algún lado. Hay que
+				// recortar en las coordenadas de la fuente, no en las de pantalla.
+				const recorteAncho = Math.round(anchoFuente * ANCHO_SILUETA);
+				const recorteAlto = Math.round(recorteAncho / proporcion);
+
+				// Si la cámara entrega un cuadro más estrecho que alto —un teléfono
+				// de pie— la silueta no cabe a lo ancho: se ajusta por el alto.
+				const cabe = recorteAlto <= altoFuente;
+				ancho = cabe ? recorteAncho : Math.round(altoFuente * ANCHO_SILUETA * proporcion);
+				alto = cabe ? recorteAlto : Math.round(altoFuente * ANCHO_SILUETA);
+			}
 
 			const x = Math.round((anchoFuente - ancho) / 2);
 			const y = Math.round((altoFuente - alto) / 2);
@@ -156,8 +207,18 @@
 
 			if (!blob) throw new Error('sin imagen');
 
-			alTomar(new File([blob], `cedula-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-			cerrar();
+			alTomar(new File([blob], `${nombreBase}-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+
+			if (varias) {
+				// La cámara se queda abierta: se pidieron cinco fotos como mínimo y
+				// obligar a salir, volver a entrar y esperar el permiso entre cada
+				// una es lo que hace que la gente mande tres.
+				tomadas += 1;
+				destello = true;
+				setTimeout(() => (destello = false), 220);
+			} else {
+				cerrar();
+			}
 		} catch {
 			error = 'No se pudo tomar la foto. Inténtelo otra vez o use la cámara de su teléfono.';
 		} finally {
@@ -176,9 +237,17 @@
 
 	<div class="camara__visor">
 		<!-- svelte-ignore a11y_media_has_caption -->
-		<video bind:this={video} class="camara__video" playsinline muted autoplay></video>
+		<video
+			bind:this={video}
+			class="camara__video"
+			playsinline
+			muted
+			autoplay
+			onloadedmetadata={marcarLista}
+			onplaying={marcarLista}
+		></video>
 
-		{#if lista}
+		{#if lista && proporcion !== null}
 			<!--
 				La silueta. Es un marco con la proporción exacta del documento y el
 				resto oscurecido: se ve dónde poner la cédula sin leer una sola
@@ -186,19 +255,25 @@
 				con una mano.
 			-->
 			<div class="silueta" aria-hidden="true">
-				<div class="silueta__hueco" style="--proporcion: {PROPORCION}; --ancho: {ANCHO_SILUETA}">
+				<div class="silueta__hueco" style="--proporcion: {proporcion}; --ancho: {ANCHO_SILUETA}">
 					<span class="silueta__esquina silueta__esquina--si"></span>
 					<span class="silueta__esquina silueta__esquina--sd"></span>
 					<span class="silueta__esquina silueta__esquina--ii"></span>
 					<span class="silueta__esquina silueta__esquina--id"></span>
 				</div>
 			</div>
+		{/if}
 
+		{#if lista}
 			<p class="camara__ayuda">{ayuda}</p>
 		{/if}
 
+		{#if destello}
+			<div class="camara__destello" aria-hidden="true"></div>
+		{/if}
+
 		{#if orientacion.actual === 'vertical' && lista}
-			<GirarTelefono texto="Gire el teléfono: la cédula entra completa y se lee mejor" />
+			<GirarTelefono texto={textoGiro} />
 		{/if}
 
 		{#if error}
@@ -238,6 +313,17 @@
 			>
 				<Camera size={26} aria-hidden="true" />
 			</button>
+
+			{#if varias}
+				<span class="camara__cuenta" role="status" aria-live="polite">
+					{tomadas === 0 ? 'Ninguna todavía' : `${tomadas} ${tomadas === 1 ? 'foto tomada' : 'fotos tomadas'}`}
+				</span>
+
+				<button type="button" class="camara__listo" onclick={cerrar}>
+					<Check size={15} aria-hidden="true" />
+					Ya terminé
+				</button>
+			{/if}
 		{/if}
 	</footer>
 </div>
@@ -363,6 +449,18 @@
 		border-radius: 0 0 10px 0;
 	}
 
+	/* El destello del disparo. Cuando la cámara se cierra al tomar la foto, el
+	   cierre ya es la confirmación; cuando se queda abierta para tomar varias,
+	   sin esto no hay forma de saber si el toque entró. */
+	.camara__destello {
+		position: absolute;
+		inset: 0;
+		z-index: 4;
+		background: #fff;
+		opacity: 0.55;
+		pointer-events: none;
+	}
+
 	.camara__ayuda {
 		position: absolute;
 		left: 50%;
@@ -426,6 +524,13 @@
 		cursor: default;
 	}
 
+	.camara__cuenta {
+		color: rgb(255 255 255 / 0.85);
+		font-size: 0.82rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.camara__listo,
 	.camara__reintentar {
 		display: inline-flex;
 		align-items: center;
@@ -459,6 +564,14 @@
 		.camara__pie {
 			justify-content: center;
 			padding: 0.6rem;
+		}
+
+		.camara__cuenta {
+			writing-mode: vertical-rl;
+		}
+
+		.camara__listo {
+			writing-mode: vertical-rl;
 		}
 	}
 </style>
