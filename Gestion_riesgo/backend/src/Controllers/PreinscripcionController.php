@@ -10,6 +10,7 @@ use App\Core\Config;
 use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Limite;
+use App\Core\Reintento;
 use App\Core\Request;
 use App\Core\Response;
 use App\Preinscripcion\Censo;
@@ -1103,7 +1104,35 @@ final class PreinscripcionController
             return;
         }
 
-        $radicado = $this->guardar($datos, $huella, $envioId, $req, $carga);
+        try {
+            $radicado = $this->guardar($datos, $huella, $envioId, $req, $carga);
+        } catch (\PDOException $e) {
+            // Dos envíos de la misma familia cruzados en el aire. Ver `Reintento`.
+            // Es el formulario donde más probable es: se llena desde un celular
+            // con la señal que quede, y la cola de envío reintenta sola.
+            $previo = Reintento::filaPrevia(
+                $e,
+                $envioId,
+                'SELECT id, radicado, creado_en FROM preinscripciones WHERE envio_id = :e'
+            );
+
+            if ($previo === null) {
+                throw $e;
+            }
+
+            Response::ok([
+                'radicado'    => $previo['radicado'],
+                'recibido_en' => date('c', strtotime((string) $previo['creado_en'])),
+                'reintento'   => true,
+                // Las fotos y los videos de ESTA carga van a la solicitud que
+                // ganó la carrera. Sin esto se quedarían huérfanos en temporal/
+                // hasta que la purga se los llevara, que es el mismo agujero que
+                // ya se cerró en los otros dos atajos de arriba.
+                'archivos_agregados' => $this->adjuntarA((int) $previo['id'], $carga),
+            ]);
+
+            return;
+        }
 
         Response::json([
             'ok'   => true,

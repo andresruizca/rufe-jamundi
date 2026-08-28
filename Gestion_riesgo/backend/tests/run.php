@@ -3315,6 +3315,84 @@ prueba('el operador no está en las listas que abren el censo', function (): voi
     afirmar(in_array(Auth::OPERADOR, Auth::TODOS, true), 'sí es un usuario autenticado');
 });
 
+grupo('Dos envíos del mismo formulario cruzados en el aire');
+
+prueba('perder la carrera contra uno mismo no puede devolver un error', function () use ($raiz): void {
+    // El registro de producción lo tenía anotado cuatro veces en ocho días,
+    // siempre igual: «Duplicate entry ... for key uq_rufe_reportes_envio».
+    //
+    // Los cuatro formularios sin sesión comprueban el `envio_id` antes de
+    // insertar, pero es un mirar-y-después-insertar: si las dos peticiones del
+    // mismo envío llegan a la vez, las dos miran, las dos no encuentran nada y
+    // las dos insertan. La clave única impide la ficha repetida —hace bien su
+    // trabajo— pero la que perdía la carrera reventaba con un 500.
+    //
+    // Y ese 500 mentía: la ficha SÍ estaba guardada. Al funcionario en campo le
+    // decía «Ocurrió un error en el servidor» sobre un formulario que acababa
+    // de entrar bien, y lo natural es volver a llenarlo entero.
+    $controladores = [
+        'RufeCapturaController' => 'rufe_reportes',
+        'PreinscripcionController' => 'preinscripciones',
+        'InspeccionCapturaController' => 'inspeccion_viviendas',
+        'SinCensoController' => 'solicitudes_sin_censo',
+    ];
+
+    foreach ($controladores as $clase => $tabla) {
+        $php = (string) file_get_contents($raiz.'/src/Controllers/'.$clase.'.php');
+
+        afirmar(
+            str_contains($php, 'catch (\PDOException $e)'),
+            "{$clase} no atrapa el choque de la clave única: un reintento cruzado devuelve 500"
+        );
+        afirmar(
+            str_contains($php, 'Reintento::filaPrevia('),
+            "{$clase} no consulta si la fila ya entró antes de dar el fallo por bueno"
+        );
+        afirmar(
+            str_contains($php, "FROM {$tabla} WHERE envio_id = :e"),
+            "{$clase} no busca el envío previo en {$tabla}"
+        );
+        afirmar(
+            str_contains($php, 'throw $e;'),
+            "{$clase} se traga el error cuando NO era una carrera, que es peor"
+        );
+    }
+});
+
+prueba('sin envio_id no se puede confundir un fallo con un reintento', function () use ($raiz): void {
+    // Es la única salvaguarda que impide que este arreglo tape errores reales:
+    // sin `envio_id` no hay nada que consultar, así que el fallo sube tal cual.
+    $php = (string) file_get_contents($raiz.'/src/Core/Reintento.php');
+
+    afirmar(
+        str_contains($php, '$envioId === null') && str_contains($php, 'return null;'),
+        'Reintento tiene que rendirse cuando no hay envio_id'
+    );
+    afirmar(
+        str_contains($php, '$e instanceof \PDOException'),
+        'Reintento solo debe actuar sobre un fallo de la base, no sobre cualquier excepción'
+    );
+});
+
+prueba('la solicitud que pierde la carrera no pierde sus fotos', function () use ($raiz): void {
+    // La pre-inscripción es la única que sube archivos aparte, en una «carga».
+    // Los otros dos atajos —reintento y duplicada— ya adoptaban esa carga; si
+    // este tercero no lo hiciera, las fotos y el video se quedarían huérfanos
+    // en temporal/ hasta que la purga se los llevara. Es justo la evidencia por
+    // la que la familia volvió a enviar.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+
+    $desde = strpos($php, 'catch (\PDOException $e)');
+    afirmar($desde !== false, 'la pre-inscripción no atrapa el choque');
+
+    $bloque = substr($php, $desde, 1400);
+
+    afirmar(
+        str_contains($bloque, '$this->adjuntarA('),
+        'el reintento cruzado de la pre-inscripción tira los archivos recién subidos'
+    );
+});
+
 grupo('El buscador del call center');
 
 prueba('una búsqueda sin resultados dice si los hay en otra lista', function () use ($raiz): void {
@@ -4177,22 +4255,30 @@ prueba('la bandeja recoloca los videos que quedaron en temporal', function (): v
 });
 
 prueba('un reenvío no puede tirar los archivos que trae', function (): void {
-    // Los dos atajos de `crear()` —el reintento sin señal y la solicitud
-    // duplicada— devolvían el radicado y se marchaban sin tocar la carga: las
-    // fotos y videos recién subidos se quedaban huérfanos y la purga se los
-    // llevaba dos horas después.
+    // Los atajos de `crear()` devolvían el radicado y se marchaban sin tocar la
+    // carga: las fotos y videos recién subidos se quedaban huérfanos y la purga
+    // se los llevaba al caducar.
     //
     // El caso que lo hace grave: una familia vuelve a inscribirse porque esta
     // vez SÍ consiguió grabar el video del daño. El servidor le contestaba «su
     // vivienda ya estaba registrada» —con razón— y le tiraba el video.
+    //
+    // Son TRES, y el número es la prueba: cada camino por el que `crear()` puede
+    // responder sin insertar una fila nueva tiene que adoptar la carga primero.
+    //
+    //   1. el reintento sin señal, por `envio_id`
+    //   2. la solicitud duplicada, por huella del hogar
+    //   3. el reintento que perdió la carrera contra sí mismo (ver `Reintento`)
+    //
+    // Si algún día aparece un cuarto atajo, esta cuenta lo caza.
     $fuente = file_get_contents(__DIR__.'/../src/Controllers/PreinscripcionController.php');
     $crear = substr($fuente, strpos($fuente, 'public function crear('));
     $crear = substr($crear, 0, strpos($crear, 'private function adjuntarA('));
 
     afirmarIgual(
-        2,
+        3,
         substr_count($crear, '$this->adjuntarA('),
-        'los dos atajos de crear() deben adoptar la carga antes de responder'
+        'todos los atajos de crear() deben adoptar la carga antes de responder'
     );
 });
 

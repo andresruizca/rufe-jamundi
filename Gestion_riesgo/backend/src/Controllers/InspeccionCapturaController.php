@@ -8,6 +8,7 @@ use App\Core\Auditoria;
 use App\Core\Auth;
 use App\Core\Db;
 use App\Core\HttpError;
+use App\Core\Reintento;
 use App\Core\Request;
 use App\Core\Response;
 use App\Inspeccion\Catalogos;
@@ -147,14 +148,35 @@ final class InspeccionCapturaController
             }
         }
 
-        $numero = $this->guardar(
-            $datos,
-            $huella,
-            $envioId,
-            $actor,
-            $carga === '' ? null : $carga,
-            $preinscripcion > 0 ? $preinscripcion : null
-        );
+        try {
+            $numero = $this->guardar(
+                $datos,
+                $huella,
+                $envioId,
+                $actor,
+                $carga === '' ? null : $carga,
+                $preinscripcion > 0 ? $preinscripcion : null
+            );
+        } catch (\PDOException $e) {
+            // Dos envíos de la misma ficha cruzados en el aire. Ver `Reintento`.
+            $previo = Reintento::filaPrevia(
+                $e,
+                $envioId,
+                'SELECT numero, creado_en FROM inspeccion_viviendas WHERE envio_id = :e'
+            );
+
+            if ($previo === null) {
+                throw $e;
+            }
+
+            Response::ok([
+                'numero' => $previo['numero'],
+                'recibido_en' => date('c', strtotime((string) $previo['creado_en'])),
+                'reintento' => true,
+            ]);
+
+            return;
+        }
 
         Auditoria::registrar(
             $req,

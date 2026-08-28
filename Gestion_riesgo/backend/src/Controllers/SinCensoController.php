@@ -10,6 +10,7 @@ use App\Core\Config;
 use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Limite;
+use App\Core\Reintento;
 use App\Core\Request;
 use App\Core\Response;
 use App\SinCenso\Radicado;
@@ -96,35 +97,56 @@ final class SinCensoController
         $datos = $revision['datos'];
         $radicado = Radicado::generar();
 
-        Db::exec(
-            'INSERT INTO solicitudes_sin_censo
-                (radicado, envio_id, documento, nombres, apellidos, telefono,
-                 zona, corregimiento, vereda_sector_barrio, direccion, descripcion,
-                 autoriza_datos, aviso_version, autorizacion_en, estado, origen_hash)
-             VALUES
-                (:radicado, :envio_id, :documento, :nombres, :apellidos, :telefono,
-                 :zona, :corregimiento, :vereda, :direccion, :descripcion,
-                 :autoriza, :aviso, NOW(), :estado, :origen)',
-            [
-                'radicado' => $radicado,
-                'envio_id' => $envioId ?? bin2hex(random_bytes(18)),
-                'documento' => $datos['documento'],
-                'nombres' => $datos['nombres'],
-                'apellidos' => $datos['apellidos'],
-                'telefono' => $datos['telefono'],
-                'zona' => $datos['zona'],
-                'corregimiento' => $datos['corregimiento'],
-                'vereda' => $datos['vereda_sector_barrio'],
-                'direccion' => $datos['direccion'],
-                'descripcion' => $datos['descripcion'],
-                'autoriza' => $datos['autoriza_datos'],
-                'aviso' => $datos['aviso_version'],
-                'estado' => 'RECIBIDA',
-                // La IP no se guarda: solo su hash con sal, igual que en la
-                // pre-inscripción.
-                'origen' => hash('sha256', $req->ip().'|'.Config::get('rufe.sal', '')),
-            ]
-        );
+        try {
+            Db::exec(
+                'INSERT INTO solicitudes_sin_censo
+                    (radicado, envio_id, documento, nombres, apellidos, telefono,
+                     zona, corregimiento, vereda_sector_barrio, direccion, descripcion,
+                     autoriza_datos, aviso_version, autorizacion_en, estado, origen_hash)
+                 VALUES
+                    (:radicado, :envio_id, :documento, :nombres, :apellidos, :telefono,
+                     :zona, :corregimiento, :vereda, :direccion, :descripcion,
+                     :autoriza, :aviso, NOW(), :estado, :origen)',
+                [
+                    'radicado' => $radicado,
+                    'envio_id' => $envioId ?? bin2hex(random_bytes(18)),
+                    'documento' => $datos['documento'],
+                    'nombres' => $datos['nombres'],
+                    'apellidos' => $datos['apellidos'],
+                    'telefono' => $datos['telefono'],
+                    'zona' => $datos['zona'],
+                    'corregimiento' => $datos['corregimiento'],
+                    'vereda' => $datos['vereda_sector_barrio'],
+                    'direccion' => $datos['direccion'],
+                    'descripcion' => $datos['descripcion'],
+                    'autoriza' => $datos['autoriza_datos'],
+                    'aviso' => $datos['aviso_version'],
+                    'estado' => 'RECIBIDA',
+                    // La IP no se guarda: solo su hash con sal, igual que en la
+                    // pre-inscripción.
+                    'origen' => hash('sha256', $req->ip().'|'.Config::get('rufe.sal', '')),
+                ]
+            );
+        } catch (\PDOException $e) {
+            // Dos envíos cruzados en el aire. Ver `Reintento`.
+            $previo = Reintento::filaPrevia(
+                $e,
+                $envioId,
+                'SELECT radicado, creado_en FROM solicitudes_sin_censo WHERE envio_id = :e'
+            );
+
+            if ($previo === null) {
+                throw $e;
+            }
+
+            Response::ok([
+                'radicado' => $previo['radicado'],
+                'recibido_en' => date('c', strtotime((string) $previo['creado_en'])),
+                'reintento' => true,
+            ]);
+
+            return;
+        }
 
         Response::json([
             'ok' => true,

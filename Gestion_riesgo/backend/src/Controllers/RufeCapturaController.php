@@ -10,6 +10,7 @@ use App\Core\Config;
 use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Limite;
+use App\Core\Reintento;
 use App\Core\Request;
 use App\Core\Response;
 use App\Rufe\Archivos;
@@ -231,7 +232,28 @@ final class RufeCapturaController
         $this->revisarDuplicado($req, $huella);
 
         $actor = Auth::exigirUsuario($req);
-        $radicado = $this->guardar($req, $datos, $huella, $envioId, $actor);
+        try {
+            $radicado = $this->guardar($req, $datos, $huella, $envioId, $actor);
+        } catch (\PDOException $e) {
+            // Dos envíos del mismo formulario cruzados en el aire. Ver `Reintento`.
+            $previo = Reintento::filaPrevia(
+                $e,
+                $envioId,
+                'SELECT radicado, creado_en FROM rufe_reportes WHERE envio_id = :e'
+            );
+
+            if ($previo === null) {
+                throw $e;
+            }
+
+            Response::ok([
+                'radicado' => $previo['radicado'],
+                'recibido_en' => date('c', strtotime((string) $previo['creado_en'])),
+                'reintento' => true,
+            ]);
+
+            return;
+        }
 
         Auditoria::registrar(
             $req,
