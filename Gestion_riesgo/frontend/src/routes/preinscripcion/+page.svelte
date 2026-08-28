@@ -430,7 +430,11 @@
 			</p>
 		</div>
 	{:else if !habilitado}
-		<PuertaCedula onEntrar={entrarConCedula} entroSinVerificar={(v) => (sinVerificar = v)} />
+		<PuertaCedula
+			onEntrar={entrarConCedula}
+			entroSinVerificar={(v) => (sinVerificar = v)}
+			{catalogos}
+		/>
 	{:else if catalogos}
 		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
 

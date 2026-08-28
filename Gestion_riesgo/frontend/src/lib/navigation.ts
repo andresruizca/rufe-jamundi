@@ -32,7 +32,8 @@ import {
 	PhoneCall,
 	ClipboardCheck,
 	Inbox,
-	Video
+	Video,
+	UserPlus
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
 
@@ -93,7 +94,8 @@ export const RUTAS_SIN_CONEXION: string[] = [
 	'/riesgo/inspecciones',
 	'/riesgo/preinscripciones',
 	'/riesgo/mapas',
-	'/riesgo/callcenter'
+	'/riesgo/callcenter',
+	'/riesgo/sin-censo'
 ];
 
 export function funcionaSinConexion(ruta: string): boolean {
@@ -316,6 +318,23 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: IconoMapa,
 		roles: LECTURA_RUFE,
 		match: ['/riesgo/mapas']
+	},
+
+	// Suelta y fuera de «Reportes» a propósito: ninguna de estas solicitudes
+	// tiene una ficha RUFE detrás todavía, y mezclarla con «Solicitudes
+	// ciudadanas» —que sí la tienen— confundiría los conteos de las dos
+	// bandejas. Mismo rol que esa: nombre, teléfono y ubicación de alguien que
+	// puede ser una familia damnificada, así que ni el inspector ni el
+	// operador de call center la necesitan.
+	{
+		id: 'sin-censo',
+		type: 'item',
+		label: 'No aparecen en el censo',
+		title: 'Quienes no aparecen en el censo (RUFE)',
+		href: '/riesgo/sin-censo',
+		icon: UserPlus,
+		roles: LECTURA_RUFE,
+		match: ['/riesgo/sin-censo', /^\/riesgo\/sin-censo\/[^/]+$/]
 	},
 
 	{

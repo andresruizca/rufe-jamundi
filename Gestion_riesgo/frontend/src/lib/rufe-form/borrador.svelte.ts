@@ -79,6 +79,38 @@ export const descartarBorrador = (clave: string): void => almacen.descartar(clav
 
 export { haceCuanto };
 
+/**
+ * Arma un borrador nuevo con datos ya escritos y devuelve su clave.
+ *
+ * Nace de «Convertir a ficha RUFE», en la bandeja de quien no aparece en el
+ * censo: el funcionario decide que el caso es real y esto le ahorra
+ * volver a teclear el nombre, el teléfono y la ubicación que la persona ya
+ * dejó. El resto de la ficha —personas del hogar, daños, fotos— lo completa
+ * él, en campo o por teléfono.
+ *
+ * No es una ruta nueva ni un campo de servidor: se guarda exactamente como
+ * cualquier otro borrador —solo en este navegador— y aparece solo donde ya
+ * aparecen los demás, en la lista de fichas sin terminar de `/riesgo/reportar`.
+ */
+export function crearBorradorDesdeSolicitud(datos: FormularioRufe): string {
+	const clave = uid();
+	const ahora = Date.now();
+
+	almacen.guardar(
+		{
+			version: VERSION,
+			clave,
+			actualizado_en: ahora,
+			expira_en: ahora + almacen.vigenciaMs,
+			paso: 'ubicacion',
+			datos: limpiarParaGuardar(datos)
+		},
+		ahora
+	);
+
+	return clave;
+}
+
 /** Cuándo deja de poder retomarse, para poder avisarlo antes de que pase. */
 export function diasQueLeQuedan(b: BorradorGuardado, ahora = Date.now()): number {
 	return diasRestantes(b.expira_en, ahora);

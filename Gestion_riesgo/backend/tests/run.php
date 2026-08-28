@@ -3117,6 +3117,10 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         // en la lista de damnificados—, y por eso devuelve un booleano y nada
         // más, va por POST y lleva doble límite de tasa. Ver Preinscripcion\Censo.
         'POST /preinscripcion/verificacion',
+        // La vía corta para quien la puerta de arriba rechazó. Mismas defensas
+        // que /preinscripcion: límite de tasa, trampa antirrobot e idempotencia
+        // por envio_id. Ver SinCensoController.
+        'POST /sin-censo',
     ], rutasPublicas($raiz));
 });
 
@@ -3634,6 +3638,133 @@ prueba('la huella junta la misma vivienda del mismo solicitante', function (): v
 
     afirmarIgual($a, $b, 'la misma casa y persona deben coincidir');
     afirmar($a !== $c, 'otro solicitante es otra solicitud');
+});
+
+grupo('Sin censo › validación');
+
+function erroresSC(array $entrada): array
+{
+    return App\SinCenso\Validador::revisar($entrada)['errores'];
+}
+
+function datosSC(array $entrada): array
+{
+    return App\SinCenso\Validador::revisar($entrada)['datos'];
+}
+
+function scBase(array $cambios = []): array
+{
+    return array_replace([
+        'nombres' => 'Ana Lucía',
+        'apellidos' => 'Torres',
+        'documento' => '16.234.567',
+        'telefono' => '315 123 4567',
+        'zona' => 'URBANO',
+        'direccion' => 'Cerca al parque principal',
+        'autoriza_datos' => true,
+        'aviso_version' => App\Rufe\Catalogos::AVISO_VERSION,
+    ], $cambios);
+}
+
+prueba('una solicitud mínima y completa pasa', function (): void {
+    afirmarIgual([], erroresSC(scBase()));
+});
+
+prueba('nombres y apellidos van por separado, igual que en rufe_personas', function (): void {
+    // Misma regla que Rufe\Validador::persona(): así, si la solicitud se
+    // convierte, el jefe de hogar se precarga tal cual, sin adivinar dónde
+    // termina el nombre y empieza el apellido.
+    afirmar(isset(erroresSC(scBase(['nombres' => '']))['nombres']), 'debe exigir los nombres');
+    afirmar(isset(erroresSC(scBase(['apellidos' => '']))['apellidos']), 'debe exigir los apellidos');
+    afirmar(isset(erroresSC(scBase(['nombres' => 'A']))['nombres']), 'un solo caracter no basta');
+    afirmar(
+        isset(erroresSC(scBase(['nombres' => 'Ana123']))['nombres']),
+        'no debe aceptar dígitos en el nombre'
+    );
+
+    $d = datosSC(scBase(['nombres' => 'María José', 'apellidos' => "O'Higgins"]));
+    afirmarIgual('María José', $d['nombres']);
+    afirmarIgual("O'Higgins", $d['apellidos']);
+});
+
+prueba('el teléfono se guarda sin puntos ni espacios', function (): void {
+    afirmarIgual('3151234567', datosSC(scBase())['telefono']);
+});
+
+prueba('la cédula es de referencia: si no parece una, se guarda como null y no tumba el envío', function (): void {
+    // Aquí no hay censo con qué compararla, y quien la escribe puede estar
+    // recordándola mal. Exigirle una forma plausible no aporta nada.
+    afirmarIgual([], erroresSC(scBase(['documento' => 'no recuerdo'])));
+    afirmarIgual(null, datosSC(scBase(['documento' => 'no recuerdo']))['documento']);
+    afirmarIgual('16234567', datosSC(scBase())['documento']);
+});
+
+prueba('sin autorización de datos NO se guarda', function (): void {
+    afirmar(isset(erroresSC(scBase(['autoriza_datos' => false]))['autoriza_datos']), 'debe exigir la autorización');
+});
+
+prueba('una versión de aviso desconocida se rechaza', function (): void {
+    afirmar(isset(erroresSC(scBase(['aviso_version' => 'inventada-v9']))['aviso_version']), 'debe exigir una versión conocida');
+});
+
+prueba('la zona urbana o rural es obligatoria', function (): void {
+    afirmar(isset(erroresSC(scBase(['zona' => '']))['zona']), 'debe exigir la zona');
+    afirmar(isset(erroresSC(scBase(['zona' => 'SEMIRURAL']))['zona']), 'no debe aceptar una zona inventada');
+});
+
+prueba('en zona urbana el corregimiento se descarta en vez de rechazarse', function (): void {
+    $d = datosSC(scBase([
+        'zona' => 'URBANO',
+        'corregimiento' => App\Rufe\Catalogos::CORREGIMIENTOS[0],
+    ]));
+
+    afirmarIgual(null, $d['corregimiento'], 'en zona urbana no hay corregimiento');
+});
+
+prueba('hace falta AL MENOS una pista de dónde vive', function (): void {
+    // No un campo concreto: una dirección con formato dejaría fuera a quien no
+    // la tiene, y solo el corregimiento no basta en zona urbana. Lo que no
+    // puede pasar es que no quede ninguna pista.
+    $e = erroresSC(scBase(['direccion' => '']));
+    afirmar(isset($e['direccion']), 'sin dirección, vereda ni corregimiento debe fallar');
+
+    afirmarIgual([], erroresSC(scBase([
+        'direccion' => '',
+        'vereda_sector_barrio' => 'Vereda La Liberia',
+    ])), 'la vereda sola ya alcanza');
+
+    afirmarIgual([], erroresSC(scBase([
+        'zona' => 'RURAL',
+        'direccion' => '',
+        'corregimiento' => App\Rufe\Catalogos::CORREGIMIENTOS[0],
+    ])), 'el corregimiento solo ya alcanza en zona rural');
+});
+
+prueba('la descripción es opcional y tiene un tope de caracteres', function (): void {
+    afirmarIgual([], erroresSC(scBase()), 'sin descripción no debe fallar');
+    afirmarIgual(null, datosSC(scBase())['descripcion']);
+
+    $e = erroresSC(scBase(['descripcion' => str_repeat('a', 501)]));
+    afirmar(isset($e['descripcion']), 'debe rechazar una descripción demasiado larga');
+});
+
+prueba('no se piden datos del inmueble ni del hogar', function (): void {
+    // Eso lo levanta el funcionario si el caso resulta real, no esta puerta.
+    $d = datosSC(scBase());
+
+    afirmar(! isset($d['tipo_bien']), 'el tipo de bien no debe pedirse aquí');
+    afirmar(! isset($d['personas']), 'la composición del hogar no debe pedirse aquí');
+});
+
+grupo('Sin censo › radicado');
+
+prueba('el radicado se distingue de los otros dos', function (): void {
+    $r = App\SinCenso\Radicado::componer(2026);
+
+    afirmar(str_starts_with($r, 'SC-2026-'), "el radicado no lleva el prefijo esperado: {$r}");
+    afirmar(App\SinCenso\Radicado::esValido($r), 'debería validarse a sí mismo');
+    afirmar(! App\SinCenso\Radicado::esValido('PRE-2026-ABCDEFGH'), 'no debe aceptar el de pre-inscripción');
+    afirmar(! App\SinCenso\Radicado::esValido('RUFE-2026-ABCDEFGH'), 'no debe aceptar el del censo');
 });
 
 grupo('La profesión del inspector, de la ficha de usuario al numeral 1');
