@@ -59,3 +59,23 @@ model BotEvent {
   @@index([createdAt])
   @@map("bot_events")
 }
+
+/// Qué se le ha hecho ya a una conversación silenciosa de Zavu.
+///
+/// Hace falta porque el vigilante corre cada minuto y la API de Zavu no
+/// recuerda nada: sin esta marca, una conversación callada recibiría el mismo
+/// «¿sigues ahí?» sesenta veces por hora.
+model ZavuInactividad {
+  /// Id de la conversación en Zavu. Es la clave natural.
+  conversacion  String   @id
+  /// Solo para poder leer el log; el envío usa el identificador de la
+  /// conversación que devuelve la API, no este campo.
+  telefono      String?
+  /// AVISADO (se preguntó si sigue ahí) o CERRADO (ya se despidió).
+  etapa         String
+  actualizadoEn DateTime @default(now()) @updatedAt @map("actualizado_en")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+
+  @@index([actualizadoEn])
+  @@map("zavu_inactividad")
+}

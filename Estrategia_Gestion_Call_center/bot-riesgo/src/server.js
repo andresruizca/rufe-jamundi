@@ -9,6 +9,7 @@ import { env, puedeEnviar } from './config/env.js';
 import { prisma } from './config/database.js';
 import { webhookRouter, adminRouter } from './webhook/routes.js';
 import { iniciarVigilanteDeInactividad } from './jobs/inactivity.js';
+import { iniciarVigilanteZavu } from './jobs/inactividad-zavu.js';
 
 const app = express();
 
@@ -44,6 +45,8 @@ const servidor = app.listen(env.PORT, '0.0.0.0', () => {
     console.warn('[bot-riesgo]   Se vincula escaneando el QR desde el Dashboard cuando se defina el número.');
   }
   iniciarVigilanteDeInactividad();
+  // El reloj de las conversaciones de Zavu, que Zavu no tiene.
+  iniciarVigilanteZavu();
 });
 
 // Apagado ordenado: sin esto, un `docker compose restart` corta conexiones a
