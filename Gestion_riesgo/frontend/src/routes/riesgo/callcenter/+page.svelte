@@ -464,7 +464,7 @@
 			<Info size={15} aria-hidden="true" />
 			<span>
 				{#if hogares.length === 0}
-					Aquí no hay coincidencias, pero
+					Aquí no hay coincidencias, pero hay
 				{:else}
 					Además de {total === 1 ? 'este' : 'estos'}, hay
 				{/if}
@@ -484,7 +484,17 @@
 		</p>
 	{:else if hogares.length === 0}
 		<p class="vacio">
-			<Check size={24} aria-hidden="true" />
+			<!--
+				El ✓ dice «no queda trabajo pendiente», que es verdad cuando la
+				lista está vacía por sí sola. Con una búsqueda escrita es otra
+				cosa —no se encontró lo que se buscaba— y felicitar a la operadora
+				por no encontrar a la familia que tiene al teléfono no ayuda.
+			-->
+			{#if busqueda !== ''}
+				<Search size={22} aria-hidden="true" />
+			{:else}
+				<Check size={24} aria-hidden="true" />
+			{/if}
 			<span>
 				{#if busqueda !== ''}
 					No hay coincidencias en esta lista.
