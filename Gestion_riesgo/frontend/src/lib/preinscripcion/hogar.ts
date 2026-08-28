@@ -24,7 +24,7 @@ export type PersonaCenso = {
 
 export type HogarCenso = {
 	reporte_id: number;
-	zona: 'URBANA' | 'RURAL';
+	zona: 'URBANO' | 'RURAL';
 	corregimiento: string;
 	vereda: string;
 	direccion: string;

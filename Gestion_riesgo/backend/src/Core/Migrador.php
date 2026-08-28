@@ -59,6 +59,11 @@ final class Migrador
         // El canal de la gestión y el envío del enlace por WhatsApp. Va después
         // de callcenter_01.sql, que es quien crea `rufe_gestiones`.
         'callcenter_03_whatsapp.sql',
+        // Concilia los campos del formulario ciudadano con los del censo: el
+        // nombre en dos, el tipo de documento y un solo vocabulario para la
+        // zona. Va despues de preinscripcion_01.sql y de _03_pasos.sql, que son
+        // quienes crean la tabla y su columna `zona`.
+        'preinscripcion_06_conciliar.sql',
         // Solicitudes de quien no aparece en el censo. Va al final: apunta a
         // `rufe_reportes`, que ya existe mucho antes.
         'sincenso_01.sql',

@@ -166,7 +166,8 @@ export function valeLaPena(b: BorradorPre, hayFotos: boolean): boolean {
 	const d = b.datos;
 
 	return (
-		d.nombre_completo.trim() !== '' ||
+		d.nombres.trim() !== '' ||
+		d.apellidos.trim() !== '' ||
 		d.telefono.trim() !== '' ||
 		d.direccion.trim() !== '' ||
 		d.senales.length > 0 ||

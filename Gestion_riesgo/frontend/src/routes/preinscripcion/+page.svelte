@@ -48,6 +48,7 @@
 		type PersonaHogar
 	} from '$lib/preinscripcion/hogar';
 	import BotonInstalar from '$lib/components/layout/BotonInstalar.svelte';
+	import SelectorBarrio from '$lib/components/SelectorBarrio.svelte';
 	import {
 		bloqueoDeAvance,
 		datosVacios,
@@ -189,8 +190,12 @@
 		// hogar: quien hace el trámite puede ser el hijo mayor de edad.
 		const yo = hogar.personas.find((p) => p.id === hogar.persona_id);
 
-		if (yo && datos.nombre_completo.trim() === '') {
-			datos.nombre_completo = `${yo.nombres} ${yo.apellidos}`.trim();
+		// Cada parte en su campo. Antes se unían aquí, y era justo el punto donde
+		// el sistema perdía para siempre dónde terminaba el nombre.
+		if (yo) {
+			if (datos.nombres.trim() === '') datos.nombres = yo.nombres;
+			if (datos.apellidos.trim() === '') datos.apellidos = yo.apellidos;
+			if (datos.tipo_documento === null) datos.tipo_documento = yo.tipo_documento || null;
 		}
 
 		// Las personas solo se traen si la familia no ha tocado la lista: si ya
@@ -255,7 +260,8 @@
 		if (cargando || resultado !== null) return;
 
 		void [
-			datos.nombre_completo,
+			datos.nombres,
+			datos.apellidos,
 			datos.documento,
 			datos.telefono,
 			datos.correo,
@@ -567,7 +573,8 @@
 
 	/** Los campos que se corrigen en el paso 1, para saber a dónde devolver. */
 	const CAMPOS_PASO_1 = [
-		'nombre_completo',
+		'nombres',
+		'apellidos',
 		'documento',
 		'telefono',
 		'correo',
@@ -766,13 +773,35 @@
 			<section class="tarjeta">
 				<h2 class="tarjeta__titulo">Quién es</h2>
 
-				<label class="campo">
-					<span class="campo__etiqueta">Nombre y apellidos *</span>
-					<input class="campo__control" bind:value={datos.nombre_completo} autocomplete="name" />
-					{#if errores.nombre_completo}
-						<span class="campo__error">{errores.nombre_completo}</span>
-					{/if}
-				</label>
+				<!--
+					Dos campos, como en el censo. Antes era uno solo y al precargar
+					desde el RUFE se unían los dos: esa frontera se perdía y no se
+					puede reconstruir por regla, porque en Colombia hay uno o dos
+					nombres y dos apellidos sin forma de saber dónde corta cada caso.
+				-->
+				<div class="dos">
+					<label class="campo">
+						<span class="campo__etiqueta">Nombres *</span>
+						<input
+							class="campo__control"
+							maxlength="120"
+							autocomplete="given-name"
+							bind:value={datos.nombres}
+						/>
+						{#if errores.nombres}<span class="campo__error">{errores.nombres}</span>{/if}
+					</label>
+
+					<label class="campo">
+						<span class="campo__etiqueta">Apellidos *</span>
+						<input
+							class="campo__control"
+							maxlength="120"
+							autocomplete="family-name"
+							bind:value={datos.apellidos}
+						/>
+						{#if errores.apellidos}<span class="campo__error">{errores.apellidos}</span>{/if}
+					</label>
+				</div>
 
 				<!--
 					La cédula ya no se escribe aquí: se verificó contra el censo en la
@@ -827,13 +856,13 @@
 					<legend class="campo__etiqueta">¿La vivienda está en zona urbana o rural? *</legend>
 
 					<div class="opciones opciones--dos">
-						<label class="opcion" class:opcion--activa={datos.zona === 'URBANA'}>
+						<label class="opcion" class:opcion--activa={datos.zona === 'URBANO'}>
 							<input
 								type="radio"
 								name="zona"
-								value="URBANA"
-								checked={datos.zona === 'URBANA'}
-								onchange={() => (datos.zona = 'URBANA')}
+								value="URBANO"
+								checked={datos.zona === 'URBANO'}
+								onchange={() => (datos.zona = 'URBANO')}
 							/>
 							<span class="opcion__texto">
 								Urbana
@@ -891,10 +920,22 @@
 					</label>
 				{/if}
 
-				<label class="campo">
-					<span class="campo__etiqueta">{datos.zona === 'RURAL' ? 'Vereda' : 'Barrio'}</span>
-					<input class="campo__control" bind:value={datos.vereda} />
-				</label>
+				{#if datos.zona === 'RURAL'}
+					<!-- El archivo de Planeación trae la zona urbana. En el campo la
+					     vereda se escribe, y para eso está el corregimiento de arriba. -->
+					<label class="campo">
+						<span class="campo__etiqueta">Vereda</span>
+						<input class="campo__control" maxlength="120" bind:value={datos.vereda} />
+					</label>
+				{:else}
+					<SelectorBarrio
+						id="barrio"
+						etiqueta="Barrio"
+						bind:valor={datos.vereda}
+						opciones={catalogos.barrios ?? []}
+						ayuda="Escriba unas letras y elija el suyo de la lista."
+					/>
+				{/if}
 
 				<div class="ubicacion">
 					<p class="ubicacion__titulo">Ubicación en el mapa (opcional)</p>
@@ -1037,7 +1078,10 @@
 				<h2 class="tarjeta__titulo">Lo que va a enviar</h2>
 
 				<dl class="resumen">
-					<div><dt>Nombre</dt><dd>{datos.nombre_completo || '—'}</dd></div>
+					<div>
+						<dt>Nombre</dt>
+						<dd>{`${datos.nombres} ${datos.apellidos}`.trim() || '—'}</dd>
+					</div>
 					<div><dt>Cédula</dt><dd>{datos.documento || '—'}</dd></div>
 					<div><dt>Teléfono</dt><dd>{datos.telefono || '—'}</dd></div>
 					<div>
@@ -1130,6 +1174,19 @@
 </div>
 
 <style>
+	/* Nombres y apellidos, uno al lado del otro cuando cabe. En un celular
+	   angosto se apilan: dos campos de 8rem no se llenan con el pulgar. */
+	.dos {
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	@media (min-width: 30rem) {
+		.dos {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
 	.aviso--ok {
 		background: var(--color-success-bg);
 		color: var(--color-success);

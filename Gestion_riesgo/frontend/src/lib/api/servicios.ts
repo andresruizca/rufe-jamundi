@@ -363,6 +363,8 @@ export const preinscripcionApi = {
 	catalogos: () =>
 		api.get<{
 			corregimientos: string[];
+			/** Los 165 barrios del POT que entregó Planeación. */
+			barrios: string[];
 			// Listas fijas para el listado del hogar. No son datos de nadie: son
 			// las mismas que ve el funcionario en el censo.
 			parentescos: Record<string, string>;

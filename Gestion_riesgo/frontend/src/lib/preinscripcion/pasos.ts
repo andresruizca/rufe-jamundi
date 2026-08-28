@@ -71,12 +71,23 @@ export type Errores = Record<string, string>;
 
 /** Lo que el formulario recoge. Un espejo de lo que acepta el validador de PHP. */
 export type DatosPre = {
-	nombre_completo: string;
+	/**
+	 * El nombre, en dos, como en el censo.
+	 *
+	 * `rufe_personas` los guarda separados, y también el listado del hogar de
+	 * esta misma preinscripción. Este formulario los juntaba en uno solo y esa
+	 * frontera se perdía: nadie puede volver a partir «ANDRES RUIZ CADAVID» por
+	 * regla, porque en Colombia hay uno o dos nombres y dos apellidos sin forma
+	 * de saber dónde corta cada caso.
+	 */
+	nombres: string;
+	apellidos: string;
+	tipo_documento: number | null;
 	documento: string;
 	telefono: string;
 	correo: string;
 	direccion: string;
-	zona: 'URBANA' | 'RURAL' | '';
+	zona: 'URBANO' | 'RURAL' | '';
 	corregimiento: string;
 	vereda: string;
 	senales: string[];
@@ -90,7 +101,9 @@ export type DatosPre = {
 
 export function datosVacios(): DatosPre {
 	return {
-		nombre_completo: '',
+		nombres: '',
+		apellidos: '',
+		tipo_documento: null,
 		documento: '',
 		telefono: '',
 		correo: '',
@@ -120,9 +133,14 @@ export function validarPaso(paso: IdPasoPre, d: DatosPre): Errores {
 	const e: Errores = {};
 
 	if (paso === 'datos') {
-		const nombre = d.nombre_completo.trim();
-		if (nombre.length < 5 || nombre.length > 200) {
-			e.nombre_completo = 'Escriba su nombre y sus apellidos.';
+		const nombres = d.nombres.trim();
+		if (nombres.length < 2 || nombres.length > 120) {
+			e.nombres = 'Escriba su nombre.';
+		}
+
+		const apellidos = d.apellidos.trim();
+		if (apellidos.length < 2 || apellidos.length > 120) {
+			e.apellidos = 'Escriba sus apellidos.';
 		}
 
 		// La gente escribe la cédula como la lee en su documento, con puntos.
@@ -147,7 +165,7 @@ export function validarPaso(paso: IdPasoPre, d: DatosPre): Errores {
 			e.direccion = 'Escriba dónde queda la vivienda, como se lo explicaría a alguien que va a buscarla.';
 		}
 
-		if (d.zona !== 'URBANA' && d.zona !== 'RURAL') {
+		if (d.zona !== 'URBANO' && d.zona !== 'RURAL') {
 			e.zona = 'Indique si la vivienda está en zona urbana o rural.';
 		}
 	}
@@ -326,7 +344,9 @@ export function videosQueFaltan(pedidos: CategoriaVideo[], listos: number[]): Ca
  */
 export function paraEnviar(d: DatosPre): Record<string, unknown> {
 	return {
-		nombre_completo: d.nombre_completo.trim(),
+		nombres: d.nombres.trim(),
+		apellidos: d.apellidos.trim(),
+		tipo_documento: d.tipo_documento,
 		documento: d.documento.replace(SOLO_DIGITOS, ''),
 		telefono: d.telefono.replace(SOLO_DIGITOS, ''),
 		correo: d.correo.trim(),

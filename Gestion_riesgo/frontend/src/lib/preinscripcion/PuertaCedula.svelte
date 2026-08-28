@@ -31,6 +31,7 @@
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi, sinCensoApi } from '$lib/api/servicios';
 	import CedulaDosCaras from './CedulaDosCaras.svelte';
+	import SelectorBarrio from '$lib/components/SelectorBarrio.svelte';
 	import type { GestorEvidencias } from '$lib/rufe-form/evidencias.svelte';
 	import type { HogarCenso } from './hogar';
 	import { erroresSolicitud, solicitudVacia, ZONAS, type ZonaSinCenso } from '$lib/sin-censo/solicitud';
@@ -39,7 +40,7 @@
 	const POLITICA_DATOS =
 		'https://portal.gestiondelriesgo.gov.co/Documents/Ley_Transparencia/Politica-de-Tratamiento-de-Datos-Personales.pdf';
 
-	type CatalogosPuerta = { corregimientos: string[]; aviso_version: string } | null;
+	type CatalogosPuerta = { corregimientos: string[]; barrios?: string[]; aviso_version: string } | null;
 
 	type Props = {
 		/**
@@ -400,10 +401,24 @@
 					</label>
 				{/if}
 
-				<label class="campo">
-					<span class="campo__etiqueta">Vereda, sector o barrio</span>
-					<input class="campo__control" bind:value={sc.vereda_sector_barrio} disabled={enviandoSC} />
-				</label>
+				{#if sc.zona === 'RURAL'}
+					<label class="campo">
+						<span class="campo__etiqueta">Vereda o sector</span>
+						<input
+							class="campo__control"
+							maxlength="120"
+							bind:value={sc.vereda_sector_barrio}
+							disabled={enviandoSC}
+						/>
+					</label>
+				{:else}
+					<SelectorBarrio
+						id="sc-barrio"
+						etiqueta="Barrio"
+						bind:valor={sc.vereda_sector_barrio}
+						opciones={catalogos?.barrios ?? []}
+					/>
+				{/if}
 
 				<label class="campo">
 					<span class="campo__etiqueta">Dirección aproximada</span>

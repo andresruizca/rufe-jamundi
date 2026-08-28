@@ -1127,6 +1127,12 @@ const ENUMS_QUE_PUEDEN_CRECER = [
         'CONTACTADO', 'NO_CONTESTA', 'NUMERO_ERRADO',
         'VOLVER_A_LLAMAR', 'NO_INTERESA', 'YA_DILIGENCIO',
     ],
+    // La zona de la preinscripción. Creció para admitir URBANO, que es como lo
+    // dice el censo: eran dos verdades para lo mismo, y la traducción a mano
+    // que las unía solo estaba en un sitio. Los dos de aquí son los que había
+    // antes, y esta comprobación impide que una migración futura pierda
+    // URBANA — las filas anteriores a la conciliación siguen diciéndolo.
+    'zona' => ['URBANA', 'RURAL'],
 ];
 
 prueba('la excepción del ENUM no vale para recortarlo', function (): void {
@@ -3569,6 +3575,144 @@ prueba('el envío devuelve el reporte ya actualizado', function () use ($raiz): 
         str_contains($metodo, "'envios' => \$this->enviosWhatsapp(\$id)"),
         'la respuesta del envío no trae el reporte actualizado'
     );
+});
+
+grupo('Conciliar los campos con el censo');
+
+/**
+ * Una solicitud mínima que pasa, para cambiarle solo lo que cada prueba mira.
+ *
+ * @param  array<string,mixed>  $cambios
+ * @return array<string,mixed>
+ */
+function baseValida(array $cambios = []): array
+{
+    return array_merge([
+        'nombres' => 'Andres',
+        'apellidos' => 'Ruiz Cadavid',
+        'documento' => '16844290',
+        'telefono' => '3157729890',
+        'direccion' => 'Carrera 11 # 8-26',
+        'zona' => 'URBANO',
+        'autoriza_datos' => true,
+        'aviso_version' => 'habeas-data-v2',
+    ], $cambios);
+}
+
+
+prueba('el nombre llega partido, como en el censo', function (): void {
+    // `rufe_personas` guarda nombres y apellidos por separado, y también lo
+    // hacen el listado del hogar de la propia preinscripción y el formulario
+    // de quien no aparece en el censo. Esta tabla era la única de una pieza.
+    $r = App\Preinscripcion\Validador::revisar(baseValida([
+        'nombres' => 'Andres',
+        'apellidos' => 'Ruiz Cadavid',
+    ]));
+
+    afirmarIgual([], $r['errores'], 'un nombre partido debería pasar');
+    afirmarIgual('Andres', $r['datos']['nombres'], 'no guardó los nombres');
+    afirmarIgual('Ruiz Cadavid', $r['datos']['apellidos'], 'no guardó los apellidos');
+    afirmarIgual('Andres Ruiz Cadavid', $r['datos']['nombre_completo'], 'no compuso el nombre completo');
+});
+
+prueba('una solicitud vieja del APK todavía entra', function (): void {
+    // El APK guarda solicitudes sin conexión y las manda días después, con el
+    // formato que tenían al llenarse. Una pestaña abierta desde ayer, igual.
+    // Rechazarlas sería tirar el trabajo de una familia por un cambio nuestro.
+    $r = App\Preinscripcion\Validador::revisar(baseValida([
+        'nombres' => '', 'apellidos' => '',
+        'nombre_completo' => 'Andres Ruiz Cadavid',
+    ]));
+
+    afirmarIgual([], $r['errores'], 'el formato anterior dejó de entrar');
+    afirmarIgual('Andres Ruiz Cadavid', $r['datos']['nombre_completo'], 'perdió el nombre');
+
+    // Y las dos partes quedan NULAS, no partidas a ojo: nulo dice «no se
+    // preguntó», y ninguna división inventada es mejor que eso.
+    afirmar($r['datos']['nombres'] === null, 'se inventó dónde termina el nombre');
+    afirmar($r['datos']['apellidos'] === null, 'se inventó dónde empiezan los apellidos');
+});
+
+prueba('sin nombre no se pasa, venga como venga', function (): void {
+    $vacio = App\Preinscripcion\Validador::revisar(baseValida([
+        'nombres' => '', 'apellidos' => '', 'nombre_completo' => '',
+    ]));
+    afirmar(isset($vacio['errores']['nombres']), 'dejó pasar una solicitud sin nombre');
+
+    $medias = App\Preinscripcion\Validador::revisar(baseValida(['nombres' => 'Andres', 'apellidos' => '']));
+    afirmar(isset($medias['errores']['apellidos']), 'dejó pasar un nombre sin apellidos');
+});
+
+prueba('la zona se guarda con el vocabulario del censo', function (): void {
+    // El censo dice URBANO y este formulario decía URBANA. Se aceptan las dos
+    // al entrar —el APK y las pestañas viejas mandan la vieja— y se guarda una.
+    foreach (['URBANA', 'URBANO'] as $comoLlega) {
+        $r = App\Preinscripcion\Validador::revisar(baseValida(['zona' => $comoLlega]));
+
+        afirmarIgual([], $r['errores'], "la zona «{$comoLlega}» debería entrar");
+        afirmarIgual('URBANO', $r['datos']['zona'], "«{$comoLlega}» no se normalizó");
+    }
+
+    $rural = App\Preinscripcion\Validador::revisar(baseValida(['zona' => 'RURAL']));
+    afirmarIgual('RURAL', $rural['datos']['zona'], 'la zona rural cambió');
+});
+
+prueba('el tipo de documento entra, y su ausencia no bloquea', function (): void {
+    $con = App\Preinscripcion\Validador::revisar(baseValida(['tipo_documento' => '1']));
+    afirmarIgual(1, $con['datos']['tipo_documento'], 'no guardó el tipo de documento');
+
+    // Quien llene esto desde el APK o una pestaña vieja no lo manda, y eso no
+    // puede costarle la solicitud. Nulo es honesto: «no se preguntó».
+    $sin = App\Preinscripcion\Validador::revisar(baseValida());
+    afirmarIgual([], $sin['errores'], 'faltar el tipo de documento bloqueó el envío');
+    afirmar($sin['datos']['tipo_documento'] === null, 'se inventó un tipo de documento');
+
+    $malo = App\Preinscripcion\Validador::revisar(baseValida(['tipo_documento' => '99']));
+    afirmar($malo['datos']['tipo_documento'] === null, 'aceptó un tipo que no está en el catálogo');
+});
+
+prueba('se marca si el barrio salió de la lista del POT', function (): void {
+    // Lo escrito a mano es lo que Planeación tiene que revisar: o falta un
+    // barrio en la lista de 2021, o es una grafía nueva de uno que ya está.
+    $delCatalogo = App\Preinscripcion\Validador::revisar(baseValida([
+        'zona' => 'URBANO', 'vereda' => 'Ciudadela Terranova',
+    ]));
+    afirmarIgual(1, $delCatalogo['datos']['barrio_del_catalogo'], 'no reconoció un barrio del POT');
+
+    $aMano = App\Preinscripcion\Validador::revisar(baseValida([
+        'zona' => 'URBANO', 'vereda' => 'Invasion Nueva Esperanza',
+    ]));
+    afirmarIgual(0, $aMano['datos']['barrio_del_catalogo'], 'dio por oficial un barrio escrito a mano');
+
+    // En zona rural la lista no aplica: el archivo trae la zona urbana.
+    $rural = App\Preinscripcion\Validador::revisar(baseValida([
+        'zona' => 'RURAL', 'vereda' => 'La Meseta',
+    ]));
+    afirmarIgual(0, $rural['datos']['barrio_del_catalogo'], 'marcó una vereda como barrio del POT');
+});
+
+prueba('la lista de barrios es la del archivo de Planeación', function (): void {
+    $barrios = App\Rufe\CatalogoBarrios::BARRIOS;
+
+    afirmarIgual(165, count($barrios), 'la lista ya no son los 165 del POT 2021');
+    afirmarIgual(count($barrios), count(array_unique($barrios)), 'hay barrios repetidos');
+
+    // Y viaja a los formularios: sin esto la lista existe y nadie la ve.
+    afirmar(
+        isset(App\Rufe\Catalogos::paraApi()['barrios']),
+        'los barrios no llegan al formulario del censo'
+    );
+});
+
+prueba('un barrio se reconoce escrito de cualquier manera', function (): void {
+    // Es la misma normalización con la que el tablero agrupa: si dos grafías
+    // cuentan como el mismo barrio al sumar, tienen que contarlo al validar.
+    foreach (['Ciudadela Terranova', 'CIUDADELA TERRANOVA', '  ciudadela  terranova '] as $x) {
+        afirmar(App\Rufe\CatalogoBarrios::reconocido($x), "no reconoció «{$x}»");
+    }
+
+    afirmar(! App\Rufe\CatalogoBarrios::reconocido(''), 'dio por bueno un barrio vacío');
+    afirmar(! App\Rufe\CatalogoBarrios::reconocido('Barrio Que No Existe'), 'reconoció un barrio inventado');
 });
 
 grupo('El buscador del call center');

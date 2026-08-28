@@ -45,6 +45,7 @@
 	import { GestorEnvio, hayFichasPendientes } from '$lib/rufe-form/envio.svelte';
 
 	import CampoTexto from '$lib/rufe-form/componentes/CampoTexto.svelte';
+	import SelectorBarrio from '$lib/components/SelectorBarrio.svelte';
 	import CampoSelect from '$lib/rufe-form/componentes/CampoSelect.svelte';
 	import CampoOpciones from '$lib/rufe-form/componentes/CampoOpciones.svelte';
 	import IndicadorProgreso from '$lib/rufe-form/componentes/IndicadorProgreso.svelte';
@@ -884,15 +885,30 @@
 					/>
 				{/if}
 
-				<CampoTexto
-					id="vereda_sector_barrio"
-					etiqueta={etiquetaLugar(datos)}
-					requerido
-					maximo={160}
-					bind:valor={datos.vereda_sector_barrio}
-					error={errores.vereda_sector_barrio ?? ''}
-					{alCambiar}
-				/>
+				{#if datos.zona === 'RURAL'}
+					<CampoTexto
+						id="vereda_sector_barrio"
+						etiqueta={etiquetaLugar(datos)}
+						requerido
+						maximo={160}
+						bind:valor={datos.vereda_sector_barrio}
+						error={errores.vereda_sector_barrio ?? ''}
+						{alCambiar}
+					/>
+				{:else}
+					<!-- En zona urbana, la lista del POT. Escribir el barrio a mano es
+					     lo que produjo 249 grafías para 117 barrios reales, y esa tabla
+					     es la que decide a dónde sale una brigada. -->
+					<SelectorBarrio
+						id="vereda_sector_barrio"
+						etiqueta={etiquetaLugar(datos)}
+						requerido
+						bind:valor={datos.vereda_sector_barrio}
+						opciones={catalogos.barrios ?? []}
+						error={errores.vereda_sector_barrio ?? ''}
+						{alCambiar}
+					/>
+				{/if}
 
 				<CampoTexto
 					id="direccion"

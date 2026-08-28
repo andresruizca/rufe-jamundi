@@ -39,6 +39,8 @@ export type Catalogos = {
 	unidades_medida: OpcionTextual[];
 	eventos_sugeridos: string[];
 	corregimientos: string[];
+	/** Los 165 barrios del POT que entregó Planeación. */
+	barrios: string[];
 	/** Valores con los que abre el formulario. Vacíos = sin precargar. */
 	predeterminados: { evento: string; fecha_evento: string };
 };

@@ -44,6 +44,7 @@ const CATALOGOS: Catalogos = {
 	unidades_medida: [{ codigo: 'HECTAREA', etiqueta: 'Hectárea(s)' }],
 	eventos_sugeridos: ['Terremoto', 'Inundación'],
 	corregimientos: ['Potrerito'],
+	barrios: ['Belalcazar', 'Ciudadela Terranova'],
 	predeterminados: { evento: 'Terremoto', fecha_evento: '2026-08-10' }
 };
 

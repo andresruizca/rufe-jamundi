@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Preinscripcion;
 
+use App\Rufe\CatalogoBarrios;
 use App\Rufe\Catalogos as Rufe;
 
 /**
@@ -31,7 +32,20 @@ use App\Rufe\Catalogos as Rufe;
 final class Validador
 {
     /** @var list<string> */
-    public const ZONAS = ['URBANA', 'RURAL'];
+    /**
+     * Las zonas que se aceptan al recibir.
+     *
+     * `URBANO` es como lo dice el censo y es lo que se guarda desde la
+     * conciliación; `URBANA` es lo que decía este formulario antes y lo que
+     * todavía mandan el APK sin conexión y cualquier pestaña que lleve horas
+     * abierta. Se admiten las dos al entrar y se normaliza a una sola al
+     * guardar: rechazar el envío de una familia por una letra sería el peor
+     * canje posible.
+     */
+    public const ZONAS = ['URBANA', 'URBANO', 'RURAL'];
+
+    /** La que se guarda. Una sola, la del censo. */
+    public const ZONA_URBANA = 'URBANO';
 
     /**
      * Tope de personas en el listado del hogar.
@@ -69,12 +83,7 @@ final class Validador
     /** @param array<string,mixed> $e */
     private function identificacion(array $e): void
     {
-        $nombre = $this->texto($e, 'nombre_completo');
-        if (mb_strlen($nombre) < 5 || mb_strlen($nombre) > 200) {
-            $this->errores['nombre_completo'] = 'Escriba su nombre y sus apellidos.';
-        } else {
-            $this->datos['nombre_completo'] = $nombre;
-        }
+        $this->nombre($e);
 
         // Solo dígitos y una longitud plausible. No se valida contra la
         // Registraduría: aquí no hay forma de hacerlo, y rechazar una cédula
@@ -85,6 +94,18 @@ final class Validador
         } else {
             $this->datos['documento'] = $documento;
         }
+
+        // El tipo de documento, del mismo catálogo que el censo. Antes solo se
+        // guardaba el número, y cédula, tarjeta de identidad y pasaporte
+        // quedaban indistinguibles: al volver al censo había que adivinarlo.
+        //
+        // Opcional: quien llene esto desde una pestaña vieja o desde el APK no
+        // lo manda, y eso no puede costarle la solicitud. Sin él se queda nulo,
+        // que es honesto — «no se preguntó» y no «es una cédula».
+        $tipo = trim($this->texto($e, 'tipo_documento'));
+        $this->datos['tipo_documento'] = $tipo !== '' && isset(Rufe::TIPOS_DOCUMENTO[(int) $tipo])
+            ? (int) $tipo
+            : null;
 
         $telefono = preg_replace('/\D+/', '', $this->texto($e, 'telefono')) ?? '';
         if (strlen($telefono) < 7 || strlen($telefono) > 15) {
@@ -201,6 +222,67 @@ final class Validador
         return $d !== false && $d->format('Y-m-d') === $valor && $d <= new \DateTimeImmutable('today');
     }
 
+    /**
+     * El nombre, en dos campos como en el censo.
+     *
+     * ── Qué se arregla ───────────────────────────────────────────────────────
+     *
+     * `rufe_personas` guarda `nombres` y `apellidos` por separado, y también lo
+     * hacen el listado del hogar de esta misma preinscripción y el formulario
+     * de quien no aparece en el censo. Esta tabla era la única que guardaba una
+     * sola cadena, y al precargar desde el censo se unían las dos partes: esa
+     * frontera se perdía y no se puede reconstruir por regla, porque en
+     * Colombia hay uno o dos nombres y dos apellidos sin forma de saber dónde
+     * corta cada caso.
+     *
+     * ── Por qué se sigue aceptando el campo viejo ────────────────────────────
+     *
+     * El APK guarda solicitudes sin conexión y las manda días después, con el
+     * formato que tenía cuando se llenaron. Una pestaña abierta desde ayer,
+     * igual. Rechazarlas sería tirar el trabajo de una familia por un cambio
+     * nuestro. Si llegan las dos partes, mandan ellas; si llega solo la cadena
+     * entera, se guarda tal cual y las dos partes quedan nulas — nulo significa
+     * «no se preguntó», y ninguna división inventada es mejor que eso.
+     */
+    private function nombre(array $e): void
+    {
+        $nombres = trim($this->texto($e, 'nombres'));
+        $apellidos = trim($this->texto($e, 'apellidos'));
+
+        if ($nombres !== '' || $apellidos !== '') {
+            if (mb_strlen($nombres) < 2 || mb_strlen($nombres) > 120) {
+                $this->errores['nombres'] = 'Escriba su nombre.';
+            } else {
+                $this->datos['nombres'] = $nombres;
+            }
+
+            if (mb_strlen($apellidos) < 2 || mb_strlen($apellidos) > 120) {
+                $this->errores['apellidos'] = 'Escriba sus apellidos.';
+            } else {
+                $this->datos['apellidos'] = $apellidos;
+            }
+
+            // `nombre_completo` sigue existiendo y sigue siendo obligatorio en
+            // la tabla. Lo compone el servidor: así una sola fuente manda, y
+            // las pantallas que todavía lo leen siguen funcionando.
+            $this->datos['nombre_completo'] = trim($nombres.' '.$apellidos);
+
+            return;
+        }
+
+        $nombre = $this->texto($e, 'nombre_completo');
+
+        if (mb_strlen($nombre) < 5 || mb_strlen($nombre) > 200) {
+            $this->errores['nombres'] = 'Escriba su nombre y sus apellidos.';
+
+            return;
+        }
+
+        $this->datos['nombre_completo'] = $nombre;
+        $this->datos['nombres'] = null;
+        $this->datos['apellidos'] = null;
+    }
+
     /** @param array<string,mixed> $e */
     private function ubicacion(array $e): void
     {
@@ -222,14 +304,17 @@ final class Validador
         if (! in_array($zona, self::ZONAS, true)) {
             $this->errores['zona'] = 'Indique si la vivienda está en zona urbana o rural.';
             $this->datos['zona'] = null;
+            $zona = '';
         } else {
+            // Se guarda con el vocabulario del censo, venga como venga.
+            $zona = $zona === 'RURAL' ? 'RURAL' : self::ZONA_URBANA;
             $this->datos['zona'] = $zona;
         }
 
         $corregimiento = $this->texto($e, 'corregimiento');
         if ($corregimiento !== '' && ! in_array($corregimiento, Rufe::CORREGIMIENTOS, true)) {
             $this->errores['corregimiento'] = 'Seleccione un corregimiento de la lista.';
-        } elseif ($zona === 'URBANA') {
+        } elseif ($zona === self::ZONA_URBANA) {
             // En zona urbana no hay corregimiento. Se descarta en vez de
             // rechazar: si alguien marcó uno y después corrigió la zona, el dato
             // sobrante no puede costarle el envío.
@@ -240,6 +325,14 @@ final class Validador
 
         $vereda = $this->texto($e, 'vereda');
         $this->datos['vereda'] = $vereda === '' ? null : mb_substr($vereda, 0, 120);
+
+        // ¿Salió de la lista del POT o lo escribió a mano? Lo escrito a mano es
+        // lo que Planeación tiene que revisar: o falta un barrio en la lista de
+        // 2021, o es una grafía nueva de uno que ya está. Sin esta marca habría
+        // que volver a adivinarlo comparando cadenas, que es de donde venimos.
+        $this->datos['barrio_del_catalogo'] = $zona === self::ZONA_URBANA
+            && $vereda !== ''
+            && CatalogoBarrios::reconocido($vereda) ? 1 : 0;
 
         $this->coordenadas($e);
     }

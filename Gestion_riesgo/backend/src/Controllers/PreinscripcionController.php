@@ -19,6 +19,7 @@ use App\Preinscripcion\Senales;
 use App\Preinscripcion\Validador;
 use App\Preinscripcion\Videos;
 use App\Rufe\Archivos;
+use App\Rufe\CatalogoBarrios;
 use App\Rufe\Catalogos as Rufe;
 use Throwable;
 
@@ -179,6 +180,7 @@ final class PreinscripcionController
 
         Response::ok([
             'corregimientos' => Rufe::CORREGIMIENTOS,
+            'barrios' => CatalogoBarrios::BARRIOS,
             'zonas'          => Validador::ZONAS,
             // Para el listado del hogar: sin ellos, el formulario no puede
             // dibujar «hijo(a)», «mujer» ni «tarjeta de identidad» y la persona
@@ -1218,26 +1220,37 @@ final class PreinscripcionController
         try {
             Db::exec(
                 'INSERT INTO preinscripciones
-                    (radicado, envio_id, nombre_completo, documento, telefono, correo,
-                     direccion, zona, corregimiento, vereda, latitud, longitud, precision_m,
+                    (radicado, envio_id, nombre_completo, nombres, apellidos,
+                     documento, tipo_documento, telefono, correo,
+                     direccion, zona, corregimiento, vereda, barrio_del_catalogo,
+                     latitud, longitud, precision_m,
                      descripcion_dano, autoriza_datos, aviso_version, autorizacion_en,
                      huella, estado, origen_hash)
                  VALUES
-                    (:radicado, :envio_id, :nombre, :documento, :telefono, :correo,
-                     :direccion, :zona, :corregimiento, :vereda, :latitud, :longitud, :precision_m,
+                    (:radicado, :envio_id, :nombre, :nombres, :apellidos,
+                     :documento, :tipo_documento, :telefono, :correo,
+                     :direccion, :zona, :corregimiento, :vereda, :barrio_catalogo,
+                     :latitud, :longitud, :precision_m,
                      :descripcion, :autoriza, :aviso, NOW(),
                      :huella, :estado, :origen)',
                 [
                     'radicado'      => $radicado,
                     'envio_id'      => $envioId ?? bin2hex(random_bytes(18)),
+                    // Lo compone el validador con las dos partes. Se conserva
+                    // porque la columna es obligatoria y porque las pantallas
+                    // que aún lo leen tienen que seguir funcionando.
                     'nombre'        => $datos['nombre_completo'],
+                    'nombres'       => $datos['nombres'] ?? null,
+                    'apellidos'     => $datos['apellidos'] ?? null,
                     'documento'     => $datos['documento'],
+                    'tipo_documento' => $datos['tipo_documento'] ?? null,
                     'telefono'      => $datos['telefono'],
                     'correo'        => $datos['correo'],
                     'direccion'     => $datos['direccion'],
                     'zona'          => $datos['zona'],
                     'corregimiento' => $datos['corregimiento'],
                     'vereda'        => $datos['vereda'],
+                    'barrio_catalogo' => $datos['barrio_del_catalogo'] ?? 0,
                     'latitud'       => $datos['latitud'],
                     'longitud'      => $datos['longitud'],
                     'precision_m'   => $datos['precision_m'],

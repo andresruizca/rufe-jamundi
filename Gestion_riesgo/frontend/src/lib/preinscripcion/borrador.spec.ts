@@ -73,13 +73,19 @@ describe('el borrador de la pre-inscripción', () => {
 	});
 
 	it('conserva el paso, lo escrito y el hogar', () => {
-		const datos = { ...datosVacios(), nombre_completo: 'Martha Londoño', telefono: '3183333510' };
+		const datos = {
+			...datosVacios(),
+			nombres: 'Martha',
+			apellidos: 'Londoño',
+			telefono: '3183333510'
+		};
 
 		guardar(borradorDe({ datos, indice: 2, videosListos: [7] }));
 
 		const recuperado = leer();
 
-		expect(recuperado?.datos.nombre_completo).toBe('Martha Londoño');
+		expect(recuperado?.datos.nombres).toBe('Martha');
+		expect(recuperado?.datos.apellidos).toBe('Londoño');
 		expect(recuperado?.indice).toBe(2);
 		expect(recuperado?.videosListos).toEqual([7]);
 	});

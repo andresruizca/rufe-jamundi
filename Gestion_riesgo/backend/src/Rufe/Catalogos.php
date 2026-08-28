@@ -494,6 +494,9 @@ final class Catalogos
                 'fecha_evento' => self::FECHA_EVENTO_PREDETERMINADA,
             ],
             'corregimientos' => self::CORREGIMIENTOS,
+            // Los 165 del POT. Van a todo formulario que pregunte por el barrio:
+            // escribirlo a mano es lo que produjo 249 grafías para 117 barrios.
+            'barrios' => CatalogoBarrios::BARRIOS,
         ];
     }
 

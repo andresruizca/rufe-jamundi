@@ -19,11 +19,12 @@ import {
 function completos(cambios: Partial<DatosPre> = {}): DatosPre {
 	return {
 		...datosVacios(),
-		nombre_completo: 'Pedro Antonio Pérez Gómez',
+		nombres: 'Pedro Antonio',
+		apellidos: 'Pérez Gómez',
 		documento: '16.234.567',
 		telefono: '315 123 4567',
 		direccion: 'Carrera 11 # 8-26',
-		zona: 'URBANA',
+		zona: 'URBANO',
 		...cambios
 	};
 }
@@ -108,7 +109,7 @@ describe('lo que se manda al servidor', () => {
 	it('descarta el corregimiento en zona urbana', () => {
 		// Si alguien eligió uno y después corrigió la zona, ese dato sobrante no
 		// debe viajar. PHP hace lo mismo; esto evita mandar una contradicción.
-		const enviado = paraEnviar(completos({ zona: 'URBANA', corregimiento: 'Robles' }));
+		const enviado = paraEnviar(completos({ zona: 'URBANO', corregimiento: 'Robles' }));
 
 		expect(enviado.corregimiento).toBe('');
 	});
