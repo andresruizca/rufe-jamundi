@@ -25,7 +25,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
-		ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, MapPin, Send, TriangleAlert
+		ArrowLeft, ArrowRight, Check, CheckCircle2, LoaderCircle, MapPin, Send, TriangleAlert
 	} from '@lucide/svelte';
 	import { ApiError } from '$lib/api/client';
 	import { preinscripcionApi } from '$lib/api/servicios';
@@ -39,6 +39,7 @@
 	import AutorizacionDatos from '$lib/preinscripcion/AutorizacionDatos.svelte';
 	import PuertaCedula from '$lib/preinscripcion/PuertaCedula.svelte';
 	import ListaHogar from '$lib/preinscripcion/ListaHogar.svelte';
+	import * as borradorPre from '$lib/preinscripcion/borrador';
 	import CedulaDosCaras from '$lib/preinscripcion/CedulaDosCaras.svelte';
 	import {
 		desdeCenso,
@@ -106,10 +107,22 @@
 	let ubicando = $state(false);
 	let avisoUbicacion = $state<string | null>(null);
 
-	// Identificador estable de este envío: si la solicitud entra pero la
-	// respuesta se pierde por mala señal, reintentar devuelve el mismo radicado
-	// en vez de inscribir dos veces a la misma familia.
-	const envioId = crypto.randomUUID();
+	/**
+	 * Identificador de este envío.
+	 *
+	 * Decía «estable» y no lo era: se generaba con `crypto.randomUUID()` en cada
+	 * carga de la página. Como es la raíz de la clave con la que las fotos viven
+	 * en IndexedDB, al volver la clave era otra — las fotos seguían en el
+	 * aparato y no había forma de encontrarlas. Una familia que se salía sin
+	 * querer lo perdía todo.
+	 *
+	 * Ahora se recupera del borrador, y solo se hace uno nuevo cuando no hay
+	 * ninguno que continuar.
+	 */
+	let envioId = $state(borradorPre.nuevoEnvioId());
+
+	/** Cuándo se guardó lo que acabamos de recuperar. Vacío si no había nada. */
+	let recuperado = $state<string | null>(null);
 
 	let datos = $state(datosVacios());
 
@@ -172,6 +185,30 @@
 		habilitado = true;
 	}
 
+	/**
+	 * Descartar lo recuperado y empezar limpio.
+	 *
+	 * Con confirmación, y no por gusto: aquí se borran fotos que la persona ya
+	 * tomó. Es la única acción de este formulario que destruye trabajo suyo.
+	 */
+	async function empezarDeCero() {
+		if (!confirm('Se borrará lo que llevaba, incluidas las fotos y los videos. ¿Seguro?')) return;
+
+		borradorPre.borrar();
+		await evidencias?.limpiar();
+
+		envioId = borradorPre.nuevoEnvioId();
+		datos = datosVacios();
+		personas = [];
+		hogarCenso = null;
+		videosListos = [];
+		errores = {};
+		errorEnvio = '';
+		indice = 0;
+		recuperado = null;
+		habilitado = false;
+	}
+
 	/** Volver a la puerta: la cédula se cambia allí, no en el paso 1. */
 	function cambiarCedula() {
 		habilitado = false;
@@ -184,6 +221,53 @@
 	}
 
 	let indice = $state(0);
+
+	/**
+	 * Guardar lo que lleva escrito, cada vez que cambia algo.
+	 *
+	 * Un `$effect` y no un botón: quien llena esto está de pie en el patio de su
+	 * casa y no va a acordarse de pulsar «guardar». Lo que se guarda es ligero
+	 * —texto, el paso, el token de la carga—; las fotos van a IndexedDB por su
+	 * cuenta, en cuanto se toman.
+	 *
+	 * Se lee todo lo que se quiere vigilar de forma explícita: un `$effect` solo
+	 * se vuelve a disparar por lo que lee, y con los objetos anidados hay que
+	 * tocar los campos para que Svelte los siga.
+	 */
+	$effect(() => {
+		// No se guarda antes de que la página termine de cargar: escribiría el
+		// formulario vacío encima de lo que acabamos de recuperar.
+		if (cargando || resultado !== null) return;
+
+		void [
+			datos.nombre_completo,
+			datos.documento,
+			datos.telefono,
+			datos.correo,
+			datos.direccion,
+			datos.zona,
+			datos.corregimiento,
+			datos.vereda,
+			datos.descripcion_dano,
+			datos.senales.length,
+			datos.latitud,
+			datos.autoriza_datos,
+			personas.length,
+			videosListos.length,
+			indice,
+			evidencias?.carga
+		];
+
+		borradorPre.guardar({
+			envioId,
+			carga: evidencias?.carga ?? null,
+			datos: $state.snapshot(datos),
+			personas: $state.snapshot(personas),
+			hogar: $state.snapshot(hogarCenso),
+			indice,
+			videosListos: $state.snapshot(videosListos)
+		});
+	});
 
 	/**
 	 * Los videos que se le piden a ESTA persona: uno por cada daño que marcó.
@@ -225,6 +309,26 @@
 			try {
 				catalogos = await preinscripcionApi.catalogos();
 
+				// ANTES de crear el gestor: la clave con la que las fotos viven en
+				// IndexedDB se deriva del envío, así que el gestor tiene que nacer
+				// ya con el envío recuperado o buscará donde no hay nada.
+				const previo = borradorPre.leer();
+
+				if (previo) {
+					envioId = previo.envioId;
+					datos = previo.datos;
+					personas = previo.personas;
+					hogarCenso = previo.hogar;
+					videosListos = previo.videosListos;
+					indice = previo.indice;
+
+					// La puerta ya se pasó en la visita anterior. Volver a pedir la
+					// cédula para enseñarle lo que ya había escrito sería castigar
+					// a quien se salió sin querer. El servidor la comprueba otra vez
+					// al recibir el envío, que es donde de verdad se decide.
+					if (previo.datos.documento.trim() !== '') habilitado = true;
+				}
+
 				evidencias = new GestorEvidencias(
 					{
 						PRE_CEDULA: catalogos.limites.fotos_cedula,
@@ -240,10 +344,25 @@
 				);
 				detenerEvidencias = evidencias.iniciar();
 
+				// El token de la carga anterior va ANTES de restaurar. `restaurar()`
+				// termina llamando a `subirPendientes()`, y sin la carga puesta esas
+				// fotos se subirían a una carga nueva — dejando en la vieja los
+				// videos, que sí están solo en el servidor, hasta que la purga se
+				// los llevara.
+				if (previo) {
+					recuperado = previo.actualizado_en;
+					evidencias.carga = previo.carga;
+				}
+
+				// Las fotos de la visita anterior vuelven a la lista y se vuelven a
+				// subir. Están en el aparato, así que sobreviven aunque la carga del
+				// servidor ya hubiera caducado.
+				await evidencias.restaurar();
+
 				// Los videos van en la MISMA carga que las fotos, y la carga se abre
 				// sola al subir la primera foto. Si alguien solo graba videos, esa
 				// carga no existiría y se perderían: se abre aquí.
-				if ((catalogos.categorias_video ?? []).length > 0) {
+				if (evidencias.carga === null && (catalogos.categorias_video ?? []).length > 0) {
 					try {
 						evidencias.carga = (await preinscripcionApi.abrirCarga()).carga;
 					} catch {
@@ -398,6 +517,12 @@
 				duplicada: r.duplicada,
 				archivosAgregados: r.archivos_agregados
 			};
+
+			// Entró. Se borra todo: lo guardado lleva cédula, nombres, dirección
+			// y quiénes viven en la casa, y un teléfono se presta.
+			borradorPre.borrar();
+			void evidencias?.limpiar();
+
 			subirAlInicio();
 		} catch (e) {
 			if (e instanceof ApiError) {
@@ -486,6 +611,21 @@
 		<IndicadorProgreso indice={indice + 1} total={pasos.length} titulo={paso.titulo} />
 
 		<p class="ayuda-paso">{paso.ayuda}</p>
+
+		{#if recuperado}
+			<!--
+				Lo primero que ve al volver. Sin este aviso, quien se salió sin
+				querer no sabe si lo que ve es lo suyo de antes o un formulario que
+				se llenó solo, y vuelve a tomar las fotos por si acaso.
+			-->
+			<p class="aviso aviso--ok" role="status">
+				<Check size={15} aria-hidden="true" />
+				Recuperamos lo que llevaba {borradorPre.cuandoFue(recuperado)}, con sus fotos.
+				<button type="button" class="aviso__accion" onclick={empezarDeCero}>
+					Empezar de cero
+				</button>
+			</p>
+		{/if}
 
 		{#if sinVerificar}
 			<!--
@@ -877,6 +1017,23 @@
 </div>
 
 <style>
+	.aviso--ok {
+		background: var(--color-success-bg);
+		color: var(--color-success);
+	}
+
+	.aviso__accion {
+		border: none;
+		background: none;
+		color: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		text-decoration: underline;
+		cursor: pointer;
+		padding: 0;
+		margin-left: 0.35rem;
+	}
+
 	.cedula__titulo {
 		margin: 0 0 0.3rem;
 		font-size: 1.05rem;
