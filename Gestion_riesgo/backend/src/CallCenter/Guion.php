@@ -51,101 +51,68 @@ final class Guion
     /** Un guión más largo que esto no se lee en pantalla: se pierde. */
     public const MAX_LARGO = 20000;
 
+    /**
+     * A donde se manda al ciudadano.
+     *
+     * Vive aqui y no solo dentro del texto porque la pantalla lo pinta aparte,
+     * grande y con boton de copiar: es el mismo numero en las mil trescientas
+     * llamadas, y leerlo de un parrafo trescientas veces al dia es justo la
+     * friccion que hay que quitar.
+     */
+    public const WHATSAPP_OFICIAL = '3106173887';
+
     public const PREDETERMINADO = <<<'TXT'
 ## Antes de marcar
 
-- Mire la ficha en pantalla: el nombre de quien contesta, el barrio y si ya se preinscribió.
-- Si la ficha dice que le faltaron datos o evidencia, empiece por ahí: es una llamada distinta.
-- Tenga el número a la vista y márquelo en el teléfono IP. El sistema no marca por usted.
+- Mire la ficha: nombre, barrio y si ya se preinscribió. Si le faltaron datos o evidencia, empiece por ahí.
+- Marque en el teléfono IP. El sistema no marca por usted.
 
-## Saludo
+## La llamada
 
 » Buenos días. Le habla [su nombre], de la Alcaldía de Jamundí, oficina de Gestión del Riesgo. ¿Hablo con [nombre del ciudadano]?
 
-- Si contesta otra persona, pregunte si puede pasarle o a qué hora conviene volver a llamar. No explique el trámite a un tercero.
+- Si contesta otra persona, pregunte a qué hora conviene volver a llamar. No explique el trámite a un tercero.
 
-» Le llamo porque su hogar quedó registrado en el censo del sismo y falta un paso para continuar el proceso.
+» Le llamo porque su hogar quedó registrado en el censo del sismo y falta un paso para continuar con la inspección de su vivienda.
 
-! Nunca prometa ayuda, subsidio, mercado, arriendo ni una cantidad de dinero. Este formulario registra la solicitud; no la aprueba.
+» Va a guardar un número de WhatsApp: 310 617 3887. Es el número oficial de Gestión del Riesgo de la Alcaldía.
 
-## De qué se trata
+- Dígalo despacio y en dos partes. Espere a que lo anote y pídale que se lo repita.
 
-» Es un formulario en internet donde usted nos cuenta cómo quedó su vivienda y sube fotos y videos. Con eso un ingeniero revisa su caso y programa la visita.
+» Escríbale un mensaje a ese número, el que sea, un «hola» basta. Le va a contestar un asistente automático.
 
-» Se llena desde el celular, con la cámara del mismo celular. Se demora unos quince minutos.
+» Cuando le conteste, responda con el número 1. Ahí mismo le llega el enlace del formulario.
 
-» No tiene ningún costo y no necesita ir a ninguna oficina.
+» Ese formulario le va a pedir la foto de su cédula por las dos caras y al menos cinco fotos de los daños de la casa. Téngalas listas antes de empezar.
 
-## Mandarle el enlace
+## Si le faltó algo
 
-- Use el botón «Mandarle el enlace ahora» mientras la persona sigue al teléfono. No cuelgue antes de confirmar que le llegó.
+- Solo para quien aparece en «Les faltó algo». Es la cola más urgente: ya llenaron el formulario entero y se quedaron a un paso.
 
-» Le acabo de mandar un mensaje con el enlace. ¿Le llegó?
+» Su solicitud no está negada: está esperando que nos complete [lo que diga la ficha].
 
-- Si no tiene WhatsApp, dícteselo despacio: ge, ere, jota, punto, oticjamundi, punto com, barra, preinscripción.
-- Si no tiene celular inteligente o no tiene datos, anote «No tiene cómo llenarlo» en la nota de la llamada y dígale que puede acercarse a la oficina de Gestión del Riesgo. No lo deje sin salida.
+» Escriba otra vez al 310 617 3887, responda 1, y el formulario le abre donde lo dejó.
 
-## Acompañarlo pantalla por pantalla
+## Antes de colgar
 
-» Lo primero que le pide es el número de cédula, sin puntos ni espacios.
+- Confirme que anotó el número. Si no lo tiene, repítalo.
+- Si no tiene WhatsApp, anote VOLVER A LLAMAR y dígalo en la nota: hay que buscarle otra vía.
+- Anote el resultado antes de pasar a la siguiente llamada.
 
-- Si dice que le aparece que no está registrado: verifique que sea la cédula del titular del censo. Si aun así no aparece, dígale que llame al 6025190969, extensión 2070.
+## Si preguntan
 
-» Después le pide sus datos: nombre completo, cédula, teléfono y la dirección de la vivienda afectada. El correo es opcional.
+? ¿Cuánto cuesta? »» Nada. Ni el formulario ni la inspección tienen costo, y nadie de la Alcaldía le va a pedir dinero.
+? ¿Cuándo me visitan? »» Todavía no hay fecha. Primero se revisa su solicitud y después se programa la visita.
+? ¿Me van a dar ayuda? »» Eso no lo decide esta llamada. El formulario es para que un profesional revise su vivienda.
+? No tengo datos en el celular. »» Escribir por WhatsApp gasta muy poco. Si no puede, dele el número a alguien de confianza que sí tenga.
+? Ya llené un formulario antes. »» Que escriba igual al número: si ya está registrado, el asistente se lo confirma.
+? ¿Puedo llamar en vez de escribir? »» Sí, a la línea de atención 6025190969, pero por WhatsApp es más rápido y le queda el enlace guardado.
 
-» La dirección escríbala como se la explicaría a alguien que va a buscar la casa. Si es vereda, ponga el nombre de la vereda y un punto de referencia.
+## Nunca
 
-» Luego le muestra unos dibujos con los daños: paredes agrietadas, paredes caídas, columnas partidas, tejas, techo, piso, tubería y luz. Marque todos los que reconozca en su casa. No hace falta saber de construcción.
-
-» Después le pide las fotos. Pida por lo menos diez: la cédula, la fachada de la casa y cada daño que marcó, de lejos y de cerca.
-
-» Y por último un video corto de cada daño que marcó. Máximo dos minutos cada uno. No hace falta uno solo largo: es mejor uno por cada cosa.
-
-» Al final tiene que aceptar la autorización de datos y darle a enviar.
-
-» Cuando termine le aparece un número de radicado. Anótelo o tómele una foto a la pantalla: con ese número le damos razón de su solicitud.
-
-## Si se le va la señal
-
-» Si se le va la señal a mitad del formulario, no se preocupe ni lo llene otra vez. Queda guardado en el celular y se manda solo cuando le vuelva la conexión.
-
-## Cerrar la llamada
-
-» ¿Le quedó alguna duda de algún paso?
-
-» Si algo no le funciona, llame al 6025190969, extensión 2070, y con mucho gusto le ayudamos.
-
-- Anote la llamada ANTES de marcar el siguiente número. Lo que no queda anotado, el turno de la tarde lo vuelve a llamar.
-
-## Cuando hay que volver a llamar porque le faltó algo
-
-- La ficha le dice qué faltó. Empiece por ahí, no por el saludo del principio.
-
-» Le llamo de nuevo de la Alcaldía. Ya revisamos su solicitud y para poder continuar nos falta [lo que diga la ficha]. ¿Puede volver a entrar al mismo enlace y completarlo?
-
-» Su solicitud no está negada: está esperando ese dato para seguir.
-
-! No diga «se la rechazaron» ni «se la negaron». Está incompleta, que es otra cosa.
-
-## Preguntas que hacen siempre
-
-? ¿Esto tiene algún costo? » Ninguno. Ni el formulario, ni la visita, ni el trámite.
-
-? ¿Me van a dar casa o plata? » Eso yo no se lo puedo prometer. Lo que hace este formulario es registrar su caso para que un ingeniero lo revise y vaya a su vivienda.
-
-? ¿Cuándo me visitan? » No le puedo dar una fecha exacta. Primero se revisa la solicitud y después se programa la visita.
-
-? Ya lo llené. » Permítame y lo confirmo en el sistema.
-
-- Si en la ficha no aparece, casi siempre es que se cerró antes de darle a enviar.
-
-» No me aparece registrado. Es probable que se haya cerrado antes de enviarlo. ¿Puede intentarlo otra vez con el mismo enlace? Yo lo acompaño.
-
-? ¿Cómo sé que ustedes son de la Alcaldía? » Puede colgar y llamar usted al 6025190969, extensión 2070, y preguntar por Gestión del Riesgo. Con gusto lo esperamos.
-
-? No quiero dar mis datos. » Es voluntario y está en su derecho. Solo tenga en cuenta que sin esa autorización no podemos registrar su solicitud.
-
-! Nunca pida claves, códigos que le lleguen por mensaje, número de cuenta ni datos de tarjetas. La Alcaldía no pide eso por teléfono. Si alguien lo ofrece, dígale que no es necesario.
+! Nunca prometa ayuda, mercados, materiales, subsidios ni plazos. Eso no lo decide esta llamada.
+! Nunca pida claves, datos bancarios ni códigos que le lleguen por mensaje. La Alcaldía no los necesita.
+! Nunca diga que la inspección está aprobada. Eso lo decide un profesional después de visitar la casa.
 TXT;
 
     /**

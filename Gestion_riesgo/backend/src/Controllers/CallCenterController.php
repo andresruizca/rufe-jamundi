@@ -750,6 +750,12 @@ final class CallCenterController
         Response::ok([
             'guion' => Guion::vigente(),
             'predeterminado' => Guion::PREDETERMINADO,
+            // El número al que hay que mandar al ciudadano. Viaja aparte del
+            // texto porque la pantalla lo pinta grande y con botón de copiar:
+            // es el mismo en las mil trescientas llamadas, y leerlo de un
+            // párrafo trescientas veces al día es la fricción que hay que
+            // quitar. Si el administrador reescribe el guión, esto no cambia.
+            'whatsapp_oficial' => Guion::WHATSAPP_OFICIAL,
         ]);
     }
 

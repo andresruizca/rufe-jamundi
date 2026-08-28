@@ -11,6 +11,15 @@ import type { GuionVigente } from './tipos';
 
 class AlmacenGuion {
 	guion = $state<GuionVigente | null>(null);
+
+	/**
+	 * El WhatsApp oficial al que hay que mandar al ciudadano.
+	 *
+	 * Va aparte del texto del guión porque la pantalla lo pinta grande y con
+	 * botón de copiar: es el mismo número en las mil trescientas llamadas.
+	 * Aunque el administrador reescriba el guión entero, esto sigue estando.
+	 */
+	whatsappOficial = $state('');
 	/** El texto original del sistema, para «restaurar». */
 	predeterminado = $state('');
 	cargando = $state(false);
@@ -30,6 +39,7 @@ class AlmacenGuion {
 			try {
 				const r = await callCenterApi.guion();
 				this.guion = r.guion;
+				this.whatsappOficial = r.whatsapp_oficial ?? '';
 				this.predeterminado = r.predeterminado;
 			} catch (e) {
 				this.error = e instanceof Error ? e.message : 'No se pudo cargar el guión.';

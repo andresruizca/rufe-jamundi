@@ -54,6 +54,7 @@
 	let guardando = $state(false);
 	let errores = $state<Record<string, string>>({});
 	let copiado = $state(false);
+	let copiadoOficial = $state(false);
 
 	// El envío del enlace por WhatsApp. `aviso` guarda el mensaje del servidor
 	// tal cual: está escrito para leerse —«ya se le envió el 27/08 a las 18:40»,
@@ -132,6 +133,17 @@
 		if (dias === 1) return `ayer a las ${hora}`;
 
 		return `el ${d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })} a las ${hora}`;
+	}
+
+	async function copiarOficial() {
+		try {
+			await navigator.clipboard.writeText(almacenGuion.whatsappOficial);
+			copiadoOficial = true;
+			setTimeout(() => (copiadoOficial = false), 1800);
+		} catch {
+			// Sin permiso de portapapeles el número sigue en pantalla, grande y
+			// separado en grupos, que es para lo que está ahí.
+		}
 	}
 
 	async function copiar() {
@@ -298,6 +310,36 @@
 
 	<!-- ① El guión ─────────────────────────────────────────────────────── -->
 	<section class="bloque bloque--guion">
+		<!--
+			El número al que hay que mandar al ciudadano, arriba del guión y en
+			grande.
+
+			Es el mismo en las mil trescientas llamadas, y es lo único que la
+			operadora tiene que dictar de memoria. Leerlo de un párrafo
+			trescientas veces al día es la fricción que hay que quitar, y un
+			dígito mal dictado manda a la familia a un número que no existe.
+		-->
+		{#if almacenGuion.whatsappOficial}
+			<div class="oficial">
+				<span class="oficial__que">Dígale que escriba por WhatsApp a</span>
+				<strong class="oficial__numero">{agrupar(almacenGuion.whatsappOficial)}</strong>
+				<button
+					type="button"
+					class="oficial__copiar"
+					onclick={copiarOficial}
+					aria-label="Copiar el número oficial de WhatsApp"
+				>
+					{#if copiadoOficial}
+						<Check size={14} aria-hidden="true" />
+						Copiado
+					{:else}
+						<ClipboardCopy size={14} aria-hidden="true" />
+						Copiar
+					{/if}
+				</button>
+				<span class="oficial__paso">Le contesta el asistente · responde <strong>1</strong> · recibe el enlace</span>
+			</div>
+		{/if}
 		{#if almacenGuion.cargando && secciones.length === 0}
 			<p class="cargando">
 				<LoaderCircle size={16} class="girando" aria-hidden="true" />
@@ -589,7 +631,60 @@
 		/* El guión se queda a la vista mientras se rellena el formulario de al
 		   lado. Con desplazamiento propio: si compartiera el de la página, bajar
 		   a «¿Cómo terminó la llamada?» se lo llevaría fuera de la pantalla. */
-		.bloque--guion {
+		/* ── El número oficial ──────────────────────────────────────────────
+	   Lo primero de la columna del guión, y con el contraste más alto de la
+	   pantalla: es lo único que la operadora tiene que dictar de memoria. */
+	.oficial {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.35rem 0.7rem;
+		margin-bottom: 0.9rem;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid var(--color-success);
+		border-radius: 12px;
+		background: var(--color-success-bg);
+	}
+
+	.oficial__que {
+		flex-basis: 100%;
+		font-size: 0.78rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-success);
+	}
+
+	.oficial__numero {
+		font-size: clamp(1.5rem, 4vw, 2rem);
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text);
+	}
+
+	.oficial__copiar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 1px solid var(--color-success);
+		border-radius: 999px;
+		background: none;
+		color: var(--color-success);
+		font-size: 0.8rem;
+		font-weight: 600;
+		padding: 0.25rem 0.7rem;
+		cursor: pointer;
+	}
+
+	.oficial__paso {
+		flex-basis: 100%;
+		font-size: 0.83rem;
+		line-height: 1.4;
+		color: var(--color-muted);
+	}
+
+	.bloque--guion {
 			position: sticky;
 			top: calc(var(--alto-barra, 3.8rem) + 0.5rem);
 			max-height: calc(100vh - var(--alto-barra, 3.8rem) - 1.5rem);

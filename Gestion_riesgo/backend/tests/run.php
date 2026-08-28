@@ -3222,6 +3222,31 @@ prueba('el guión original nunca se puede perder', function (): void {
     );
 });
 
+prueba('el guión manda al ciudadano al WhatsApp oficial', function (): void {
+    // El flujo cambió: la operadora ya no le lee el enlace, le dicta el número
+    // para que ESCRIBA él. WhatsApp no deja escribirle libremente a quien no ha
+    // escrito primero, así que es el ciudadano quien tiene que abrir la puerta.
+    $g = App\CallCenter\Guion::PREDETERMINADO;
+
+    afirmar(str_contains($g, '310 617 3887'), 'el guión no dicta el número oficial');
+    afirmar(str_contains($g, 'responda con el número 1'), 'el guión no dice qué contestarle al asistente');
+
+    // Y el número viaja aparte del texto: la pantalla lo pinta grande y con
+    // botón de copiar. Si el administrador reescribe el guión entero, el número
+    // sigue estando donde la operadora lo ve.
+    afirmarIgual('3106173887', App\CallCenter\Guion::WHATSAPP_OFICIAL, 'cambió el número oficial');
+});
+
+prueba('el guión sigue siendo corto', function (): void {
+    // Se acortó de 96 líneas a la mitad a pedido de la Alcaldía. Un guión que
+    // no cabe en pantalla no se lee: la operadora lo hojea, se salta la parte
+    // de «nunca prometa» y acaba improvisando con una familia damnificada al
+    // teléfono. Este tope no es estética.
+    $lineas = substr_count(trim(App\CallCenter\Guion::PREDETERMINADO), "\n") + 1;
+
+    afirmar($lineas <= 60, "el guión creció a {$lineas} líneas: ya no se lee de un vistazo");
+});
+
 prueba('el guión trae las salvaguardas que protegen a la ciudadanía', function (): void {
     // Tres personas hablan en nombre de la Alcaldía con familias damnificadas.
     // Estas tres frases no son adorno: son lo que separa una campaña de

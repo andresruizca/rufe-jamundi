@@ -269,7 +269,10 @@ export const callCenterApi = {
 	atender: (id: number, soltar = false) =>
 		api.post<{ atendiendo: boolean }>(`/callcenter/hogares/${id}/atencion`, { soltar }),
 
-	guion: () => api.get<{ guion: GuionVigente; predeterminado: string }>('/callcenter/guion'),
+	guion: () =>
+		api.get<{ guion: GuionVigente; predeterminado: string; whatsapp_oficial: string }>(
+			'/callcenter/guion'
+		),
 
 	guardarGuion: (cuerpo: string) =>
 		api.put<{ guion: GuionVigente }>('/callcenter/guion', { cuerpo })
