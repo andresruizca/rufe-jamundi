@@ -114,6 +114,49 @@ final class CallCenterController
     private const SIN_PRE = 'pre.id IS NULL';
 
     /**
+     * Terminó: tiene la inspección de vivienda APROBADA.
+     *
+     * ── Por qué la campaña termina aquí y no en el formulario ────────────────
+     *
+     * Antes, un hogar salía de la cola de llamadas en cuanto se preinscribía, y
+     * eso medía lo que no era. Estar en el RUFE es el REQUISITO para que le
+     * hagan la inspección; llenar el formulario es pedir el turno. Ninguna de
+     * las dos cosas es haber recibido ayuda.
+     *
+     * A quien se preinscribió y sigue esperando al ingeniero todavía le puede
+     * pasar de todo —que le falte evidencia, que no lo encuentren en la
+     * dirección, que se le venza el plazo— y dejarlo fuera de la cola era
+     * dejarlo sin nadie que lo acompañe justo en la mitad del trámite. Los que
+     * no hay que llamar son los que ya tienen la inspección aprobada.
+     *
+     * ── Y por qué también se cruza por cédula ────────────────────────────────
+     *
+     * `rufe_reporte_id` admite nulos: una inspección capturada sin enlazar a su
+     * ficha del censo existiría sin que este cruce la viera, y esa familia
+     * seguiría recibiendo llamadas después de terminar. Se mira también el
+     * documento del propietario contra el del jefe de hogar, igual que ya se
+     * hace con la preinscripción.
+     */
+    private const TERMINADO = 'insp.id IS NOT NULL';
+
+    /** Todavía no ha terminado. */
+    private const SIN_TERMINAR = 'insp.id IS NULL';
+
+    /**
+     * Fuera de la campaña de llamadas.
+     *
+     * Dos motivos, y solo dos: ya terminó, o el ingeniero dictaminó que no
+     * aplica. `COALESCE` y no `pre.motivo_descarte <> ...` porque en SQL la
+     * negación de un NULL es NULL, y esa fila desaparecería de todas las listas
+     * sin que nadie lo notara.
+     */
+    private const NO_APLICA_YA = "pre.id IS NOT NULL AND pre.estado = 'DESCARTADA'
+                                  AND COALESCE(pre.motivo_descarte, '') = 'NO_APLICA'";
+
+    /** Sigue habiendo algo que hacer con este hogar. */
+    private const EN_CAMPANA = 'insp.id IS NULL AND NOT ('.self::NO_APLICA_YA.')';
+
+    /**
      * Cómo se responde una llamada, y qué significa cada respuesta.
      *
      * `YA_DILIGENCIO` es lo que DICE la persona. Que lo haya hecho de verdad lo
@@ -195,6 +238,14 @@ final class CallCenterController
                ON g.id = (SELECT g2.id FROM rufe_gestiones g2
                            WHERE g2.reporte_id = r.id AND g2.canal = \'LLAMADA\'
                            ORDER BY g2.creado_en DESC, g2.id DESC LIMIT 1)
+        LEFT JOIN inspeccion_viviendas insp
+               ON insp.id = (SELECT i2.id FROM inspeccion_viviendas i2
+                              WHERE i2.estado = \'APROBADA\'
+                                AND (i2.rufe_reporte_id = r.id
+                                     OR (jefe.numero_documento IS NOT NULL
+                                         AND jefe.numero_documento <> \'\'
+                                         AND i2.propietario_documento = jefe.numero_documento))
+                              ORDER BY i2.id DESC LIMIT 1)
         LEFT JOIN rufe_atenciones aten
                ON aten.reporte_id = r.id
               AND aten.actualizado_en > (NOW() - INTERVAL '.self::MINUTOS_ATENCION.' MINUTE)
@@ -225,6 +276,8 @@ final class CallCenterController
                     pre.creado_en AS preinscripcion_en,
                     pre.estado AS preinscripcion_estado,
                     pre.motivo_descarte AS preinscripcion_motivo,
+                    insp.numero AS inspeccion_numero,
+                    insp.fecha_evaluacion AS inspeccion_en,
                     aten.usuario_nombre AS atendida_por,
                     aten.usuario_id AS atendida_por_id,
                     aten.actualizado_en AS atendida_en,
@@ -315,12 +368,13 @@ final class CallCenterController
         $fila = Db::first(
             'SELECT
                 COUNT(*) AS total,
-                SUM('.self::PRE_ACTIVA.') AS preinscritos,
-                SUM('.self::PRE_SUBSANABLE.') AS por_subsanar,
+                SUM('.self::TERMINADO.') AS terminados,
+                SUM('.self::PRE_ACTIVA.' AND '.self::SIN_TERMINAR.') AS preinscritos,
+                SUM('.self::PRE_SUBSANABLE.' AND '.self::SIN_TERMINAR.') AS por_subsanar,
                 SUM('.self::PRE_NO_APLICA.') AS no_aplica,
-                SUM('.self::SIN_PRE.' AND g.id IS NOT NULL) AS contactados_sin_preinscribir,
-                SUM('.self::SIN_PRE.' AND g.id IS NULL) AS sin_llamar,
-                SUM('.self::SIN_PRE.' AND g.proxima_llamada IS NOT NULL
+                SUM('.self::EN_CAMPANA.' AND g.id IS NOT NULL) AS contactados_sin_preinscribir,
+                SUM('.self::EN_CAMPANA.' AND g.id IS NULL) AS sin_llamar,
+                SUM('.self::EN_CAMPANA.' AND g.proxima_llamada IS NOT NULL
                     AND g.proxima_llamada <= CURDATE()) AS para_hoy,
                 SUM((r.contacto_telefono IS NULL OR r.contacto_telefono = \'\')
                     AND (jefe.telefono IS NULL OR jefe.telefono = \'\')) AS sin_telefono
@@ -331,6 +385,7 @@ final class CallCenterController
         Response::ok([
             'resumen' => [
                 'total'                        => (int) ($fila['total'] ?? 0),
+                'terminados'                   => (int) ($fila['terminados'] ?? 0),
                 'preinscritos'                 => (int) ($fila['preinscritos'] ?? 0),
                 'por_subsanar'                 => (int) ($fila['por_subsanar'] ?? 0),
                 'no_aplica'                    => (int) ($fila['no_aplica'] ?? 0),
@@ -666,31 +721,43 @@ final class CallCenterController
         $params = ['jefe' => Catalogos::PARENTESCO_JEFE];
 
         switch ($estado) {
+            case 'terminado':
+                // Los únicos que ya no hay que llamar.
+                $where[] = self::TERMINADO;
+                break;
             case 'preinscrito':
-                $where[] = self::PRE_ACTIVA;
+                // Pidió el turno y espera al ingeniero. Sigue en la campaña:
+                // llenar el formulario no es haber recibido la inspección.
+                $where[] = self::PRE_ACTIVA.' AND '.self::SIN_TERMINAR;
                 break;
             case 'subsanar':
                 // El ingeniero la descartó por algo que se arregla. Es la cola
                 // más urgente de todas: son familias que ya hicieron el
                 // esfuerzo de llenar el formulario y se quedaron a un paso.
-                $where[] = self::PRE_SUBSANABLE;
+                $where[] = self::PRE_SUBSANABLE.' AND '.self::SIN_TERMINAR;
                 break;
             case 'no_aplica':
                 $where[] = self::PRE_NO_APLICA;
                 break;
             case 'contactado':
-                $where[] = self::SIN_PRE.' AND g.id IS NOT NULL';
+                $where[] = self::EN_CAMPANA.' AND g.id IS NOT NULL';
                 break;
             case 'reintentar':
-                $where[] = self::SIN_PRE.' AND g.proxima_llamada IS NOT NULL AND g.proxima_llamada <= CURDATE()';
+                $where[] = self::EN_CAMPANA.' AND g.proxima_llamada IS NOT NULL AND g.proxima_llamada <= CURDATE()';
                 break;
             case 'todos':
                 break;
             case 'pendiente':
             default:
-                // Lo que falta por hacer: nadie lo ha llamado y no tiene
-                // ninguna solicitud, ni buena ni descartada.
-                $where[] = self::SIN_PRE.' AND g.id IS NULL';
+                // Lo que falta por hacer: sigue en la campaña y nadie lo ha
+                // llamado todavía.
+                //
+                // Ya NO se exige `pre.id IS NULL`. Quien se preinscribió por su
+                // cuenta —por el enlace que le pasó un vecino, por el bot— y a
+                // quien nadie ha llamado sigue necesitando acompañamiento hasta
+                // que su inspección esté aprobada, y antes desaparecía de todas
+                // las colas sin que nadie hubiera hablado con él.
+                $where[] = self::EN_CAMPANA.' AND g.id IS NULL';
                 break;
         }
 
@@ -930,10 +997,18 @@ final class CallCenterController
             // Lo que el ingeniero decidió, escrito para que la operadora lo
             // pueda leer en voz alta sin traducirlo.
             'descarte' => $descarte,
-            // La única razón para NO marcar este número. Va como un campo
-            // aparte y no deducido en la pantalla: si mañana se añade otro
-            // motivo, se decide aquí y no en cinco sitios.
-            'no_llamar' => $descarte !== null && $descarte['llamar'] === false,
+            // Terminó: el ingeniero le aprobó la inspección de vivienda. Es lo
+            // único que saca a un hogar de la campaña por haber llegado al
+            // final; todo lo demás son etapas del camino.
+            'inspeccion' => ($f['inspeccion_numero'] ?? null) === null ? null : [
+                'numero' => (string) $f['inspeccion_numero'],
+                'fecha'  => $f['inspeccion_en'],
+            ],
+            // Las razones para NO marcar este número. Van como un campo aparte
+            // y no deducidas en la pantalla: si mañana se añade otra, se decide
+            // aquí y no en cinco sitios.
+            'no_llamar' => ($f['inspeccion_numero'] ?? null) !== null
+                           || ($descarte !== null && $descarte['llamar'] === false),
             // Quién lo tiene abierto ahora mismo. Es un aviso entre las tres
             // operadoras, no una reserva: la fila sigue estando disponible.
             'atendida' => $f['atendida_por'] === null ? null : [

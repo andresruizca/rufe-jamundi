@@ -18,6 +18,7 @@
 		BookOpen,
 		Check,
 		CircleDot,
+		ClipboardCheck,
 		ClipboardCopy,
 		Clock,
 		Headphones,
@@ -312,12 +313,22 @@
 				icon={Users}
 				sub="El universo de la campaña"
 			/>
+			<!-- La cifra que mide el final del camino. Antes este sitio lo ocupaba
+			     «ya se preinscribieron», que mide formularios llenados, no
+			     viviendas inspeccionadas. -->
 			<KpiTile
-				label="Ya se preinscribieron"
-				value={resumen.preinscritos}
+				label="Inspección aprobada"
+				value={resumen.terminados}
 				color="var(--color-success)"
 				icon={Check}
-				sub="{porcentaje(resumen.preinscritos, resumen.total)} del censo"
+				sub="{porcentaje(resumen.terminados, resumen.total)} del censo"
+			/>
+			<KpiTile
+				label="Esperan la inspección"
+				value={resumen.preinscritos}
+				color="var(--color-info)"
+				icon={ClipboardCheck}
+				sub="Ya pidieron el turno"
 			/>
 			<KpiTile
 				label="Faltan por llamar"

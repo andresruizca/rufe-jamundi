@@ -9,7 +9,22 @@
 export type ResumenCallCenter = {
 	/** Hogares en el censo. El universo de la campaña. */
 	total: number;
-	/** Ya diligenciaron la preinscripción. Se sabe por el cruce de cédulas. */
+	/**
+	 * Terminaron: tienen la inspección de vivienda APROBADA.
+	 *
+	 * Es la única cifra que mide el final del camino, y los únicos hogares a
+	 * los que ya no hay que llamar. Estar en el RUFE es el requisito para que
+	 * le hagan la inspección; llenar el formulario es pedir el turno. Ninguna
+	 * de las dos cosas es haber recibido ayuda.
+	 */
+	terminados: number;
+	/**
+	 * Pidieron el turno y esperan al ingeniero.
+	 *
+	 * Se sabe por el cruce de cédulas. NO están fuera de la campaña: a quien
+	 * espera la visita todavía le puede faltar evidencia, o pueden no
+	 * encontrarlo en la dirección.
+	 */
 	preinscritos: number;
 	/**
 	 * El ingeniero les descartó la solicitud por algo que se arregla.
@@ -20,9 +35,9 @@ export type ResumenCallCenter = {
 	por_subsanar: number;
 	/** El ingeniero determinó que el caso no aplica. No se vuelven a llamar. */
 	no_aplica: number;
-	/** Se les llamó y aún no la diligencian. */
+	/** Se les llamó y siguen en la campaña. */
 	contactados_sin_preinscribir: number;
-	/** Nadie los ha llamado todavía. */
+	/** Nadie los ha llamado todavía y siguen en la campaña. */
 	sin_llamar: number;
 	/** Quedaron para volver a llamar hoy o antes. */
 	para_hoy: number;
@@ -71,7 +86,15 @@ export type HogarParaLlamar = {
 		llamar: boolean;
 		decirle: string;
 	} | null;
-	/** La única razón para NO marcar este número. La decide el servidor. */
+	/**
+	 * Terminó: el ingeniero le aprobó la inspección de vivienda.
+	 *
+	 * Es lo único que saca a un hogar de la campaña por haber llegado al final.
+	 * Todo lo demás —estar en el RUFE, haber llenado el formulario— son etapas
+	 * del camino.
+	 */
+	inspeccion: { numero: string; fecha: string } | null;
+	/** Las razones para NO marcar este número. Las decide el servidor. */
 	no_llamar: boolean;
 	/** Otra operadora lo tiene abierto ahora mismo. Es un aviso, no una reserva. */
 	atendida: { quien: string; usuario_id: number | null; desde: string } | null;
@@ -106,6 +129,7 @@ export type GuionVigente = {
 
 export type FiltroEstado =
 	| 'pendiente'
+	| 'terminado'
 	| 'subsanar'
 	| 'reintentar'
 	| 'contactado'
@@ -128,6 +152,9 @@ export const PESTANAS: { valor: FiltroEstado; etiqueta: string; urgente?: boolea
 	{ valor: 'reintentar', etiqueta: 'Volver a llamar hoy' },
 	{ valor: 'contactado', etiqueta: 'Ya se les llamó' },
 	{ valor: 'preinscrito', etiqueta: 'Ya se preinscribieron' },
+	// El final del camino, y lo único que saca a un hogar de la campaña por
+	// haber llegado hasta el final. Va después de las etapas, no entre ellas.
+	{ valor: 'terminado', etiqueta: 'Inspección aprobada' },
 	{ valor: 'no_aplica', etiqueta: 'No aplica' },
 	{ valor: 'todos', etiqueta: 'Todos' }
 ];
@@ -137,7 +164,15 @@ export function estadoDe(h: HogarParaLlamar): {
 	texto: string;
 	clase: 'ok' | 'espera' | 'pendiente' | 'problema';
 } {
-	if (h.preinscrita) return { texto: 'Ya se preinscribió', clase: 'ok' };
+	// El final del camino, y lo primero que hay que ver: es el único hogar al
+	// que ya no hay que llamar por haber terminado. Va ANTES de «se preinscribió»
+	// porque quien tiene la inspección aprobada también se preinscribió, y lo
+	// que importa es lo segundo.
+	if (h.inspeccion) return { texto: 'Inspección aprobada', clase: 'ok' };
+
+	// Pidió el turno. No es el final: sigue esperando al ingeniero, y hasta que
+	// llegue le puede faltar evidencia o pueden no encontrarlo en la dirección.
+	if (h.preinscrita) return { texto: 'Espera la inspección', clase: 'espera' };
 
 	// El descarte manda sobre todo lo demás. Un hogar cuya solicitud rechazaron
 	// puede tener diez llamadas anotadas y da igual: lo que la operadora tiene

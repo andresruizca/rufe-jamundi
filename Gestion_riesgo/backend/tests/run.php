@@ -3393,6 +3393,90 @@ prueba('la solicitud que pierde la carrera no pierde sus fotos', function () use
     );
 });
 
+grupo('Cuándo termina la campaña de llamadas');
+
+prueba('solo la inspección aprobada saca a un hogar de la cola', function () use ($raiz): void {
+    // La regla de negocio, dicha por la Alcaldía: estar en el RUFE es el
+    // REQUISITO para que le hagan la inspección de vivienda, y llenar el
+    // formulario es pedir el turno. Ninguna de las dos cosas es haber recibido
+    // ayuda.
+    //
+    // Antes, un hogar salía de la cola en cuanto se preinscribía. A quien pidió
+    // el turno y sigue esperando al ingeniero todavía le puede pasar de todo
+    // —que le falte evidencia, que no lo encuentren, que se le venza el plazo—
+    // y sacarlo de la cola lo dejaba sin nadie que lo acompañe justo en la
+    // mitad del trámite. Peor: la cifra de avance que se le reporta a la
+    // Alcaldía medía formularios llenados, no viviendas inspeccionadas.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    preg_match('/private const TERMINADO = (.*?);/s', $php, $m);
+    afirmar(isset($m[1]) && str_contains($m[1], 'insp.id IS NOT NULL'), 'TERMINADO ya no mira la inspección');
+
+    // La pestaña «falta llamar» NO puede volver a exigir que no haya
+    // preinscripción: quien se preinscribió solo y a quien nadie ha llamado
+    // desaparecía de todas las colas sin que nadie hubiera hablado con él.
+    preg_match('/case \'pendiente\':.*?break;/s', $php, $mp);
+    afirmar(isset($mp[0]), 'no se encontró el caso «pendiente»');
+    afirmar(
+        ! str_contains($mp[0], 'SIN_PRE'),
+        'la cola de llamadas volvió a excluir a quien se preinscribió sin que lo llamaran'
+    );
+    afirmar(
+        str_contains($mp[0], 'EN_CAMPANA'),
+        'la cola de llamadas no usa el criterio de seguir en campaña'
+    );
+});
+
+prueba('la inspección se reconoce aunque no la enlazaran a la ficha', function () use ($raiz): void {
+    // `inspeccion_viviendas.rufe_reporte_id` admite nulos. Una inspección
+    // capturada sin enlazar existiría sin que el cruce la viera, y esa familia
+    // seguiría recibiendo llamadas después de terminar su trámite.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    preg_match('/private const CRUCE = \'(.*?)\';/s', $php, $m);
+    $cruce = $m[1] ?? '';
+
+    afirmar(str_contains($cruce, 'inspeccion_viviendas i2'), 'el cruce no mira las inspecciones');
+    afirmar(str_contains($cruce, "i2.estado = \\'APROBADA\\'"), 'cuenta inspecciones que no están aprobadas');
+    afirmar(str_contains($cruce, 'i2.rufe_reporte_id = r.id'), 'no cruza por la ficha del censo');
+    afirmar(
+        str_contains($cruce, 'i2.propietario_documento = jefe.numero_documento'),
+        'no cruza por cédula: una inspección sin enlazar dejaría al hogar recibiendo llamadas'
+    );
+});
+
+prueba('salir de la campaña por «no aplica» sobrevive a un motivo en blanco', function () use ($raiz): void {
+    // En SQL la negación de NULL es NULL, y una fila cuyo motivo estuviera en
+    // blanco desaparecería de TODAS las listas sin que nadie lo notara: ni en
+    // «falta llamar», ni en «ya se les llamó», ni en ninguna. Un hogar
+    // damnificado invisible es el peor resultado posible de esta pantalla.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    preg_match('/private const NO_APLICA_YA = (.*?);/s', $php, $m);
+
+    afirmar(isset($m[1]), 'no se encontró NO_APLICA_YA');
+    afirmar(
+        str_contains($m[1], 'COALESCE(pre.motivo_descarte'),
+        'sin COALESCE, un motivo en blanco hace desaparecer al hogar de todas las listas'
+    );
+});
+
+prueba('el resumen cuenta viviendas inspeccionadas, no formularios llenados', function () use ($raiz): void {
+    // Es la cifra que se le reporta a la Alcaldía.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $resumen = substr($php, strpos($php, 'public function resumen('), 2500);
+
+    afirmar(str_contains($resumen, 'AS terminados'), 'el resumen no cuenta los terminados');
+    afirmar(
+        str_contains($resumen, "'terminados'"),
+        'el conteo de terminados no llega a la pantalla'
+    );
+    afirmar(
+        substr_count($resumen, 'EN_CAMPANA') >= 3,
+        'las cifras de la campaña siguen contando por preinscripción y no por inspección'
+    );
+});
+
 grupo('El buscador del call center');
 
 prueba('una búsqueda sin resultados dice si los hay en otra lista', function () use ($raiz): void {
@@ -3547,14 +3631,28 @@ prueba('el cruce del call center da UNA fila por hogar, pase lo que pase', funct
 
     $cruce = $m[1];
 
-    foreach (['preinscripciones pre', 'rufe_personas jefe', 'rufe_gestiones g'] as $tabla) {
+    // Las cuatro que pueden traer más de una fila por hogar. Se nombran una a
+    // una en vez de contarlas: así, añadir una quinta obliga a decidir aquí si
+    // también necesita su LIMIT, en vez de subir un número y seguir.
+    $unaFilaPorHogar = [
+        'rufe_personas jefe' => 'j2',
+        'preinscripciones pre' => 'p2',
+        'rufe_gestiones g' => 'g2',
+        // Una casa puede tener varias inspecciones: una rechazada y otra
+        // aprobada después. Sin LIMIT, el hogar saldría dos veces en la lista y
+        // dos veces en el resumen — el mismo fallo que ya tuvo el cruce con la
+        // preinscripción, y que infló la cifra de avance de la campaña.
+        'inspeccion_viviendas i2' => 'i2',
+    ];
+
+    foreach ($unaFilaPorHogar as $tabla => $alias) {
         afirmar(str_contains($cruce, $tabla), "el cruce ya no une con {$tabla}");
     }
 
-    // Cada tabla del cruce tiene que engancharse por `id = (SELECT … LIMIT 1)`.
+    // Cada una tiene que engancharse por `id = (SELECT … LIMIT 1)`.
     // Sin el LIMIT, una fila de más al otro lado multiplica el hogar.
     afirmarIgual(
-        3,
+        count($unaFilaPorHogar),
         preg_match_all('/LIMIT 1\)/', $cruce),
         'cada tabla del cruce debe engancharse por una subconsulta con LIMIT 1'
     );

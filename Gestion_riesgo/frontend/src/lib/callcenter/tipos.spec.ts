@@ -14,6 +14,7 @@ function hogar(extra: Partial<HogarParaLlamar> = {}): HogarParaLlamar {
 		fecha_evento: '2026-08-01',
 		preinscrita: false,
 		preinscripcion: null,
+		inspeccion: null,
 		descarte: null,
 		no_llamar: false,
 		atendida: null,
@@ -30,13 +31,19 @@ function ultima(resultado: string) {
 }
 
 describe('el estado de un hogar', () => {
-	it('preinscrito manda sobre todo lo demás', () => {
-		// Aunque la última llamada dijera «no contesta»: si ya está en el
-		// formulario, la campaña terminó para ese hogar.
+	it('preinscrito manda sobre el historial de llamadas', () => {
+		// Aunque la última llamada dijera «no contesta»: lo que hizo la familia
+		// pesa más que lo que pasó en el teléfono.
+		//
+		// Lo que cambió es qué SIGNIFICA: antes decía «Ya se preinscribió» en
+		// verde, como si la campaña hubiera terminado para ese hogar. No había
+		// terminado. Estar en el RUFE es el requisito para que le hagan la
+		// inspección y llenar el formulario es pedir el turno; el final es la
+		// inspección aprobada.
 		const h = hogar({ preinscrita: true, ultima: ultima('NO_CONTESTA') });
 
-		expect(estadoDe(h).texto).toBe('Ya se preinscribió');
-		expect(estadoDe(h).clase).toBe('ok');
+		expect(estadoDe(h).texto).toBe('Espera la inspección');
+		expect(estadoDe(h).clase).not.toBe('ok');
 	});
 
 	it('un rechazo subsanable manda sobre el historial de llamadas', () => {
@@ -76,7 +83,7 @@ describe('el estado de un hogar', () => {
 		// como rechazada y la volverían a llamar.
 		const h = hogar({ preinscrita: true, descarte: null });
 
-		expect(estadoDe(h).clase).toBe('ok');
+		expect(estadoDe(h).texto).toBe('Espera la inspección');
 	});
 
 	it('sin ninguna llamada es trabajo por hacer, no un problema', () => {
@@ -122,5 +129,41 @@ describe('las pestañas', () => {
 	it('abren en el trabajo del día, no en el resultado', () => {
 		expect(PESTANAS[0].valor).toBe('pendiente');
 		expect(PESTANAS[PESTANAS.length - 1].valor).toBe('todos');
+	});
+});
+
+
+describe('cuándo un hogar sale de la campaña', () => {
+	// La regla de negocio: estar en el RUFE es el REQUISITO para que le hagan la
+	// inspección de vivienda, y llenar el formulario es pedir el turno. Ninguna
+	// de las dos cosas es haber recibido ayuda. Solo se deja de llamar a quien
+	// ya tiene la inspección aprobada.
+	const aprobada = { numero: 'INS-2026-000001', fecha: '2026-08-27' };
+
+	it('la inspección aprobada es lo único que marca el final', () => {
+		expect(estadoDe(hogar({ inspeccion: aprobada })).texto).toBe('Inspección aprobada');
+		expect(estadoDe(hogar({ inspeccion: aprobada })).clase).toBe('ok');
+	});
+
+	it('haberse preinscrito ya no se pinta como terminado', () => {
+		// Antes decía «Ya se preinscribió» en verde, y esa familia desaparecía de
+		// la cola. Sigue esperando al ingeniero: puede faltarle evidencia, o
+		// pueden no encontrarla en la dirección.
+		const st = estadoDe(hogar({ preinscrita: true }));
+
+		expect(st.texto).toBe('Espera la inspección');
+		expect(st.clase).not.toBe('ok');
+	});
+
+	it('con inspección aprobada manda la inspección, no la preinscripción', () => {
+		// Quien tiene la inspección aprobada también se preinscribió. Si el orden
+		// se invirtiera, el final del camino no se vería nunca.
+		expect(estadoDe(hogar({ preinscrita: true, inspeccion: aprobada })).texto).toBe(
+			'Inspección aprobada'
+		);
+	});
+
+	it('la lista de pestañas ofrece ver a los que ya terminaron', () => {
+		expect(PESTANAS.map((p) => p.valor)).toContain('terminado');
 	});
 });
