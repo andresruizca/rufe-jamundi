@@ -382,6 +382,66 @@
 
 	let listaEl = $state<HTMLElement | null>(null);
 
+	// ── El resumen, pegado arriba ───────────────────────────────────────────
+	//
+	// Desde que las tarjetas filtran, no son un adorno del encabezado: son la
+	// barra de herramientas de la pantalla. Dejarlas fijas evita subir hasta
+	// arriba cada vez que hay que cambiar de cola en mitad de una lista de
+	// cuarenta hogares.
+	//
+	// Pero completas ocupan un tercio de la pantalla, y lo que se vino a leer
+	// es la lista. Así que al pegarse se encoge: se va el título, se va la
+	// descripción y se van los pies de las tarjetas. Queda el nombre, el número
+	// y cuál está abierta, que es lo único que hace falta de un vistazo.
+
+	let pegada = $state(false);
+	let resumenEl = $state<HTMLElement | null>(null);
+	let centinelaEl = $state<HTMLElement | null>(null);
+
+	/**
+	 * Saber si ya está pegada.
+	 *
+	 * No se puede preguntar en CSS, así que se vigila un testigo de un píxel
+	 * puesto justo encima: cuando deja de verse, la tarjeta llegó a su tope.
+	 *
+	 * El margen se saca del `top` que la propia hoja de estilos le resolvió, y
+	 * no de un número escrito aquí: la altura de la barra superior es suya y
+	 * cambiarla no puede desajustar esto en silencio.
+	 */
+	$effect(() => {
+		const tarjeta = resumenEl;
+		const centinela = centinelaEl;
+		if (!tarjeta || !centinela) return;
+
+		// Solo donde las nueve caben en una fila. Por debajo se reparten en
+		// tres o cuatro, y fijas no dejarían lista que mirar.
+		const ancha = window.matchMedia('(min-width: 1250px)');
+		let observador: IntersectionObserver | null = null;
+
+		const vigilar = () => {
+			observador?.disconnect();
+			observador = null;
+			pegada = false;
+
+			if (!ancha.matches) return;
+
+			const tope = parseFloat(getComputedStyle(tarjeta).top) || 0;
+
+			observador = new IntersectionObserver(([visto]) => (pegada = !visto.isIntersecting), {
+				rootMargin: `-${tope + 1}px 0px 0px 0px`
+			});
+			observador.observe(centinela);
+		};
+
+		vigilar();
+		ancha.addEventListener('change', vigilar);
+
+		return () => {
+			observador?.disconnect();
+			ancha.removeEventListener('change', vigilar);
+		};
+	});
+
 	function buscar(e: Event) {
 		e.preventDefault();
 		if (esperaTecleo) clearTimeout(esperaTecleo);
@@ -450,7 +510,15 @@
 	}
 </script>
 
-<div class="tarjeta">
+<!-- El testigo de un píxel que avisa cuando el resumen llega a su tope. -->
+<div class="centinela" bind:this={centinelaEl} aria-hidden="true"></div>
+
+<div
+	class="tarjeta resumen"
+	class:resumen--fija={!atendiendo}
+	class:resumen--pegada={pegada && !atendiendo}
+	bind:this={resumenEl}
+>
 	<!--
 		El enlace del formulario, arriba y siempre a mano.
 
@@ -973,6 +1041,53 @@
 
 	   Por debajo de 1250 px no se leen todas seguidas, así que se vuelven a
 	   repartir en las filas que hagan falta. */
+	/* ── El resumen pegado arriba ──────────────────────────────────────────
+
+	   Solo desde 1250 px, que es donde las nueve tarjetas caben en una fila.
+	   Por debajo ocupan tres o cuatro y fijas no dejarían lista que mirar: la
+	   operadora se quedaría desplazando cifras en vez de hogares.
+
+	   Y NO mientras se atiende una llamada. Ahí la pantalla es el guión que se
+	   está leyendo en voz alta con una persona esperando al otro lado; robarle
+	   un tercio del alto para unas cifras que en ese momento no se miran sería
+	   cambiar la herramienta por el adorno.
+
+	   `z-index: 15` para quedar por DEBAJO de la barra superior (40) y del menú
+	   lateral (60), igual que hace la barra de filtros del tablero. */
+	.centinela {
+		height: 1px;
+	}
+
+	@media (min-width: 1250px) {
+		.resumen--fija {
+			position: sticky;
+			top: calc(var(--alto-barra, 3.8rem) + 8px);
+			z-index: 15;
+		}
+
+		/* Ya pegada: se encoge a lo imprescindible. Lo que se vino a leer es la
+		   lista, no el encabezado. */
+		.resumen--pegada {
+			padding-top: 0.7rem;
+			padding-bottom: 0.7rem;
+			box-shadow: var(--shadow-lg);
+		}
+
+		.resumen--pegada .encabezado {
+			display: none;
+		}
+
+		.resumen--pegada .kpi-grid {
+			margin-top: 0;
+		}
+
+		/* El pie de cada tarjeta —«El universo de la campaña»— explica la cifra
+		   la primera vez que se lee. Pegada arriba ya no explica nada: repite. */
+		.resumen--pegada :global(.kpi-sub) {
+			display: none;
+		}
+	}
+
 	.kpi-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
