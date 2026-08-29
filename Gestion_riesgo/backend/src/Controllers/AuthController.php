@@ -8,11 +8,65 @@ use App\Core\Auditoria;
 use App\Core\Auth;
 use App\Core\Db;
 use App\Core\HttpError;
+use App\Core\Limite;
 use App\Core\Request;
 use App\Core\Response;
 
 final class AuthController
 {
+    /**
+     * Cuántos intentos fallidos se toleran, y en cuánto tiempo.
+     *
+     * ── El agujero que esto cierra ───────────────────────────────────────────
+     *
+     * `/auth/login` es una de las trece rutas que se pueden llamar sin sesión, y
+     * era la única sin freno: se podían probar contraseñas indefinidamente desde
+     * una sola IP. Detrás de esa puerta hay nombres, teléfonos y direcciones de
+     * mil trescientos hogares damnificados.
+     *
+     * ── Por qué dos cubetas y no una ────────────────────────────────────────
+     *
+     * Por IP se para a quien prueba mil contraseñas desde un sitio. Pero la
+     * cubeta por CUENTA es la que de verdad protege a una persona concreta: sin
+     * ella, repartir los intentos entre cincuenta direcciones —cosa trivial— deja
+     * el freno por IP en nada mientras se martillea una sola cuenta.
+     *
+     * ── Y por qué solo cuentan los fallos ───────────────────────────────────
+     *
+     * Se comprueba ANTES de validar y se consume solo DESPUÉS de fallar. Si cada
+     * entrada gastara cupo, una operadora que entra y sale varias veces en la
+     * mañana —cosa que pasa— se quedaría fuera de su propio turno sin haberse
+     * equivocado ni una vez.
+     */
+    private const MAX_FALLOS_IP = 10;
+
+    private const MAX_FALLOS_CUENTA = 5;
+
+    /** Quince minutos. Larga para molestar a un robot, corta para una persona. */
+    private const VENTANA_FALLOS = 900;
+    /**
+     * Corta si esta IP o esta cuenta ya agotó sus intentos.
+     *
+     * Mira sin consumir. El mensaje no dice si el correo existe —sería el mismo
+     * para uno inventado— y sí dice qué hacer: una persona que de verdad olvidó
+     * su contraseña tiene que saber que espera quince minutos, no quedarse
+     * mirando un error que no explica nada.
+     */
+    private function exigirCupo(string $accion, string $sujeto, int $maximo): void
+    {
+        if (Limite::usos($accion, $sujeto, self::VENTANA_FALLOS) < $maximo) {
+            return;
+        }
+
+        header('Retry-After: '.self::VENTANA_FALLOS);
+
+        throw new HttpError(
+            'Demasiados intentos fallidos. Espere quince minutos y vuelva a intentarlo. '
+            .'Si olvidó su contraseña, pídale a un administrador que se la restablezca.',
+            429
+        );
+    }
+
     public function login(Request $req): void
     {
         $email = strtolower($req->texto('email'));
@@ -24,6 +78,12 @@ final class AuthController
                 'password' => $password === '' ? 'Escribe tu contraseña.' : '',
             ]);
         }
+
+        // Se MIRA el cupo, no se consume: quien acierta la contraseña no gasta
+        // nada. La clave viaja ya con sal y hash dentro de `Limite`, así que el
+        // correo no queda escrito en la tabla de límites.
+        $this->exigirCupo('auth.login.ip', $req->ip(), self::MAX_FALLOS_IP);
+        $this->exigirCupo('auth.login.cuenta', $email, self::MAX_FALLOS_CUENTA);
 
         $usuario = Db::first(
             'SELECT id, nombre, email, password_hash, rol, activo
@@ -39,6 +99,13 @@ final class AuthController
         $correcto = password_verify($password, $hash);
 
         if ($usuario === null || ! $correcto) {
+            // Se consume en las dos cubetas, exista el correo o no. Consumir solo
+            // cuando el usuario existe convertiría el propio freno en un delator:
+            // bastaría contar intentos hasta el bloqueo para saber qué correos
+            // están registrados.
+            Limite::consumir('auth.login.ip', $req->ip(), self::MAX_FALLOS_IP, self::VENTANA_FALLOS);
+            Limite::consumir('auth.login.cuenta', $email, self::MAX_FALLOS_CUENTA, self::VENTANA_FALLOS);
+
             Auditoria::registrar($req, 'login.fallido', null, 'usuarios', null, "Intento con {$email}");
             throw new HttpError('Correo o contraseña incorrectos.', 401);
         }

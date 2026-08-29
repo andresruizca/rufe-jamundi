@@ -3740,6 +3740,59 @@ prueba('un barrio se reconoce escrito de cualquier manera', function (): void {
     afirmar(! App\Rufe\CatalogoBarrios::reconocido('Barrio Que No Existe'), 'reconoció un barrio inventado');
 });
 
+grupo('El login contra la fuerza bruta');
+
+prueba('probar contraseñas indefinidamente ya no es posible', function () use ($raiz): void {
+    // `/auth/login` era la única de las trece rutas sin sesión que no tenía
+    // freno. Detrás de esa puerta hay nombres, teléfonos y direcciones de mil
+    // trescientos hogares damnificados, y circula una contraseña temporal.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/AuthController.php');
+    $login = metodoDe($php, 'public function login(');
+
+    afirmar(str_contains($login, "exigirCupo('auth.login.ip'"), 'el login no frena por IP');
+    afirmar(str_contains($login, "exigirCupo('auth.login.cuenta'"), 'el login no frena por cuenta');
+});
+
+prueba('el freno por cuenta existe además del de IP', function () use ($raiz): void {
+    // Sin él, repartir los intentos entre cincuenta direcciones —trivial— deja
+    // el freno por IP en nada mientras se martillea una sola cuenta.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/AuthController.php');
+
+    preg_match('/MAX_FALLOS_CUENTA = (\d+)/', $php, $c);
+    preg_match('/MAX_FALLOS_IP = (\d+)/', $php, $i);
+
+    afirmar(isset($c[1]) && isset($i[1]), 'faltan los topes');
+    afirmar((int) $c[1] < (int) $i[1], 'el tope por cuenta debe ser MÁS estrecho que el de IP');
+    afirmar((int) $c[1] >= 3, 'un tope menor que 3 deja fuera a quien se equivoca de mayúsculas');
+});
+
+prueba('acertar la contraseña no gasta cupo', function () use ($raiz): void {
+    // Se mira antes de validar y se consume solo después de fallar. Si cada
+    // entrada gastara, una operadora que entra y sale varias veces en la mañana
+    // se quedaría fuera de su propio turno sin equivocarse ni una vez.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/AuthController.php');
+    $login = metodoDe($php, 'public function login(');
+
+    $dondeConsume = strpos($login, 'Limite::consumir');
+    $dondeFalla = strpos($login, 'if ($usuario === null || ! $correcto)');
+
+    afirmar($dondeConsume !== false, 'el login no consume cupo al fallar');
+    afirmar($dondeConsume > $dondeFalla, 'el login consume cupo antes de saber si falló');
+});
+
+prueba('el freno no delata qué correos existen', function () use ($raiz): void {
+    // Consumir solo cuando el usuario existe convertiría el propio freno en un
+    // delator: bastaría contar intentos hasta el bloqueo para enumerar cuentas.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/AuthController.php');
+    $login = metodoDe($php, 'public function login(');
+
+    // Las dos llamadas a consumir viven en la MISMA rama que el 401, la que se
+    // toma tanto si el correo no existe como si la contraseña es incorrecta.
+    $rama = substr($login, strpos($login, 'if ($usuario === null || ! $correcto)'), 700);
+
+    afirmarIgual(2, substr_count($rama, 'Limite::consumir'), 'las dos cubetas deben consumirse siempre que se falle');
+});
+
 grupo('El buscador del call center');
 
 prueba('una búsqueda sin resultados dice si los hay en otra lista', function () use ($raiz): void {
