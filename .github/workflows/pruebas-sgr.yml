@@ -1,0 +1,121 @@
+# Las pruebas del Sistema de Gestión del Riesgo, en cada empujón.
+#
+# ── Por qué existe ───────────────────────────────────────────────────────────
+#
+# Había 1.071 pruebas y ninguna corría sola: dependían de que alguien se
+# acordara de ejecutarlas antes de desplegar. En un sistema que atiende a mil
+# trescientas familias damnificadas, «acordarse» no es un control.
+#
+# Y no es hipotético. En una sola jornada estas pruebas detuvieron tres veces
+# un cambio que habría roto producción, incluida una migración que iba a perder
+# un valor de un ENUM con filas vivas.
+#
+# ── Por qué no despliega ─────────────────────────────────────────────────────
+#
+# A propósito. El despliegue va por la API de cPanel con un token de la cuenta
+# entera de la Alcaldía, y meterlo aquí significaría guardarlo en GitHub —que
+# es justo el problema que esta misma auditoría encontró—. Esto comprueba; el
+# despliegue sigue siendo un acto deliberado.
+
+name: Pruebas SGR
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'Gestion_riesgo/backend/**'
+      - 'Gestion_riesgo/frontend/**'
+      - '.github/workflows/pruebas-sgr.yml'
+  pull_request:
+    paths:
+      - 'Gestion_riesgo/backend/**'
+      - 'Gestion_riesgo/frontend/**'
+
+# Un empujón nuevo cancela la comprobación anterior de la misma rama: interesa
+# el estado de lo último, no la cola de lo que ya quedó atrás.
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · PHP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # La misma versión que corre en el hosting. Probar contra otra sería
+      # probar contra un sistema que no existe.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      # Sin Composer a propósito: el hosting no tiene consola y el proyecto usa
+      # un autoloader propio. Instalar dependencias aquí probaría algo distinto
+      # de lo que se despliega.
+      - name: Sintaxis de todo el PHP
+        working-directory: Gestion_riesgo/backend
+        run: find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Pruebas
+        working-directory: Gestion_riesgo/backend
+        run: php tests/run.php
+
+  frontend:
+    name: Frontend · Svelte
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Gestion_riesgo/frontend/package-lock.json
+
+      - name: Instalar
+        working-directory: Gestion_riesgo/frontend
+        run: npm ci
+
+      - name: Tipos
+        working-directory: Gestion_riesgo/frontend
+        run: npx svelte-check --threshold error
+
+      - name: Pruebas
+        working-directory: Gestion_riesgo/frontend
+        run: npm test
+
+      # Que compile es parte de la comprobación: un error de compilación no lo
+      # caza ninguna prueba y deja el despliegue a medias.
+      - name: Compilar
+        working-directory: Gestion_riesgo/frontend
+        run: npm run build
+
+  secretos:
+    name: Secretos y datos personales
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # El 28 de agosto de 2026 se encontró un token vivo de Zavu y doce cédulas
+      # de personas del censo en un repositorio que estaba en público. Esto no
+      # los habría impedido —ya estaban— pero sí impide los siguientes.
+      - name: Buscar secretos versionados
+        run: |
+          if git ls-files -z | xargs -0 grep -lE 'zv_live_[A-Za-z0-9]{16}|ghp_[A-Za-z0-9]{30}|-----BEGIN [A-Z ]*PRIVATE KEY-----' 2>/dev/null; then
+            echo "::error::Hay un secreto versionado en los archivos de arriba."
+            exit 1
+          fi
+          echo "Sin secretos versionados."
+
+      - name: Buscar datos personales sueltos
+        run: |
+          # Un CSV o un Excel bajo scripts/ casi siempre sale de consultar datos
+          # reales del censo. Se bloquea por si acaso: el coste de un falso
+          # positivo es cero comparado con publicar cédulas de damnificados.
+          if git ls-files 'Gestion_riesgo/backend/scripts/*.csv' 'Gestion_riesgo/backend/scripts/*.xls*' | grep .; then
+            echo "::error::Hay archivos de datos versionados bajo backend/scripts/."
+            exit 1
+          fi
+          echo "Sin volcados de datos versionados."
