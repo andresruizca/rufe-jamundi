@@ -4200,7 +4200,6 @@ prueba('el buscador de la bandeja ciudadana no repite marcadores', function () u
     // texto y no funcionaría nunca. Es exactamente como estuvo roto el buscador
     // del censo durante semanas, así que aquí se vigila desde el primer día.
     $metodo = new ReflectionMethod(App\Controllers\PreinscripcionController::class, 'busqueda');
-    $metodo->setAccessible(true);
 
     foreach (['Juan Pérez', '16844290', 'Cra 78', 'juan 3126058353'] as $texto) {
         [$sql, $params] = $metodo->invoke(null, $texto);
@@ -4223,7 +4222,6 @@ prueba('la bandeja ciudadana busca la cédula exacta, no por trozos', function (
     // Un documento parcial devolvería decenas de familias ajenas y convertiría
     // el buscador en una forma de pasear por el censo de damnificados.
     $metodo = new ReflectionMethod(App\Controllers\PreinscripcionController::class, 'busqueda');
-    $metodo->setAccessible(true);
 
     [$sql, $params] = $metodo->invoke(null, '16844290');
 
