@@ -121,9 +121,29 @@ sw.addEventListener('install', (evento) => {
 				})
 			);
 
-			// Se activa de inmediato: esperar a que se cierren las pestañas solo
-			// retrasaría el envío de las fichas pendientes.
-			await sw.skipWaiting();
+			// ── Por qué YA NO se activa de inmediato ─────────────────────
+			//
+			// Antes había aquí un `skipWaiting()` sin condiciones, y eso rompía
+			// las pestañas abiertas. La aplicación carga cada pantalla en un
+			// archivo aparte y con el contenido en el nombre; al activarse la
+			// versión nueva se borran las cachés viejas, y la pestaña que
+			// seguía ejecutando la versión anterior pedía un archivo con el
+			// nombre de antes: ya no está ni en la caché ni en el servidor.
+			// Resultado, pantalla en blanco al pulsar cualquier enlace.
+			//
+			// Ahora la versión nueva espera, la pantalla avisa, y solo se
+			// activa cuando la persona acepta (ver `aplicar-actualizacion`).
+			//
+			// Y no retrasa el envío de nada: la versión ANTERIOR sigue viva y
+			// activa mientras tanto, con su cola y su `sync` funcionando. Lo
+			// que espera es el cambio, no el trabajo.
+			//
+			// La excepción es la primera instalación: ahí no hay ninguna
+			// pestaña que romper ni nada anterior que respetar, y hacerla
+			// esperar dejaría la primera visita sin aplicación guardada.
+			if (sw.registration.active === null) {
+				await sw.skipWaiting();
+			}
 		})()
 	);
 });
@@ -142,9 +162,12 @@ sw.addEventListener('activate', (evento) => {
 
 			await sw.clients.claim();
 
-			// Se avisa a las pestañas abiertas en vez de recargarlas por sorpresa:
-			// recargar a alguien a mitad de una ficha sería peor que dejarle con la
-			// versión anterior un rato más.
+			// Quien mira la versión nueva es la PÁGINA, vigilando el registro
+			// (ver `+layout.svelte`): así se entera de que hay una esperando
+			// antes de que se active, que es justo cuando hay que preguntar.
+			// Este aviso queda para el caso en que se active sin que nadie la
+			// haya aceptado —todas las pestañas cerradas—, y para las que
+			// pudieran seguir abiertas con la versión anterior.
 			await avisarALaPagina({ tipo: 'version-nueva', version });
 		})()
 	);
@@ -274,14 +297,16 @@ async function responder(peticion: Request, url: URL): Promise<Response> {
 	// —así una versión nueva se ve en cuanto hay señal— y si no hay, el guardado.
 	if (peticion.mode === 'navigate') {
 		try {
-			const red = await fetch(peticion);
+			const red = await conTiempoLimite(peticion);
 			if (red.ok) return red;
 		} catch {
-			// Sin señal: se sigue con lo guardado.
+			// Sin señal, o tardando demasiado: se sigue con lo guardado.
 		}
 
 		const armazon = (await cache.match(`${base}/`)) ?? (await cache.match('/200.html'));
 		if (armazon) return armazon;
+
+		return sinConexion();
 	}
 
 	try {
@@ -297,8 +322,70 @@ async function responder(peticion: Request, url: URL): Promise<Response> {
 		const guardado = await cache.match(url.pathname);
 		if (guardado) return guardado;
 
-		throw new Error('Sin conexión y sin copia guardada.');
+		// Lanzar aquí dejaba al navegador enseñando SU pantalla de error, la
+		// del dinosaurio, que no dice nada de este sistema ni de que las
+		// fichas guardadas siguen a salvo.
+		return sinConexion();
 	}
+}
+
+/** Cuánto se espera a la red antes de tirar de lo guardado. */
+const ESPERA_RED_MS = 4000;
+
+/**
+ * Pedir a la red, pero sin quedarse esperando para siempre.
+ *
+ * ── Por qué hace falta ───────────────────────────────────────────────────────
+ *
+ * `fetch` solo se rechaza cuando la conexión FALLA. En una vereda con una raya
+ * de señal no falla: se queda colgada, a veces minutos. Y como la respuesta de
+ * la caché solo llegaba en el `catch`, la persona se quedaba mirando una
+ * pantalla en blanco con la aplicación entera guardada en su propio teléfono.
+ *
+ * Cuatro segundos: bastante para una red lenta pero viva, poco para que alguien
+ * de pie en un patio piense que se rompió.
+ */
+async function conTiempoLimite(peticion: Request): Promise<Response> {
+	const corte = new AbortController();
+	const reloj = setTimeout(() => corte.abort(), ESPERA_RED_MS);
+
+	try {
+		return await fetch(peticion, { signal: corte.signal });
+	} finally {
+		clearTimeout(reloj);
+	}
+}
+
+/**
+ * La última red: una página propia cuando no hay ni señal ni copia.
+ *
+ * Pasa poco —el armazón se guarda en la instalación— pero cuando pasa, lo que
+ * la persona necesita saber es que lo suyo no se perdió.
+ */
+function sinConexion(): Response {
+	return new Response(
+		`<!doctype html>
+<html lang="es-CO"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sin conexión — SGR Jamundí</title>
+<style>
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:2rem;
+         background:#0b1526; color:#eef3fb; text-align:center;
+         font-family: system-ui, -apple-system, sans-serif; line-height:1.55 }
+  h1 { font-size:1.25rem; margin:0 0 .6rem }
+  p { margin:0 0 .5rem; color:#93a1bc; max-width:30rem }
+  button { margin-top:1.2rem; padding:.6rem 1.2rem; border:0; border-radius:8px;
+           background:#2e6fb0; color:#fff; font:inherit; font-weight:600; cursor:pointer }
+</style></head>
+<body><div>
+  <h1>Sin conexión</h1>
+  <p>No hay señal y esta pantalla todavía no estaba guardada en el aparato.</p>
+  <p><strong>Lo que ya había registrado no se ha perdido</strong>: las fichas
+     guardadas se envían solas en cuanto vuelva la cobertura.</p>
+  <button onclick="location.reload()">Reintentar</button>
+</div></body></html>`,
+		{ status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+	);
 }
 
 sw.addEventListener('sync', (evento) => {
@@ -314,6 +401,13 @@ sw.addEventListener('sync', (evento) => {
 // La página puede pedir un intento inmediato: al recuperar la conexión con la
 // aplicación abierta no hay que esperar al evento del navegador.
 sw.addEventListener('message', (evento) => {
+	// La pantalla avisó de que hay versión nueva y la persona aceptó. Hasta
+	// aquí la versión anterior seguía sirviendo, que es lo que impide que una
+	// pestaña abierta se quede pidiendo archivos que ya no existen.
+	if (evento.data?.tipo === 'aplicar-actualizacion') {
+		void sw.skipWaiting();
+	}
+
 	if (evento.data?.tipo === 'enviar-pendientes') {
 		evento.waitUntil?.(enviarPendientes());
 		void enviarPendientes();

@@ -45,7 +45,47 @@ trap 'rm -rf "$TMP"' EXIT
 
 AUTH="Authorization: cpanel ${USUARIO}:${CPANEL_TOKEN}"
 
-api() { curl -sf --max-time 120 -H "$AUTH" "$@"; }
+# ── Hablar con cPanel, y contar la verdad cuando falle ───────────────────────
+#
+# Antes esto era `curl -sf`. La `-f` calla el cuerpo de la respuesta cuando el
+# servidor contesta un error, así que un fallo de la API llegaba al `python3`
+# de más abajo como una cadena vacía y salía por pantalla como un volcado de
+# JSONDecodeError: veinte líneas de Python que no dicen NADA de lo que pasó.
+#
+# Pasó de verdad, dos veces seguidas, y hubo que reproducir la llamada a mano
+# para descubrir que era un fallo pasajero del servidor. Ahora se dice qué
+# petición falló, con qué código y qué contestó.
+api() {
+  local salida codigo
+  salida="$(mktemp)"
+  codigo="$(curl -s --max-time 120 -H "$AUTH" -o "$salida" -w '%{http_code}' "$@")"
+
+  if [[ "$codigo" != 2* ]]; then
+    echo "  ✗ cPanel respondió $codigo a $1" >&2
+    head -c 400 "$salida" >&2
+    echo >&2
+    rm -f "$salida"
+
+    return 1
+  fi
+
+  cat "$salida"
+  rm -f "$salida"
+}
+
+# Lo mismo, reintentando: la carga de un zip de dos megas por una red doméstica
+# falla de vez en cuando, y volver a lanzar el despliegue entero cuesta las
+# pruebas, la compilación y otra vez todo.
+con_reintento() {
+  local intento
+  for intento in 1 2 3; do
+    if "$@"; then return 0; fi
+    echo "  … intento $intento sin éxito; se reintenta en 5 s" >&2
+    sleep 5
+  done
+
+  return 1
+}
 
 subir() {  # subir <archivo> <directorio-destino>
   api "https://${HOST}/execute/Fileman/upload_files" \
@@ -80,13 +120,13 @@ echo "── Pruebas ──"
 if [[ "$QUE" == "backend" || "$QUE" == "todo" ]]; then
   echo "── Backend ──"
   ( cd "$AQUI/backend" && zip -qr "$TMP/api.zip" src public database )
-  subir "$TMP/api.zip" "${RAIZ}/api"
-  extraer "${RAIZ}/api/api.zip" "${RAIZ}/api"
+  con_reintento subir "$TMP/api.zip" "${RAIZ}/api"
+  con_reintento extraer "${RAIZ}/api/api.zip" "${RAIZ}/api"
   borrar "${RAIZ}/api/api.zip"
   echo "  ✓ src, public y database"
 
   # EL PASO QUE SE OLVIDA. Va aquí y no en un README porque un README se salta.
-  subir "$AQUI/backend/public/index.php" "${RAIZ}/api"
+  con_reintento subir "$AQUI/backend/public/index.php" "${RAIZ}/api"
   echo "  ✓ index.php aplanado (el que Apache ejecuta de verdad)"
 fi
 
@@ -94,8 +134,8 @@ if [[ "$QUE" == "frontend" || "$QUE" == "todo" ]]; then
   echo "── Frontend ──"
   ( cd "$AQUI/frontend" && npm run build >/dev/null 2>&1 )
   ( cd "$AQUI/frontend/build" && zip -qr "$TMP/front.zip" . )
-  subir "$TMP/front.zip" "$RAIZ"
-  extraer "${RAIZ}/front.zip" "$RAIZ"
+  con_reintento subir "$TMP/front.zip" "$RAIZ"
+  con_reintento extraer "${RAIZ}/front.zip" "$RAIZ"
   borrar "${RAIZ}/front.zip"
   echo "  ✓ compilado y subido"
 fi

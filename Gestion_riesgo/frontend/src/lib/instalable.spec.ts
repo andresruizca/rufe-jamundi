@@ -16,6 +16,9 @@ const estatico = join(raiz, 'static');
 const manifiesto = JSON.parse(
 	readFileSync(join(estatico, 'manifest.webmanifest'), 'utf8')
 ) as {
+	id: string;
+	start_url: string;
+	scope: string;
 	background_color: string;
 	theme_color: string;
 	icons: { src: string; sizes: string; purpose?: string }[];
@@ -39,6 +42,22 @@ describe('el manifiesto', () => {
 		// Si difieren, durante el segundo que dura el arranque queda una franja de
 		// otro color pegada arriba, que parece un fallo de dibujado.
 		expect(manifiesto.theme_color).toBe(AZUL_JAMUNDI);
+	});
+
+	it('tiene identidad propia', () => {
+		// Sin `id`, la identidad de la aplicación instalada se deriva de
+		// `start_url`. El día que esa ruta cambie —ya cambió una vez, de
+		// `/riesgo/reportar` a `/`— los teléfonos que ya la tienen verían una
+		// aplicación DISTINTA en vez de una actualización, y se quedarían con
+		// la vieja sin que nadie se enterara.
+		expect(manifiesto.id).toBeTruthy();
+	});
+
+	it('arranca dentro de su propio alcance', () => {
+		// Un `start_url` fuera del `scope` abre el navegador POR ENCIMA de la
+		// aplicación instalada: aparece la barra de direcciones y deja de
+		// parecer una aplicación desde el primer segundo.
+		expect(manifiesto.start_url.startsWith(manifiesto.scope)).toBe(true);
 	});
 
 	it('declara exactamente un icono enmascarable', () => {
@@ -94,5 +113,25 @@ describe('el armazón sin conexión', () => {
 		expect(fuera).toContain('/icono-512.png');
 		expect(fuera).toContain('/icono-maskable-512.png');
 		expect(fuera).toContain('/apple-touch-icon.png');
+	});
+});
+
+
+describe('la pantalla completa', () => {
+	it('llega hasta el borde del aparato', () => {
+		// Sin esto, la aplicación instalada deja dos franjas del color del
+		// sistema arriba y abajo: se ve como una página web metida en un marco,
+		// que es justo lo que una aplicación instalada no debe parecer.
+		expect(html).toContain('viewport-fit=cover');
+	});
+
+	it('y aparta lo que el aparato tapa', () => {
+		// `viewport-fit=cover` SIN esto es peor que no ponerlo: la aplicación
+		// llega al borde físico y el escudo se mete debajo de la cámara, y el
+		// botón de enviar una ficha queda donde Android se traga el toque.
+		const shell = readFileSync(join(raiz, 'src', 'lib', 'shell.css'), 'utf8');
+
+		expect(shell).toContain('env(safe-area-inset-top)');
+		expect(shell).toContain('env(safe-area-inset-bottom)');
 	});
 });

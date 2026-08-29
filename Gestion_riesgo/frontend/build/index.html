@@ -2,7 +2,14 @@
 <html lang="es">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!--
+			`viewport-fit=cover` para que, instalada a pantalla completa, la
+			aplicación llegue hasta el borde en vez de dejar dos franjas del color
+			del sistema arriba y abajo. Lo que queda debajo de la muesca y de la
+			barra de gestos lo aparta `safe-area-inset` en `shell.css`: sin eso,
+			llegar al borde significa que el título se meta bajo la cámara.
+		-->
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<!--
 			El color de la barra de estado cuando la aplicación corre instalada.
 
@@ -89,15 +96,15 @@
 				rel="stylesheet"
 		/></noscript>
 
-		<link href="/_app/immutable/entry/start.CrL35vie.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/D3gDMz3K.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/start.CG--VcsB.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/NvYDOjzx.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/ClSPeXlH.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.Bts6n9Wg.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.Rvw87QdN.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="/_app/immutable/nodes/0.qYGagUU9.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/D7zbW_x6.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/CGJEn3No.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.Dlinytr5.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/CkpIBYo8.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/SkbU4UmG.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BR2LtDPH.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/ui23eyoa.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DsPDbJCL.js" rel="modulepreload">
@@ -127,21 +134,21 @@
 		<link href="/_app/immutable/chunks/Dwt4e9MY.js" rel="modulepreload">
 		
 		<link href="/_app/immutable/assets/BotonInstalar.DWI8TDem.css" rel="stylesheet">
-		<link href="/_app/immutable/assets/0.D98fTGNy.css" rel="stylesheet">
+		<link href="/_app/immutable/assets/0.BFDWvVEI.css" rel="stylesheet">
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">
 			<script>
 				{
-					__sveltekit_8ysx68 = {
+					__sveltekit_ly5zz = {
 						base: ""
 					};
 
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.CrL35vie.js"),
-						import("/_app/immutable/entry/app.Bts6n9Wg.js")
+						import("/_app/immutable/entry/start.CG--VcsB.js"),
+						import("/_app/immutable/entry/app.Rvw87QdN.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});

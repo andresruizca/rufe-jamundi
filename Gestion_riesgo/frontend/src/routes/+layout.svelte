@@ -24,6 +24,7 @@
 		haySincronizacionEnSegundoPlano,
 		porQueNoSaleSolo
 	} from '$lib/offline/plataforma';
+	import { aplicarActualizacion, vigilarActualizaciones } from '$lib/offline/actualizacion';
 
 	let { children } = $props();
 
@@ -109,6 +110,12 @@
 		};
 		navigator.serviceWorker?.addEventListener('message', alMensaje);
 
+		// Y vigilando el registro, que es lo que avisa ANTES de que la versión
+		// nueva tome el relevo. El mensaje de arriba llega cuando ya se activó;
+		// desde que la activación espera a que la persona acepte, ese momento
+		// puede no llegar nunca por sí solo.
+		const dejarDeVigilar = vigilarActualizaciones(() => (versionNueva = true));
+
 		// ── Y preguntar si la hay ────────────────────────────────────────────
 		//
 		// El aviso de arriba solo llega cuando el navegador descubre por su
@@ -171,6 +178,7 @@
 
 		return () => {
 			navigator.serviceWorker?.removeEventListener('message', alMensaje);
+			dejarDeVigilar();
 			window.removeEventListener('online', alVolverLaRed);
 			document.removeEventListener('visibilitychange', alVolverAVerla);
 			clearInterval(reloj);
@@ -362,10 +370,20 @@
 			{/if}
 
 			{#if versionNueva}
+				<!--
+					Recargar a secas no bastaba: la versión nueva espera a que se le
+					dé el relevo, así que una recarga volvía a servir la anterior y
+					el aviso salía otra vez. `aplicarActualizacion` le pide el paso
+					primero y recarga cuando el navegador confirma el cambio.
+				-->
 				<p class="aviso-version" role="status">
 					<span>Hay una versión nueva del sistema.</span>
-					<button type="button" class="boton boton--suave" onclick={() => location.reload()}>
-						Recargar
+					<button
+						type="button"
+						class="boton boton--suave"
+						onclick={() => void aplicarActualizacion()}
+					>
+						Actualizar
 					</button>
 				</p>
 			{/if}

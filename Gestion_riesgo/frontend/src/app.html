@@ -2,7 +2,14 @@
 <html lang="es">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!--
+			`viewport-fit=cover` para que, instalada a pantalla completa, la
+			aplicación llegue hasta el borde en vez de dejar dos franjas del color
+			del sistema arriba y abajo. Lo que queda debajo de la muesca y de la
+			barra de gestos lo aparta `safe-area-inset` en `shell.css`: sin eso,
+			llegar al borde significa que el título se meta bajo la cámara.
+		-->
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<!--
 			El color de la barra de estado cuando la aplicación corre instalada.
 

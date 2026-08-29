@@ -324,6 +324,11 @@ h3 {
 	flex-direction: column;
 	min-height: 100vh;
 	min-width: 0;
+
+	/* Abajo, la barra de gestos de Android y la raya del iPhone. Sin esto, el
+	   último botón de una pantalla larga —«Enviar la ficha»— queda justo debajo
+	   de donde el sistema se traga el toque. */
+	padding-bottom: env(safe-area-inset-bottom);
 }
 
 /*
@@ -358,7 +363,20 @@ h3 {
 	/* Hueco base pequeño: el escudo y el nombre forman una sola unidad visual,
 	   y el botón de menú se separa aparte con su propio margen. */
 	gap: 0.55rem;
-	padding: 0.7rem 1rem;
+
+	/*
+	 * El relleno de siempre, más lo que el aparato tape.
+	 *
+	 * Con `viewport-fit=cover` la aplicación instalada llega hasta el borde
+	 * físico de la pantalla, y en un móvil con muesca eso deja el escudo y el
+	 * botón de menú debajo de la cámara. `env()` vale cero en cualquier
+	 * pantalla sin recortes, así que en un portátil no cambia nada.
+	 *
+	 * También el lado: en horizontal —que es como se toman las fotos del daño—
+	 * la muesca pasa a estar a la izquierda o a la derecha.
+	 */
+	padding: calc(0.7rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right))
+		0.7rem calc(1rem + env(safe-area-inset-left));
 	background: var(--color-surface);
 	border-bottom: 1px solid var(--color-border);
 }
