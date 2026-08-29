@@ -22,8 +22,9 @@
 	// con tarjeta. Por eso el paso 2 pregunta QUÉ VE la persona y no en qué nivel
 	// del Anexo 1 clasificaría su casa.
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
+	import { anclarArriba, entornoDelNavegador } from '$lib/scroll';
 	import {
 		ArrowLeft, ArrowRight, Check, CheckCircle2, LoaderCircle, MapPin, Send, TriangleAlert
 	} from '@lucide/svelte';
@@ -381,6 +382,12 @@
 	const esUltimo = $derived(indice === pasos.length - 1);
 
 	onMount(() => {
+		// Sostiene el arranque arriba mientras el paso termina de dibujarse: el
+		// contenido llega después de pedir los catálogos y de leer el borrador, y
+		// para entonces el navegador ya intentó restaurar la posición de la visita
+		// anterior. Se suelta sola al primer gesto (ver `$lib/scroll`).
+		const soltarAncla = anclarArriba(entornoDelNavegador());
+
 		void (async () => {
 			puedeGrabar = formatoSoportado() !== null;
 
@@ -455,7 +462,10 @@
 			}
 		})();
 
-		return () => detenerEvidencias?.();
+		return () => {
+			soltarAncla();
+			detenerEvidencias?.();
+		};
 	});
 
 	// ── Navegación ──────────────────────────────────────────────────────────
@@ -530,7 +540,13 @@
 	}
 
 	function subirAlInicio() {
-		if (browser) window.scrollTo({ top: 0, behavior: 'smooth' });
+		if (!browser) return;
+
+		// Después de `tick()` y sin animación, a propósito. Con `smooth` el salto
+		// tardaba, y al cambiar de paso la página se encoge de golpe: el navegador
+		// recortaba el desplazamiento a medias y la persona se quedaba mirando el
+		// pie del paso nuevo. Aquí no hay nada que mirar mientras sube.
+		void tick().then(() => window.scrollTo(0, 0));
 	}
 
 	// ── Ubicación ───────────────────────────────────────────────────────────
