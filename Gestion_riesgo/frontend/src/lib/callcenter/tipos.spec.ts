@@ -1,7 +1,14 @@
 // Cómo se lee el estado de un hogar en la lista de llamadas.
 
 import { describe, it, expect } from 'vitest';
-import { estadoDe, porcentaje, PESTANAS, type HogarParaLlamar } from './tipos';
+import { readFileSync } from 'node:fs';
+import {
+	COLA_DE_CIFRA,
+	estadoDe,
+	porcentaje,
+	PESTANAS,
+	type HogarParaLlamar
+} from './tipos';
 
 function hogar(extra: Partial<HogarParaLlamar> = {}): HogarParaLlamar {
 	return {
@@ -165,5 +172,76 @@ describe('cuándo un hogar sale de la campaña', () => {
 
 	it('la lista de pestañas ofrece ver a los que ya terminaron', () => {
 		expect(PESTANAS.map((p) => p.valor)).toContain('terminado');
+	});
+});
+
+
+describe('las tarjetas del resumen', () => {
+	it('cada cifra abre una pestaña que existe de verdad', () => {
+		// La promesa de la pantalla: se pulsa la tarjeta y sale ESA gente. Una
+		// cifra apuntando a una cola inexistente lanzaría la consulta
+		// equivocada, y el conteo de la lista no sería el que la tarjeta
+		// prometió — que es exactamente lo que hace que una operadora deje de
+		// creerle al tablero.
+		const colas = new Set(PESTANAS.map((p) => p.valor));
+
+		for (const [cifra, cola] of Object.entries(COLA_DE_CIFRA)) {
+			expect(colas, `la tarjeta «${cifra}» abre una cola sin pestaña`).toContain(cola);
+		}
+	});
+
+	it('están las nueve, ninguna repetida', () => {
+		// Repetida significaría que dos tarjetas distintas abren la misma lista:
+		// una de las dos estaría prometiendo un número que no es el suyo.
+		const colas = Object.values(COLA_DE_CIFRA);
+
+		expect(colas).toHaveLength(9);
+		expect(new Set(colas).size).toBe(9);
+	});
+
+	it('el servidor conoce las mismas colas', () => {
+		// Las dos tablas —esta y `CallCenterController::COLA_DE_CIFRA`— tienen
+		// que decir lo mismo, y viven en lenguajes distintos: no hay compilador
+		// que las cuadre. Esta prueba es lo único que hay entre ellas.
+		const php = readFileSync(
+			new URL('../../../../backend/src/Controllers/CallCenterController.php', import.meta.url),
+			'utf-8'
+		);
+		const tabla = php.slice(php.indexOf('public const COLA_DE_CIFRA'));
+
+		for (const [cifra, cola] of Object.entries(COLA_DE_CIFRA)) {
+			expect(tabla, `el servidor no manda la cifra «${cifra}»`).toContain(`'${cifra}'`);
+			expect(tabla, `el servidor no conoce la cola «${cola}»`).toContain(`=> '${cola}'`);
+		}
+	});
+});
+
+describe('KpiTile fuera del call center', () => {
+	it('sin `alPulsar` no dibuja un botón', () => {
+		// El componente lo comparten el tablero de riesgo, las instituciones
+		// educativas y los equipamientos, donde las cifras no filtran nada. Un
+		// botón ahí sería mentir sobre lo que la pantalla hace: se pulsaría
+		// esperando algo que no va a pasar.
+		const svelte = readFileSync(
+			new URL('../components/KpiTile.svelte', import.meta.url),
+			'utf-8'
+		);
+
+		expect(svelte).toContain('{#if alPulsar}');
+		// La rama sin `alPulsar` sigue siendo un <div>.
+		expect(svelte).toContain('<div class="kpi-tile">');
+	});
+
+	it('cuando es control, es un <button> con teclado y foco', () => {
+		// No un <div> con onclick. Esa diferencia decide si la pantalla se puede
+		// usar sin ratón, y no se nota nunca desde el ratón de quien la programa.
+		const svelte = readFileSync(
+			new URL('../components/KpiTile.svelte', import.meta.url),
+			'utf-8'
+		);
+
+		expect(svelte).toContain('<button');
+		expect(svelte).toContain('aria-pressed={activa}');
+		expect(svelte).toContain(':focus-visible');
 	});
 });

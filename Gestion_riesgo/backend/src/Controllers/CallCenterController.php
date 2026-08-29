@@ -110,9 +110,6 @@ final class CallCenterController
     private const PRE_NO_APLICA = "pre.id IS NOT NULL AND pre.estado = 'DESCARTADA'
                                    AND pre.motivo_descarte = 'NO_APLICA'";
 
-    /** Ni se preinscribió, ni tiene una solicitud descartada esperando. */
-    private const SIN_PRE = 'pre.id IS NULL';
-
     /**
      * Terminó: tiene la inspección de vivienda APROBADA.
      *
@@ -155,6 +152,75 @@ final class CallCenterController
 
     /** Sigue habiendo algo que hacer con este hogar. */
     private const EN_CAMPANA = 'insp.id IS NULL AND NOT ('.self::NO_APLICA_YA.')';
+
+    /**
+     * Por teléfono no se llega a esta familia.
+     *
+     * Ni el contacto de la ficha ni el del jefe de hogar tienen número. Se mira
+     * el vacío además del nulo porque el censo se levantó a mano y una casilla
+     * que el funcionario dejó en blanco llega como cadena vacía, no como NULL.
+     *
+     * Es una constante y no una expresión escrita dentro del resumen —donde
+     * estaba— porque ahora la usan dos consultas: la que cuenta la tarjeta y la
+     * que lista la cola. Si fueran dos copias, el día que alguien ajuste una la
+     * tarjeta empezaría a prometer un número que la lista no da, y eso es lo
+     * que hace que una operadora deje de creerle al tablero.
+     */
+    private const SIN_TELEFONO = "(r.contacto_telefono IS NULL OR r.contacto_telefono = '')
+                                  AND (jefe.telefono IS NULL OR jefe.telefono = '')";
+
+    /**
+     * Cada cola de la lista con la condición que la define.
+     *
+     * ── Por qué una tabla y no un `switch` ───────────────────────────────────
+     *
+     * Porque las tarjetas del resumen son clicables: cada cifra promete que al
+     * pulsarla saldrán ESOS hogares. Mientras el resumen sumaba por un lado y
+     * el filtro decidía por otro, nada impedía que se separaran; solo coincidían
+     * porque quien las escribió puso cuidado.
+     *
+     * Ahora las dos consultas se construyen desde aquí. No pueden discrepar
+     * porque no hay dos sitios.
+     *
+     * Es `public` para que una prueba pueda recorrerla: ver `COLA_DE_CIFRA`.
+     *
+     * @var array<string,string>
+     */
+    public const CONDICION_DE_COLA = [
+        'todos'        => '1 = 1',
+        'terminado'    => self::TERMINADO,
+        'preinscrito'  => self::PRE_ACTIVA.' AND '.self::SIN_TERMINAR,
+        'subsanar'     => self::PRE_SUBSANABLE.' AND '.self::SIN_TERMINAR,
+        'no_aplica'    => self::PRE_NO_APLICA,
+        'contactado'   => self::EN_CAMPANA.' AND g.id IS NOT NULL',
+        'reintentar'   => self::EN_CAMPANA.' AND g.proxima_llamada IS NOT NULL
+                          AND g.proxima_llamada <= CURDATE()',
+        'pendiente'    => self::EN_CAMPANA.' AND g.id IS NULL',
+        'sin_telefono' => self::SIN_TELEFONO,
+    ];
+
+    /**
+     * Qué cola contiene exactamente a la gente que cuenta cada tarjeta.
+     *
+     * Es el contrato de la pantalla: pulsar una tarjeta abre su cola, y el
+     * conteo de la lista tiene que dar el número que la tarjeta prometió.
+     *
+     * Toda cifra del resumen sale de aquí, así que una cifra nueva sin cola no
+     * se puede añadir por descuido: no habría de dónde sacarla.
+     *
+     * @var array<string,string>
+     */
+    public const COLA_DE_CIFRA = [
+        'total'                        => 'todos',
+        'terminados'                   => 'terminado',
+        'preinscritos'                 => 'preinscrito',
+        'por_subsanar'                 => 'subsanar',
+        'no_aplica'                    => 'no_aplica',
+        'contactados_sin_preinscribir' => 'contactado',
+        'sin_llamar'                   => 'pendiente',
+        'para_hoy'                     => 'reintentar',
+        'sin_telefono'                 => 'sin_telefono',
+    ];
 
     /**
      * Cómo se responde una llamada, y qué significa cada respuesta.
@@ -383,36 +449,34 @@ final class CallCenterController
      */
     public function resumen(Request $req): void
     {
+        // Las cifras se arman desde `COLA_DE_CIFRA`, no a mano. Cada tarjeta se
+        // suma con la MISMA condición con la que se filtra su cola, así que el
+        // número que promete es el que la lista da al pulsarla.
+        $columnas = [];
+
+        foreach (self::COLA_DE_CIFRA as $cifra => $cola) {
+            // `SUM(condicion)` y no `COUNT`: en MySQL una comparación vale 1 o 0,
+            // así que sumarla cuenta las filas que la cumplen. Para «todos» la
+            // condición es `1 = 1` y la suma acaba siendo el total, que es
+            // justamente lo que esa tarjeta dice.
+            $columnas[] = 'SUM('.self::CONDICION_DE_COLA[$cola].') AS '.$cifra;
+        }
+
         $fila = Db::first(
-            'SELECT
-                COUNT(*) AS total,
-                SUM('.self::TERMINADO.') AS terminados,
-                SUM('.self::PRE_ACTIVA.' AND '.self::SIN_TERMINAR.') AS preinscritos,
-                SUM('.self::PRE_SUBSANABLE.' AND '.self::SIN_TERMINAR.') AS por_subsanar,
-                SUM('.self::PRE_NO_APLICA.') AS no_aplica,
-                SUM('.self::EN_CAMPANA.' AND g.id IS NOT NULL) AS contactados_sin_preinscribir,
-                SUM('.self::EN_CAMPANA.' AND g.id IS NULL) AS sin_llamar,
-                SUM('.self::EN_CAMPANA.' AND g.proxima_llamada IS NOT NULL
-                    AND g.proxima_llamada <= CURDATE()) AS para_hoy,
-                SUM((r.contacto_telefono IS NULL OR r.contacto_telefono = \'\')
-                    AND (jefe.telefono IS NULL OR jefe.telefono = \'\')) AS sin_telefono
-               FROM rufe_reportes r '.self::CRUCE,
+            'SELECT '.implode(",\n                ", $columnas)
+                .' FROM rufe_reportes r '.self::CRUCE,
             ['jefe' => Catalogos::PARENTESCO_JEFE]
         ) ?? [];
 
-        Response::ok([
-            'resumen' => [
-                'total'                        => (int) ($fila['total'] ?? 0),
-                'terminados'                   => (int) ($fila['terminados'] ?? 0),
-                'preinscritos'                 => (int) ($fila['preinscritos'] ?? 0),
-                'por_subsanar'                 => (int) ($fila['por_subsanar'] ?? 0),
-                'no_aplica'                    => (int) ($fila['no_aplica'] ?? 0),
-                'contactados_sin_preinscribir' => (int) ($fila['contactados_sin_preinscribir'] ?? 0),
-                'sin_llamar'                   => (int) ($fila['sin_llamar'] ?? 0),
-                'para_hoy'                     => (int) ($fila['para_hoy'] ?? 0),
-                'sin_telefono'                 => (int) ($fila['sin_telefono'] ?? 0),
-            ],
-        ]);
+        $resumen = [];
+
+        foreach (array_keys(self::COLA_DE_CIFRA) as $cifra) {
+            // Sobre una base vacía `SUM` devuelve NULL, no cero. Sin esto la
+            // pantalla dibujaría huecos donde tiene que decir 0.
+            $resumen[$cifra] = (int) ($fila[$cifra] ?? 0);
+        }
+
+        Response::ok(['resumen' => $resumen]);
     }
 
     /** El historial de llamadas de un hogar. Del más reciente al más antiguo. */
@@ -808,46 +872,20 @@ final class CallCenterController
         $where = ['1 = 1'];
         $params = ['jefe' => Catalogos::PARENTESCO_JEFE];
 
-        switch ($estado) {
-            case 'terminado':
-                // Los únicos que ya no hay que llamar.
-                $where[] = self::TERMINADO;
-                break;
-            case 'preinscrito':
-                // Pidió el turno y espera al ingeniero. Sigue en la campaña:
-                // llenar el formulario no es haber recibido la inspección.
-                $where[] = self::PRE_ACTIVA.' AND '.self::SIN_TERMINAR;
-                break;
-            case 'subsanar':
-                // El ingeniero la descartó por algo que se arregla. Es la cola
-                // más urgente de todas: son familias que ya hicieron el
-                // esfuerzo de llenar el formulario y se quedaron a un paso.
-                $where[] = self::PRE_SUBSANABLE.' AND '.self::SIN_TERMINAR;
-                break;
-            case 'no_aplica':
-                $where[] = self::PRE_NO_APLICA;
-                break;
-            case 'contactado':
-                $where[] = self::EN_CAMPANA.' AND g.id IS NOT NULL';
-                break;
-            case 'reintentar':
-                $where[] = self::EN_CAMPANA.' AND g.proxima_llamada IS NOT NULL AND g.proxima_llamada <= CURDATE()';
-                break;
-            case 'todos':
-                break;
-            case 'pendiente':
-            default:
-                // Lo que falta por hacer: sigue en la campaña y nadie lo ha
-                // llamado todavía.
-                //
-                // Ya NO se exige `pre.id IS NULL`. Quien se preinscribió por su
-                // cuenta —por el enlace que le pasó un vecino, por el bot— y a
-                // quien nadie ha llamado sigue necesitando acompañamiento hasta
-                // que su inspección esté aprobada, y antes desaparecía de todas
-                // las colas sin que nadie hubiera hablado con él.
-                $where[] = self::EN_CAMPANA.' AND g.id IS NULL';
-                break;
-        }
+        // La condición sale de `CONDICION_DE_COLA`, que es de donde también sale
+        // la cifra de la tarjeta que abre esta cola. Antes había aquí un
+        // `switch` con las condiciones escritas otra vez: coincidían con las del
+        // resumen por cuidado de quien las escribió, no porque nada lo obligara.
+        //
+        // Lo desconocido cae en «falta llamar», que es el trabajo del día. Una
+        // cola inventada en la URL no puede dejar la pantalla en blanco ni,
+        // peor, enseñar el censo entero.
+        $cola = isset(self::CONDICION_DE_COLA[$estado]) ? $estado : 'pendiente';
+
+        // Entre paréntesis: las condiciones se encadenan con AND y alguna lleva
+        // OR dentro. Sin ellos, añadir mañana una cola con un OR arriba del todo
+        // ampliaría la lista en silencio en vez de acotarla.
+        $where[] = '('.self::CONDICION_DE_COLA[$cola].')';
 
         [$busqueda, $paramsBusqueda] = self::condicionDeBusqueda((string) ($req->query('q') ?? ''));
 

@@ -135,6 +135,7 @@ export type FiltroEstado =
 	| 'contactado'
 	| 'preinscrito'
 	| 'no_aplica'
+	| 'sin_telefono'
 	| 'todos';
 
 /**
@@ -156,8 +157,38 @@ export const PESTANAS: { valor: FiltroEstado; etiqueta: string; urgente?: boolea
 	// haber llegado hasta el final. Va después de las etapas, no entre ellas.
 	{ valor: 'terminado', etiqueta: 'Inspección aprobada' },
 	{ valor: 'no_aplica', etiqueta: 'No aplica' },
+	// Por teléfono a esta gente no se llega. La cola existe para poder sacarla y
+	// buscarla por otra vía —el promotor del barrio, la junta de acción comunal—,
+	// que es lo único que queda cuando no hay número que marcar.
+	{ valor: 'sin_telefono', etiqueta: 'Sin teléfono' },
 	{ valor: 'todos', etiqueta: 'Todos' }
 ];
+
+/**
+ * Qué cola abre cada tarjeta del resumen.
+ *
+ * ── Por qué es un dato y no nueve `onclick` ──────────────────────────────────
+ *
+ * Porque así se puede comprobar. La promesa de la pantalla es que la cifra de
+ * la tarjeta sea EXACTAMENTE el conteo de la lista que abre; el día que una
+ * tarjeta diga 412 y salgan 380, la operadora deja de creerle al tablero y no
+ * hay forma de recuperarlo. Escrito como tabla, una prueba recorre las nueve.
+ *
+ * Las claves son las del `ResumenCallCenter` del servidor, y allí existe la
+ * misma tabla (`CallCenterController::COLA_DE_CIFRA`) decidiendo con qué
+ * condición se suma cada una. Las dos tienen que decir lo mismo.
+ */
+export const COLA_DE_CIFRA: Record<keyof ResumenCallCenter, FiltroEstado> = {
+	total: 'todos',
+	terminados: 'terminado',
+	preinscritos: 'preinscrito',
+	por_subsanar: 'subsanar',
+	no_aplica: 'no_aplica',
+	contactados_sin_preinscribir: 'contactado',
+	sin_llamar: 'pendiente',
+	para_hoy: 'reintentar',
+	sin_telefono: 'sin_telefono'
+};
 
 /** Cómo se pinta el estado de un hogar en la lista. */
 export function estadoDe(h: HogarParaLlamar): {

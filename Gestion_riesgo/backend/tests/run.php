@@ -3234,6 +3234,110 @@ prueba('cada motivo trae qué decirle a la persona', function (): void {
     }
 });
 
+grupo('Call center: las tarjetas que abren su propia lista');
+
+prueba('cada cifra del resumen tiene una cola que la contiene', function (): void {
+    // Es el contrato de la pantalla: la tarjeta se pulsa y sale ESA gente. Una
+    // cifra nueva sin cola dejaría una tarjeta que no se puede abrir; una que
+    // apunte a una cola inexistente lanzaría la consulta equivocada y
+    // enseñaría un conteo distinto al que la tarjeta prometió.
+    $colas = App\Controllers\CallCenterController::CONDICION_DE_COLA;
+
+    foreach (App\Controllers\CallCenterController::COLA_DE_CIFRA as $cifra => $cola) {
+        afirmar(isset($colas[$cola]), "la tarjeta «{$cifra}» abre una cola que no existe: «{$cola}»");
+        afirmar(trim($colas[$cola]) !== '', "la cola «{$cola}» no filtra nada");
+    }
+});
+
+prueba('la cifra y la lista se calculan con la MISMA condición', function () use ($raiz): void {
+    // La razón de ser de todo esto. Mientras el resumen sumaba con sus propias
+    // expresiones y el filtro decidía con otras, coincidían por cuidado de
+    // quien las escribió y nada impedía que se separaran. El día que una
+    // tarjeta diga 412 y la lista devuelva 380, la operadora deja de creerle al
+    // tablero entero, y esa confianza no se recupera.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    $resumen = metodoDe($php, 'public function resumen(');
+    $filtros = metodoDe($php, 'private function filtros(');
+
+    afirmar(
+        str_contains($resumen, 'self::CONDICION_DE_COLA['),
+        'el resumen volvió a sumar con condiciones propias'
+    );
+    afirmar(
+        str_contains($filtros, 'self::CONDICION_DE_COLA['),
+        'el filtro volvió a decidir con condiciones propias'
+    );
+    afirmar(
+        ! str_contains($filtros, "case '"),
+        'volvió el switch con las condiciones escritas por segunda vez'
+    );
+});
+
+prueba('el resumen manda exactamente las cifras que la pantalla dibuja', function () use ($raiz): void {
+    // Las nueve tarjetas se dibujan recorriendo esta misma tabla en el
+    // frontend. Si el servidor dejara de mandar una, la tarjeta saldría vacía.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $resumen = metodoDe($php, 'public function resumen(');
+
+    afirmar(
+        str_contains($resumen, 'foreach (self::COLA_DE_CIFRA as $cifra => $cola)'),
+        'el resumen ya no se arma desde la tabla: se pueden desincronizar'
+    );
+    afirmarIgual(
+        9,
+        count(App\Controllers\CallCenterController::COLA_DE_CIFRA),
+        'cambió el número de tarjetas: revise que la pantalla y esta tabla digan lo mismo'
+    );
+});
+
+prueba('«sin teléfono» ya se puede abrir, no solo contar', function (): void {
+    // Era la única de las nueve que se podía leer y no abrir. Y es la más útil
+    // de todas para sacar a terreno: a esta gente no se le llega por teléfono
+    // nunca, hay que buscarla por el promotor del barrio o la junta de acción
+    // comunal.
+    $colas = App\Controllers\CallCenterController::CONDICION_DE_COLA;
+
+    afirmar(isset($colas['sin_telefono']), 'no hay cola para los hogares sin teléfono');
+    afirmar(
+        str_contains($colas['sin_telefono'], 'r.contacto_telefono')
+            && str_contains($colas['sin_telefono'], 'jefe.telefono'),
+        'la cola no mira los dos teléfonos: el de la ficha y el del jefe de hogar'
+    );
+    // El vacío además del nulo: el censo se levantó a mano y una casilla en
+    // blanco llega como cadena vacía.
+    afirmar(
+        substr_count($colas['sin_telefono'], "= ''") === 2,
+        'no cuenta las casillas que el funcionario dejó en blanco'
+    );
+});
+
+prueba('una cola inventada en la URL cae en «falta llamar»', function () use ($raiz): void {
+    // La cola viaja en la barra de direcciones. Escribir cualquier cosa ahí no
+    // puede dejar la pantalla en blanco ni, mucho peor, saltarse el filtro y
+    // enseñar el censo entero a quien abrió una cola concreta.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $filtros = metodoDe($php, 'private function filtros(');
+
+    afirmar(
+        str_contains($filtros, "isset(self::CONDICION_DE_COLA[\$estado]) ? \$estado : 'pendiente'"),
+        'un estado desconocido ya no cae en «falta llamar»'
+    );
+});
+
+prueba('las condiciones se encadenan entre paréntesis', function () use ($raiz): void {
+    // Alguna lleva un OR dentro. Sin paréntesis, el día que se añada una cola
+    // con un OR arriba del todo, el AND de al lado lo absorbería y la lista
+    // AMPLIARÍA en vez de acotar: saldría gente que esa tarjeta no contó.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+    $filtros = metodoDe($php, 'private function filtros(');
+
+    afirmar(
+        str_contains($filtros, "'('.self::CONDICION_DE_COLA[\$cola].')'"),
+        'la condición de la cola entra sin paréntesis en el WHERE'
+    );
+});
+
 grupo('El guión de la llamada');
 
 prueba('el guión original nunca se puede perder', function (): void {
@@ -3471,18 +3575,26 @@ prueba('solo la inspección aprobada saca a un hogar de la cola', function () us
     preg_match('/private const TERMINADO = (.*?);/s', $php, $m);
     afirmar(isset($m[1]) && str_contains($m[1], 'insp.id IS NOT NULL'), 'TERMINADO ya no mira la inspección');
 
-    // La pestaña «falta llamar» NO puede volver a exigir que no haya
+    // La cola «falta llamar» NO puede volver a exigir que no haya
     // preinscripción: quien se preinscribió solo y a quien nadie ha llamado
     // desaparecía de todas las colas sin que nadie hubiera hablado con él.
-    preg_match('/case \'pendiente\':.*?break;/s', $php, $mp);
-    afirmar(isset($mp[0]), 'no se encontró el caso «pendiente»');
+    //
+    // Se mira la condición ya resuelta y no el texto del código: desde que la
+    // tarjeta del resumen y la lista salen de la misma tabla, ESTA es la
+    // cadena que de verdad viaja al WHERE.
+    $pendiente = App\Controllers\CallCenterController::CONDICION_DE_COLA['pendiente'];
+
     afirmar(
-        ! str_contains($mp[0], 'SIN_PRE'),
+        ! str_contains($pendiente, 'pre.id IS NULL'),
         'la cola de llamadas volvió a excluir a quien se preinscribió sin que lo llamaran'
     );
     afirmar(
-        str_contains($mp[0], 'EN_CAMPANA'),
+        str_contains($pendiente, 'insp.id IS NULL') && str_contains($pendiente, 'NO_APLICA'),
         'la cola de llamadas no usa el criterio de seguir en campaña'
+    );
+    afirmar(
+        str_contains($pendiente, 'g.id IS NULL'),
+        'la cola de llamadas dejó de mirar si ya se llamó'
     );
 });
 
@@ -3520,20 +3632,31 @@ prueba('salir de la campaña por «no aplica» sobrevive a un motivo en blanco',
     );
 });
 
-prueba('el resumen cuenta viviendas inspeccionadas, no formularios llenados', function () use ($raiz): void {
+prueba('el resumen cuenta viviendas inspeccionadas, no formularios llenados', function (): void {
     // Es la cifra que se le reporta a la Alcaldía.
-    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
-    $resumen = substr($php, strpos($php, 'public function resumen('), 2500);
+    //
+    // Sobre las condiciones resueltas y no sobre el texto del método: el
+    // resumen ya no escribe su SQL a mano, lo arma desde la misma tabla que
+    // filtra la lista. Lo que hay que fijar es qué dice esa tabla.
+    $cifras = App\Controllers\CallCenterController::COLA_DE_CIFRA;
+    $colas = App\Controllers\CallCenterController::CONDICION_DE_COLA;
 
-    afirmar(str_contains($resumen, 'AS terminados'), 'el resumen no cuenta los terminados');
+    afirmar(isset($cifras['terminados']), 'el resumen no cuenta los terminados');
     afirmar(
-        str_contains($resumen, "'terminados'"),
-        'el conteo de terminados no llega a la pantalla'
+        str_contains($colas[$cifras['terminados']], 'insp.id IS NOT NULL'),
+        'los terminados vuelven a contarse por formulario llenado y no por inspección aprobada'
     );
-    afirmar(
-        substr_count($resumen, 'EN_CAMPANA') >= 3,
-        'las cifras de la campaña siguen contando por preinscripción y no por inspección'
-    );
+
+    // Las tres cifras de gente que sigue en la campaña. Ninguna puede darse por
+    // cerrada con un formulario: se cierran con la inspección.
+    foreach (['sin_llamar', 'contactados_sin_preinscribir', 'para_hoy'] as $cifra) {
+        $condicion = $colas[$cifras[$cifra]];
+
+        afirmar(
+            str_contains($condicion, 'insp.id IS NULL') && str_contains($condicion, 'NO_APLICA'),
+            "«{$cifra}» sigue contando por preinscripción y no por inspección"
+        );
+    }
 });
 
 grupo('Reenviar el WhatsApp');

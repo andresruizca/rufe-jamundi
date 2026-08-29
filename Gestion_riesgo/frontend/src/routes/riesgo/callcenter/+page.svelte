@@ -13,6 +13,8 @@
 	// persona —marcar, mandarle el enlace, anotar qué pasó.
 
 	import { onDestroy, onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import {
 		ArrowLeft,
 		BookOpen,
@@ -29,7 +31,8 @@
 		Search,
 		TriangleAlert,
 		UserCheck,
-		Users
+		Users,
+		type LucideIcon
 	} from '@lucide/svelte';
 	import { callCenterApi } from '$lib/api/servicios';
 	import { sesion } from '$lib/stores/sesion.svelte';
@@ -38,6 +41,7 @@
 	import PanelGuion from '$lib/callcenter/PanelGuion.svelte';
 	import AtenderLlamada from '$lib/callcenter/AtenderLlamada.svelte';
 	import {
+		COLA_DE_CIFRA,
 		PESTANAS,
 		estadoDe,
 		porcentaje,
@@ -64,7 +68,24 @@
 	let pagina = $state(1);
 	let paginas = $state(1);
 
-	let estado = $state<FiltroEstado>('pendiente');
+	/**
+	 * La cola abierta. Sale de la URL para que recargar no la pierda.
+	 *
+	 * Una operadora que pulsa «Les faltó algo», recarga sin querer y aparece
+	 * otra vez en «Falta llamar» no sabe que cambió de lista: sigue llamando y
+	 * cree que está en la cola urgente. Y así el filtro se puede pasar por chat
+	 * entre el turno de la mañana y el de la tarde.
+	 */
+	let estado = $state<FiltroEstado>(colaDeLaUrl());
+
+	function colaDeLaUrl(): FiltroEstado {
+		const pedida = page.url.searchParams.get('cola');
+		// Contra la lista de pestañas y no un `as`: lo que venga escrito a mano
+		// en la barra de direcciones no puede decidir qué consulta se lanza.
+		const valida = PESTANAS.some((p) => p.valor === pedida);
+
+		return valida ? (pedida as FiltroEstado) : 'pendiente';
+	}
 	let busqueda = $state('');
 	let cargando = $state(true);
 	let error = $state('');
@@ -208,11 +229,158 @@
 		}
 	}
 
-	function cambiarPestana(v: FiltroEstado) {
+	/**
+	 * Las nueve tarjetas del resumen, y qué dice cada una.
+	 *
+	 * Como tabla y no como nueve bloques escritos a mano: la clave `cifra` es
+	 * del `ResumenCallCenter`, así que el compilador no deja inventarse una
+	 * tarjeta que el servidor no manda, ni olvidar la cola que abre —esa la
+	 * exige `COLA_DE_CIFRA`, que las cubre todas.
+	 *
+	 * `sub` es una función porque una de ellas cuenta un porcentaje del censo,
+	 * y ese solo se sabe con el resumen delante.
+	 */
+	const TARJETAS: {
+		cifra: keyof ResumenCallCenter;
+		label: string;
+		color: string;
+		icon: LucideIcon;
+		sub: (r: ResumenCallCenter) => string;
+	}[] = [
+		{
+			cifra: 'total',
+			label: 'Hogares en el RUFE',
+			color: 'var(--color-primary)',
+			icon: Users,
+			sub: () => 'El universo de la campaña'
+		},
+		// La cifra que mide el final del camino. Antes este sitio lo ocupaba
+		// «ya se preinscribieron», que mide formularios llenados, no viviendas
+		// inspeccionadas.
+		{
+			cifra: 'terminados',
+			label: 'Inspección aprobada',
+			color: 'var(--color-success)',
+			icon: Check,
+			sub: (r) => `${porcentaje(r.terminados, r.total)} del censo`
+		},
+		{
+			cifra: 'preinscritos',
+			label: 'Esperan la inspección',
+			color: 'var(--color-info)',
+			icon: ClipboardCheck,
+			sub: () => 'Ya pidieron el turno'
+		},
+		{
+			cifra: 'sin_llamar',
+			label: 'Faltan por llamar',
+			color: 'var(--color-highlight-dark)',
+			icon: PhoneForwarded,
+			sub: () => 'Nadie los ha contactado'
+		},
+		// La cifra más accionable del tablero: familias que ya llenaron el
+		// formulario entero y se quedaron a una foto de entrar.
+		{
+			cifra: 'por_subsanar',
+			label: 'Les faltó algo',
+			color: 'var(--color-warning)',
+			icon: TriangleAlert,
+			sub: () => 'Hay que volver a llamarlas'
+		},
+		{
+			cifra: 'contactados_sin_preinscribir',
+			label: 'Llamados, sin registrarse',
+			color: 'var(--color-accent)',
+			icon: CircleDot,
+			sub: () => 'Ya se les explicó'
+		},
+		{
+			cifra: 'para_hoy',
+			label: 'Volver a llamar hoy',
+			color: 'var(--color-secondary-dark)',
+			icon: Clock,
+			sub: () => 'Quedaron para hoy'
+		},
+		{
+			cifra: 'sin_telefono',
+			label: 'Sin teléfono',
+			color: 'var(--color-muted)',
+			icon: PhoneOff,
+			sub: () => 'Hay que buscarlos por otra vía'
+		},
+		{
+			cifra: 'no_aplica',
+			label: 'No aplica',
+			color: 'var(--color-muted)',
+			icon: UserCheck,
+			sub: () => 'Fuera de la campaña'
+		}
+	];
+
+	/** La tarjeta que corresponde a la cola abierta, para marcarla. */
+	const cifraActiva = $derived(TARJETAS.find((t) => COLA_DE_CIFRA[t.cifra] === estado)?.cifra);
+
+	/**
+	 * Pulsar una tarjeta abre su cola.
+	 *
+	 * ── Por qué borra lo que hubiera en el buscador ──────────────────────────
+	 *
+	 * Porque el resumen cuenta TODO el censo y no mira el buscador —es el estado
+	 * de la campaña, no el de una búsqueda—. Si al pulsar se conservara lo
+	 * escrito, la tarjeta prometería 412 hogares y la lista devolvería uno. Con
+	 * eso basta para que la operadora no vuelva a fiarse de ninguna cifra de
+	 * esta pantalla, y esa confianza no se recupera.
+	 *
+	 * No alterna: volver a pulsar la tarjeta abierta no cierra nada. Sirve para
+	 * quitar una búsqueda sin cambiar de cola, y evita el clic que parece no
+	 * hacer nada.
+	 */
+	function abrirCola(cifra: keyof ResumenCallCenter) {
+		cambiarPestana(COLA_DE_CIFRA[cifra], true);
+		llevarALaLista();
+	}
+
+	/**
+	 * Cambiar de cola.
+	 *
+	 * `limpiarBusqueda` solo lo pide la tarjeta, y es importante que las
+	 * pestañas NO lo pidan: cuando una operadora busca una cédula y el aviso le
+	 * dice «está en otras listas», lo que hace es pulsar otra pestaña para
+	 * encontrarla. Borrarle ahí lo escrito la dejaría delante del censo entero
+	 * con la familia todavía al teléfono.
+	 */
+	function cambiarPestana(v: FiltroEstado, limpiarBusqueda = false) {
 		estado = v;
+		if (limpiarBusqueda) busqueda = '';
 		pagina = 1;
+		recordarEnLaUrl(v);
 		void cargar();
 	}
+
+	function recordarEnLaUrl(v: FiltroEstado) {
+		const url = new URL(page.url);
+
+		if (v === 'pendiente') url.searchParams.delete('cola');
+		else url.searchParams.set('cola', v);
+
+		// `replaceState` y no `goto`: cambiar de cola no es navegar. Si cada
+		// pulsación dejara una entrada en el historial, salir de esta pantalla
+		// con la flecha «atrás» costaría veinte pulsaciones.
+		replaceState(url, page.state);
+	}
+
+	/**
+	 * Llevar la vista hasta la lista.
+	 *
+	 * En un celular las nueve tarjetas ocupan la pantalla entera y la lista
+	 * queda debajo del pliegue: sin esto, la operadora pulsa, la lista cambia
+	 * donde no está mirando, y parece que el clic no hizo nada.
+	 */
+	function llevarALaLista() {
+		listaEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	let listaEl = $state<HTMLElement | null>(null);
 
 	function buscar(e: Event) {
 		e.preventDefault();
@@ -305,75 +473,24 @@
 	</div>
 
 	{#if resumen}
+		{@const r = resumen}
+		<!--
+			Cada tarjeta abre su cola. Antes eran nueve cifras que solo se podían
+			mirar: la operadora leía «Les faltó algo: 37», y para ver quiénes eran
+			esos 37 tenía que adivinar cuál de las ocho pestañas los contenía.
+		-->
 		<div class="kpi-grid">
-			<KpiTile
-				label="Hogares en el RUFE"
-				value={resumen.total}
-				color="var(--color-primary)"
-				icon={Users}
-				sub="El universo de la campaña"
-			/>
-			<!-- La cifra que mide el final del camino. Antes este sitio lo ocupaba
-			     «ya se preinscribieron», que mide formularios llenados, no
-			     viviendas inspeccionadas. -->
-			<KpiTile
-				label="Inspección aprobada"
-				value={resumen.terminados}
-				color="var(--color-success)"
-				icon={Check}
-				sub="{porcentaje(resumen.terminados, resumen.total)} del censo"
-			/>
-			<KpiTile
-				label="Esperan la inspección"
-				value={resumen.preinscritos}
-				color="var(--color-info)"
-				icon={ClipboardCheck}
-				sub="Ya pidieron el turno"
-			/>
-			<KpiTile
-				label="Faltan por llamar"
-				value={resumen.sin_llamar}
-				color="var(--color-highlight-dark)"
-				icon={PhoneForwarded}
-				sub="Nadie los ha contactado"
-			/>
-			<!-- La cifra más accionable del tablero: familias que ya llenaron el
-			     formulario entero y se quedaron a una foto de entrar. -->
-			<KpiTile
-				label="Les faltó algo"
-				value={resumen.por_subsanar}
-				color="var(--color-warning)"
-				icon={TriangleAlert}
-				sub="Hay que volver a llamarlas"
-			/>
-			<KpiTile
-				label="Llamados, sin registrarse"
-				value={resumen.contactados_sin_preinscribir}
-				color="var(--color-accent)"
-				icon={CircleDot}
-				sub="Ya se les explicó"
-			/>
-			<KpiTile
-				label="Volver a llamar hoy"
-				value={resumen.para_hoy}
-				color="var(--color-secondary-dark)"
-				icon={Clock}
-				sub="Quedaron para hoy"
-			/>
-			<KpiTile
-				label="Sin teléfono"
-				value={resumen.sin_telefono}
-				color="var(--color-muted)"
-				icon={PhoneOff}
-				sub="Sin número en la ficha"
-			/>
-			<KpiTile
-				label="No aplica"
-				value={resumen.no_aplica}
-				color="var(--color-muted)"
-				icon={UserCheck}
-				sub="Fuera de la campaña"
-			/>
+			{#each TARJETAS as t (t.cifra)}
+				<KpiTile
+					label={t.label}
+					value={r[t.cifra]}
+					color={t.color}
+					icon={t.icon}
+					sub={t.sub(r)}
+					activa={cifraActiva === t.cifra}
+					alPulsar={() => abrirCola(t.cifra)}
+				/>
+			{/each}
 		</div>
 	{/if}
 </div>
@@ -410,7 +527,7 @@
 		<PanelGuion puedeEditar={puedeEditarGuion} />
 	</div>
 {:else}
-<div class="tarjeta" style="margin-top:1.25rem">
+<div class="tarjeta" style="margin-top:1.25rem" bind:this={listaEl}>
 	<div class="titulo-fila">
 		<h2 class="tarjeta__titulo">A quién llamar</h2>
 		<button type="button" class="boton boton--suave" onclick={() => (verGuion = true)}>
@@ -846,15 +963,15 @@
 	   segunda parece una nota al pie y deja de mirarse.
 
 	   `grid-auto-flow: column` y NO un número de columnas escrito a mano. La
-	   primera versión decía `repeat(7, …)` porque conté siete tarjetas y son
+	   primera versión decía `repeat(7, …)` porque conté siete tarjetas y eran
 	   ocho: la octava se fue a una segunda fila ella sola. Así la rejilla no
-	   necesita saber cuántas hay, y añadir una novena mañana no vuelve a
-	   partirla.
+	   necesita saber cuántas hay —hoy son nueve— y añadir la siguiente no
+	   vuelve a partirla.
 
 	   `minmax(0, 1fr)`: sin el mínimo en cero, una etiqueta larga —«Llamados,
 	   sin registrarse»— ensancha su columna y descuadra las demás.
 
-	   Por debajo de 1250 px ocho tarjetas no se leen, así que se vuelven a
+	   Por debajo de 1250 px no se leen todas seguidas, así que se vuelven a
 	   repartir en las filas que hagan falta. */
 	.kpi-grid {
 		display: grid;
@@ -871,7 +988,7 @@
 		}
 	}
 
-	/* Ocho cifras donde antes había cinco: las tarjetas se aprietan un poco.
+	/* Nueve cifras donde antes había cinco: las tarjetas se aprietan un poco.
 	   Solo aquí —KpiTile lo comparten el tablero y los mapas, donde son cuatro
 	   y tienen sitio de sobra—. El número no se toca: es lo que se lee. */
 	.kpi-grid :global(.kpi-tile) {
