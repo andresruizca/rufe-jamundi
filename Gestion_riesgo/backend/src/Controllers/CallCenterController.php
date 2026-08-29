@@ -12,6 +12,7 @@ use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Request;
 use App\Core\Response;
+use App\Riesgo\Recorrido;
 use App\Rufe\Catalogos;
 
 /**
@@ -308,28 +309,19 @@ final class CallCenterController
      *
      * Con `pre.id = (SELECT … LIMIT 1)` cada hogar aporta UNA fila, siempre.
      */
-    private const CRUCE = '
-        LEFT JOIN rufe_personas jefe
-               ON jefe.id = (SELECT j2.id FROM rufe_personas j2
-                              WHERE j2.reporte_id = r.id AND j2.parentesco = :jefe
-                              ORDER BY j2.orden ASC LIMIT 1)
-        LEFT JOIN preinscripciones pre
-               ON pre.id = (SELECT p2.id FROM preinscripciones p2
-                             WHERE p2.documento = jefe.numero_documento
-                               AND jefe.numero_documento IS NOT NULL
-                             ORDER BY p2.creado_en DESC, p2.id DESC LIMIT 1)
-        LEFT JOIN rufe_gestiones g
-               ON g.id = (SELECT g2.id FROM rufe_gestiones g2
-                           WHERE g2.reporte_id = r.id AND g2.canal = \'LLAMADA\'
-                           ORDER BY g2.creado_en DESC, g2.id DESC LIMIT 1)
-        LEFT JOIN inspeccion_viviendas insp
-               ON insp.id = (SELECT i2.id FROM inspeccion_viviendas i2
-                              WHERE i2.estado = \'APROBADA\'
-                                AND (i2.rufe_reporte_id = r.id
-                                     OR (jefe.numero_documento IS NOT NULL
-                                         AND jefe.numero_documento <> \'\'
-                                         AND i2.propietario_documento = jefe.numero_documento))
-                              ORDER BY i2.id DESC LIMIT 1)
+    /**
+     * Cómo se ata un hogar del censo con su solicitud, sus llamadas y su
+     * inspección.
+     *
+     * Las reglas viven en `Recorrido` y no aquí desde que el tablero mira el
+     * mismo camino: si cada pantalla resolviera el cruce por su cuenta, esta
+     * diría que quedan mil por llamar y la otra diría otra cosa, las dos con
+     * aire de verdad.
+     *
+     * Lo único propio es la última unión: quién tiene abierto ahora mismo este
+     * hogar. Eso no es parte del recorrido de la familia, es de la operadora.
+     */
+    private const CRUCE = Recorrido::CRUCE.'
         LEFT JOIN rufe_atenciones aten
                ON aten.reporte_id = r.id
               AND aten.actualizado_en > (NOW() - INTERVAL '.self::MINUTOS_ATENCION.' MINUTE)

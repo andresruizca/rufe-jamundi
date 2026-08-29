@@ -180,13 +180,20 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-	// El tablero del RUFE es la única pantalla operativa del sistema hoy, así
-	// que va suelta en el primer nivel y no dentro de un grupo.
+	// El panorama de la emergencia: va suelto en el primer nivel porque no es
+	// de ningún módulo, es la vista de todos a la vez.
+	//
+	// Se llamaba «Dashboard» y «Tablero RUFE». Lo primero era la única palabra
+	// en inglés de un sistema que usan operadoras y funcionarios de la
+	// Alcaldía. Lo segundo nombraba el formulario con el que se llenó, cuando
+	// la pantalla ya no habla de un formato: habla de las familias y de en qué
+	// punto del trámite está cada una. El RUFE sigue nombrado dentro, en la
+	// sección del censo, que es donde el nombre es exacto.
 	{
 		id: 'dashboard',
 		type: 'item',
-		label: 'Dashboard',
-		title: 'Tablero RUFE — Sismo Jamundí',
+		label: 'Panorama',
+		title: 'Atención a damnificados — Sismo Jamundí',
 		href: '/dashboard',
 		icon: LayoutDashboard,
 		roles: LECTURA_RUFE,

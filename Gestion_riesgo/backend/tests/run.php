@@ -3234,6 +3234,94 @@ prueba('cada motivo trae qué decirle a la persona', function (): void {
     }
 });
 
+grupo('El recorrido: del censo a la ayuda');
+
+prueba('las cinco etapas van en el orden en que se recorren', function (): void {
+    // El tablero dibuja la caída de una etapa a la siguiente. Una etapa fuera
+    // de sitio convertiría un avance en una fuga y al revés: se leería que la
+    // gente retrocede, y alguien tomaría una decisión sobre eso.
+    afirmarIgual(
+        ['censadas', 'contactadas', 'preinscritas', 'inspeccionadas', 'aprobadas'],
+        array_keys(App\Riesgo\Recorrido::ETAPAS),
+        'cambió el orden o el número de etapas del recorrido'
+    );
+});
+
+prueba('el tablero y el call center atan los hogares con la MISMA regla', function (): void {
+    // Es la razón de que `Recorrido` exista. El censo, la preinscripción y la
+    // inspección no comparten ningún identificador: se atan por la cédula del
+    // jefe de hogar y, en la inspección, también por la ficha. Si cada pantalla
+    // resolviera eso por su cuenta, el call center diría que quedan mil por
+    // llamar y el tablero diría otra cosa, las dos con aire de verdad.
+    $cruce = App\Riesgo\Recorrido::CRUCE;
+
+    afirmar(str_contains($cruce, 'rufe_personas jefe'), 'el cruce no busca al jefe de hogar');
+    afirmar(str_contains($cruce, 'preinscripciones pre'), 'el cruce no mira las preinscripciones');
+    afirmar(str_contains($cruce, 'rufe_gestiones g'), 'el cruce no mira las llamadas');
+    afirmar(str_contains($cruce, 'inspeccion_viviendas insp'), 'el cruce no mira las inspecciones');
+
+    // Y el que de verdad importa: el call center lo usa tal cual, no una copia.
+    $php = (string) file_get_contents(__DIR__.'/../src/Controllers/CallCenterController.php');
+    afirmar(
+        str_contains($php, 'private const CRUCE = Recorrido::CRUCE.'),
+        'el call center volvió a escribir su propio cruce'
+    );
+});
+
+prueba('«contactada» es una llamada, nunca un WhatsApp', function (): void {
+    // Mandar un mensaje no es haber hablado con nadie. Contarlo como contacto
+    // daría por atendido a un hogar al que solo le llegó un enlace que quizá
+    // ni abrió, y esa familia no volvería a aparecer en ninguna cola.
+    afirmar(
+        str_contains(App\Riesgo\Recorrido::ULTIMA_LLAMADA, "g2.canal = 'LLAMADA'"),
+        'la etapa «contactadas» dejó de exigir que fuera una llamada'
+    );
+});
+
+prueba('«inspeccionada» y «aprobada» son dos etapas distintas', function (): void {
+    // Quien tiene la visita hecha y el dictamen pendiente no espera una visita:
+    // espera una respuesta. Son dos atascos con dos responsables distintos, y
+    // juntarlos escondería a la gente que lleva semanas esperando un papel.
+    $etapas = App\Riesgo\Recorrido::ETAPAS;
+
+    afirmar(
+        str_contains((string) $etapas['inspeccionadas']['condicion'], 'insp_toda'),
+        '«inspeccionadas» dejó de mirar las inspecciones sin aprobar'
+    );
+    afirmar(
+        str_contains(App\Riesgo\Recorrido::INSPECCION_CUALQUIERA, "i3.estado <> 'ARCHIVADA'"),
+        'una inspección archivada volvería a contar como visita hecha'
+    );
+    afirmarIgual(
+        'insp.id IS NOT NULL',
+        $etapas['aprobadas']['condicion'],
+        '«aprobadas» dejó de medirse por la inspección aprobada'
+    );
+});
+
+prueba('cada atasco lleva a la pantalla donde se resuelve', function (): void {
+    // No son cifras para mirar: son trabajo pendiente. Un atasco sin ruta es
+    // una alarma que suena y no dice dónde ir, y con tres operadoras y un
+    // ingeniero eso acaba en que no lo atiende nadie.
+    foreach (App\Riesgo\Recorrido::atascosDeclarados() as $a) {
+        afirmar(trim($a['nombre']) !== '', "un atasco sin nombre: {$a['clave']}");
+        afirmar(str_starts_with($a['ruta'], '/riesgo/'), "«{$a['clave']}» no lleva a ninguna pantalla");
+        afirmar(in_array($a['nivel'], ['critico', 'aviso'], true), "«{$a['clave']}» sin nivel válido");
+    }
+});
+
+prueba('el umbral de «demorada» es el mismo que el de la bandeja', function (): void {
+    // El tablero avisa del mismo atasco que la bandeja de solicitudes. Si
+    // mañana se afloja a cinco días, el tablero no puede seguir alarmando a los
+    // tres: quien mira el tablero vería un problema que la bandeja ya no ve.
+    $php = (string) file_get_contents(__DIR__.'/../src/Riesgo/Recorrido.php');
+
+    afirmar(
+        str_contains($php, 'PreinscripcionController::DIAS_DEMORA'),
+        'el tablero volvió a escribir su propio umbral de demora'
+    );
+});
+
 grupo('Call center: las tarjetas que abren su propia lista');
 
 prueba('cada cifra del resumen tiene una cola que la contiene', function (): void {
@@ -3602,13 +3690,10 @@ prueba('la inspección se reconoce aunque no la enlazaran a la ficha', function 
     // `inspeccion_viviendas.rufe_reporte_id` admite nulos. Una inspección
     // capturada sin enlazar existiría sin que el cruce la viera, y esa familia
     // seguiría recibiendo llamadas después de terminar su trámite.
-    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
-
-    preg_match('/private const CRUCE = \'(.*?)\';/s', $php, $m);
-    $cruce = $m[1] ?? '';
+    $cruce = App\Riesgo\Recorrido::CRUCE;
 
     afirmar(str_contains($cruce, 'inspeccion_viviendas i2'), 'el cruce no mira las inspecciones');
-    afirmar(str_contains($cruce, "i2.estado = \\'APROBADA\\'"), 'cuenta inspecciones que no están aprobadas');
+    afirmar(str_contains($cruce, "i2.estado = 'APROBADA'"), 'cuenta inspecciones que no están aprobadas');
     afirmar(str_contains($cruce, 'i2.rufe_reporte_id = r.id'), 'no cruza por la ficha del censo');
     afirmar(
         str_contains($cruce, 'i2.propietario_documento = jefe.numero_documento'),
@@ -4172,12 +4257,10 @@ prueba('el cruce del call center da UNA fila por hogar, pase lo que pase', funct
     // Lo segundo es lo grave: la cifra de avance de la campaña se le reporta a
     // la Alcaldía y estaba inflada sin que nada lo delatara. Lo primero se notó
     // solo porque la pantalla se quedaba cargando.
-    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
-
-    preg_match('/private const CRUCE = \'(.*?)\';/s', $php, $m);
-    afirmar(isset($m[1]), 'no se encontró la constante CRUCE');
-
-    $cruce = $m[1];
+    // Se mira la constante ya resuelta y no el texto del archivo: desde que las
+    // reglas del cruce se comparten con el tablero, ESTA es la cadena que de
+    // verdad viaja a la base de datos.
+    $cruce = App\Riesgo\Recorrido::CRUCE;
 
     // Las cuatro que pueden traer más de una fila por hogar. Se nombran una a
     // una en vez de contarlas: así, añadir una quinta obliga a decidir aquí si

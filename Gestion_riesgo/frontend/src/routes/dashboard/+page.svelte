@@ -19,6 +19,8 @@
 	import type { DashboardTab } from '$lib/dashboardTabs';
 	import InstEducativasView from '$lib/components/dashboard/InstEducativasView.svelte';
 	import EquipamientosView from '$lib/components/dashboard/EquipamientosView.svelte';
+	import RecorridoView from '$lib/components/dashboard/RecorridoView.svelte';
+	import AtascosView from '$lib/components/dashboard/AtascosView.svelte';
 	import ZonaFilter from '$lib/components/ZonaFilter.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import KpiTile from '$lib/components/KpiTile.svelte';
@@ -36,7 +38,6 @@
 		ShieldAlert,
 		Building2,
 		KeyRound,
-		ClipboardCheck,
 		Siren,
 		MessageSquareText,
 		Table2,
@@ -187,7 +188,6 @@
 			.sort((a, b) => b.value - a.value)
 	);
 	const maxTipo = $derived(Math.max(...tipoRows.map((r) => r.value), 1));
-	const maxVisita = $derived(Math.max(hogaresAgg.visitaSi, hogaresAgg.visitaNo, 1));
 	const maxObsTag = $derived(Math.max(...obsTags.map((t) => t.count), 1));
 
 	// Colores distintivos de la paleta de INNOLAB (más allá del azul/naranja
@@ -234,29 +234,15 @@
 </script>
 
 <svelte:head>
-	<title>Tablero RUFE — Sismo Jamundí</title>
+	<title>Atención a damnificados — Sismo Jamundí</title>
 	<meta
 		name="description"
-		content="Tablero interactivo de personas registradas por el sismo del 10 de agosto en Jamundí, por zona rural/urbana, barrio, género y edad."
+		content="Estado de la atención a las familias afectadas por el sismo del 10 de agosto en Jamundí: del censo a la inspección de vivienda."
 	/>
 </svelte:head>
 
 <div class="wrap">
 	<Header asOf={actualizado} total={DATA.total} hogares={DATA.hogares.length} />
-
-	{#if DATA.warnings?.length}
-		<!--
-			Lo que el tablero tiene que advertir para no engañar a quien lo lee.
-			Un indicador calculado sobre un tercio de la gente no está mal: está
-			incompleto, y la diferencia entre las dos cosas decide si alguien lo
-			copia tal cual a un informe para la Alcaldía.
-		-->
-		<ul class="avisos">
-			{#each DATA.warnings as aviso (aviso)}
-				<li>{aviso}</li>
-			{/each}
-		</ul>
-	{/if}
 
 	<DashboardTabs bind:active={activeTab} />
 
@@ -273,28 +259,15 @@
 		onRefresh={refresh}
 	/>
 
-	<div class="advisory">
-		<svg
-			width="16"
-			height="16"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-			><path
-				d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
-			/><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg
-		>
-		<div>
-			<strong>Datos en vivo desde el RUFE (FR-1703-SMD-69).</strong> El tablero se conecta directo a la
-			hoja de Google del consolidado y se refresca solo cada 3 minutos. El género se toma directo de la
-			columna "Identidad de género" del formulario y puede contener registros sin diligenciar; la zona
-			(rural/urbana) se infiere del corregimiento reportado. Cifras de apoyo operativo para la respuesta
-			a la emergencia, no un censo certificado.
-		</div>
+	<!--
+		Lo primero, y a propósito: es lo que le preguntan a la Alcaldía —cuánta
+		gente está esperando y en qué punto—. Lo que había antes en este sitio
+		respondía con detalle a otra pregunta, quiénes son los damnificados, que
+		también importa pero no dice si el sistema avanza o está parado.
+	-->
+	<div class="pila">
+		<RecorridoView etapas={DATA.recorrido} personas={DATA.total} />
+		<AtascosView atascos={DATA.atascos} />
 	</div>
 
 	<div class="filterbar">
@@ -311,6 +284,22 @@
 		</div>
 		<HogaresCriticosBadge top={top20Criticos} total={hogaresCriticos.length} />
 	</div>
+
+	{#if DATA.warnings?.length}
+		<!--
+			Pegado al dato que limita, y no arriba del todo.
+
+			Estaba en la cabecera, encima de todo, donde se lee una vez el primer
+			día y se deja de ver. La única advertencia que queda —que la edad solo
+			se sabe de la mitad de la gente— afecta solo a estas tarjetas, y aquí
+			la ve quien está a punto de copiar una de ellas a un informe.
+		-->
+		<ul class="avisos">
+			{#each DATA.warnings as aviso (aviso)}
+				<li>{aviso}</li>
+			{/each}
+		</ul>
+	{/if}
 
 	<div class="kpi-grid">
 		<KpiTile
@@ -599,44 +588,6 @@
 		<div class="card span-2">
 			<div class="card-head">
 				<div>
-					<h2>
-						<ClipboardCheck size={16} strokeWidth={2.25} aria-hidden="true" /> Visitas técnicas
-					</h2>
-					<p class="card-note">Si ya se realizó la visita de verificación al predio</p>
-				</div>
-			</div>
-			<div class="bars">
-				<BarRow
-					label="Realizada"
-					value={hogaresAgg.visitaSi}
-					max={maxVisita}
-					color="var(--status-good)"
-				/>
-				<BarRow
-					label="Pendiente"
-					value={hogaresAgg.visitaNo}
-					max={maxVisita}
-					color="var(--status-warning)"
-				/>
-				{#if hogaresAgg.visitaSinDato > 0}
-					<BarRow label="Sin dato" value={hogaresAgg.visitaSinDato} max={maxVisita} color="" dim />
-				{/if}
-			</div>
-			{#if hogaresAgg.visitantes.length > 0}
-				<div class="visitantes">
-					<p class="card-note visitantes-label">Quién realizó la visita</p>
-					<div class="visitantes-tags">
-						{#each hogaresAgg.visitantes.slice(0, 12) as v (v.nombre)}
-							<span class="visitante-tag">{v.nombre} <b>{v.count}</b></span>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
-
-		<div class="card span-2">
-			<div class="card-head">
-				<div>
 					<h2><Siren size={16} strokeWidth={2.25} aria-hidden="true" /> Personal evacuado</h2>
 					<p class="card-note">
 						Personas cuyo hogar fue evacuado tras el sismo, dentro del filtro activo
@@ -747,25 +698,6 @@
 		}
 	}
 
-	.advisory {
-		display: flex;
-		gap: 10px;
-		align-items: flex-start;
-		background: var(--color-warning-bg);
-		border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
-		color: color-mix(in srgb, var(--color-warning) 70%, var(--color-text));
-		border-radius: var(--radius);
-		padding: 10px 12px;
-		font-size: 12.5px;
-		line-height: 1.5;
-	}
-	.advisory svg {
-		flex: none;
-		margin-top: 1px;
-	}
-	.advisory strong {
-		color: inherit;
-	}
 
 	.filterbar {
 		display: flex;
@@ -831,6 +763,16 @@
 		font-weight: 700;
 		opacity: 0.85;
 		margin-left: 4px;
+	}
+
+	/* El recorrido y los atascos, uno encima del otro y separados del resto:
+	   son la respuesta a «cómo vamos». Lo de abajo es el detalle de quién y
+	   dónde, que es otra pregunta. */
+	.pila {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin: 0.9rem 0 0.2rem;
 	}
 
 	.kpi-grid {
@@ -990,32 +932,6 @@
 		color: var(--color-muted);
 	}
 
-	.visitantes {
-		margin-top: 14px;
-		padding-top: 12px;
-		border-top: 1px dashed var(--color-border);
-	}
-	.visitantes-label {
-		margin: 0 0 8px;
-	}
-	.visitantes-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.visitante-tag {
-		font-size: 11.5px;
-		font-weight: 600;
-		color: var(--color-text);
-		background: var(--color-surface-alt);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-full);
-		padding: 3px 9px;
-	}
-	.visitante-tag b {
-		color: var(--color-primary-dark);
-		font-weight: 800;
-	}
 
 	.obs-tags {
 		margin-bottom: 14px;

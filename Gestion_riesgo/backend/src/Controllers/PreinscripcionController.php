@@ -67,8 +67,11 @@ final class PreinscripcionController
      * de perder parte de su casa, y a los tres días sin respuesta ya está
      * llamando al conmutador. El número existe para que el atasco se vea antes
      * de que llame.
+     *
+     * Público porque el tablero avisa del mismo atasco: si mañana se afloja a
+     * cinco días, el tablero no puede seguir alarmando a los tres.
      */
-    private const DIAS_DEMORA = 3;
+    public const DIAS_DEMORA = 3;
 
     private const MAX_ENVIOS_HORA = 5;
 

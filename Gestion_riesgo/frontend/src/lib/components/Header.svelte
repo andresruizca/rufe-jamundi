@@ -9,7 +9,7 @@
 		<img class="seal" src={logo} alt="Escudo de la Alcaldía de Jamundí" width="42" height="42" />
 		<div>
 			<p class="eyebrow">Alcaldía Municipal de Jamundí · Gestión del Riesgo</p>
-			<h1>Tablero RUFE — Sismo Jamundí</h1>
+			<h1>Atención a damnificados — Sismo Jamundí</h1>
 		</div>
 	</div>
 	<div class="masthead-sub">

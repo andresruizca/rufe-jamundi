@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Rufe;
 
 use App\Core\Db;
+use App\Riesgo\Recorrido;
 
 /**
  * Las cifras del tablero, calculadas sobre la base oficial.
@@ -143,6 +144,11 @@ final class Tablero
                 'hogar' => (string) $r['radicado'],
                 'barrio' => $nombre,
                 'zona' => $zona,
+                // La usa la sección Mapas, que saca el censo de esta misma
+                // respuesta: es lo único con lo que puede ubicar un predio. El
+                // tablero no la dibuja en ninguna parte, así que sigue viajando
+                // de más a quien solo abre el tablero — para quitarla hay que
+                // darle a Mapas su propia fuente primero, y eso es otro cambio.
                 'direccion' => (string) $r['direccion'],
                 'personas' => $cuenta['total'],
                 'estadoBien' => Catalogos::ESTADOS_BIEN[$r['estado_bien']] ?? '',
@@ -160,7 +166,12 @@ final class Tablero
             'asOf' => date('c'),
             'barrios' => array_values($barrios),
             'hogares' => $hogares,
-            'warnings' => self::avisos($total, $personas, $reportes),
+            'warnings' => self::avisos($total, $personas),
+            // El camino completo, que es lo que el tablero pasó a medir: no
+            // cuánta gente entró por la primera puerta, sino dónde está cada
+            // familia entre la primera y la última.
+            'recorrido' => Recorrido::etapas(),
+            'atascos' => Recorrido::atascos(),
         ];
     }
 
@@ -224,7 +235,7 @@ final class Tablero
      * @param  list<array<string,mixed>>  $reportes
      * @return list<string>
      */
-    private static function avisos(int $total, array $personas, array $reportes): array
+    private static function avisos(int $total, array $personas): array
     {
         $avisos = [];
 
@@ -245,21 +256,10 @@ final class Tablero
             );
         }
 
-        $sinVisita = 0;
-
-        foreach ($reportes as $r) {
-            if (($r['visitada'] ?? 'SIN_DATO') === 'SIN_DATO') {
-                $sinVisita++;
-            }
-        }
-
-        if ($sinVisita > 0) {
-            $avisos[] = sprintf(
-                '%d de %d fichas no dicen si se hizo la visita. «Sin dato» no es «no visitada».',
-                $sinVisita,
-                count($reportes)
-            );
-        }
+        // El aviso de «cuántas fichas no dicen si se hizo la visita» se retiró
+        // con la tarjeta que lo necesitaba. Esa columna del censo dejó de
+        // llenarse: la visita de verdad es ahora la inspección de vivienda, que
+        // tiene sus propios estados y su propia cola en el tablero.
 
         return $avisos;
     }
