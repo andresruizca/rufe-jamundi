@@ -53,3 +53,20 @@ VIVE-HELP-MANAGER/
 # historial de nadie que ya lo haya clonado.
 *.xlsx
 Gestion_riesgo/backend/scripts/revision-rud.csv
+
+# ── Datos personales y secretos: nunca versionados ──────────────────────────
+#
+# El 28 de agosto de 2026 una auditoría encontró dos cosas publicadas en un
+# repositorio que estaba en PÚBLICO: un token vivo de Zavu —con el que
+# cualquiera manda WhatsApp desde el número oficial de la Alcaldía— y doce
+# cédulas con fecha de nacimiento de personas del censo.
+#
+# Las reglas de abajo son anchas a propósito. Un CSV de trabajo o un volcado de
+# la base casi siempre salen de consultar datos reales, y el coste de ignorar
+# uno que no hacía falta es cero comparado con publicar el que sí.
+Gestion_riesgo/backend/scripts/*.csv
+Gestion_riesgo/backend/scripts/*.xls
+Gestion_riesgo/backend/scripts/*.xlsx
+Estrategia_Gestion_Call_center/api_zv.md
+*.sqlite
+*.dump
