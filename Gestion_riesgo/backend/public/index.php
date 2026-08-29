@@ -303,7 +303,33 @@ try {
 } catch (HttpError $e) {
     Response::error($e->getMessage(), $e->estado(), $e->errores());
 } catch (Throwable $e) {
-    error_log('[SGR] '.$e->getMessage().' en '.$e->getFile().':'.$e->getLine());
+    /*
+     * Qué se anota cuando algo revienta, y por qué justo esto.
+     *
+     * Antes se escribía el mensaje, el archivo y la línea. Sonaba suficiente y
+     * no lo era: los once errores «Invalid parameter number» del 27 de agosto
+     * apuntaban todos a `Db.php:68`, que es donde se ejecuta CUALQUIER
+     * consulta. Once fallos en producción, y no hay forma de saber cuál de las
+     * ochenta y cinco rutas los produjo.
+     *
+     * Con el método y la ruta, ese mismo error se localiza en un minuto.
+     *
+     * Lo que NO se anota, y es deliberado: ni el cuerpo, ni los parámetros de
+     * la consulta, ni la cadena de consulta. En este sistema todo eso lleva
+     * cédulas, teléfonos y direcciones de familias damnificadas, y un registro
+     * de errores se lee con mucho menos cuidado que una base de datos. La ruta
+     * es un patrón —`/preinscripcion/fichas/{id}`— no el identificador real.
+     */
+    $ruta = $router->rutaDespachada() ?? ($_SERVER['REQUEST_URI'] ?? '?');
+
+    error_log(sprintf(
+        '[SGR] %s en %s:%d [%s %s]',
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine(),
+        $_SERVER['REQUEST_METHOD'] ?? '?',
+        $ruta
+    ));
 
     // El detalle del error solo se devuelve fuera de producción: en el servidor
     // real puede contener credenciales o la estructura interna del sistema.

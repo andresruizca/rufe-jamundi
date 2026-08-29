@@ -49,6 +49,20 @@ final class Router
     }
 
     /**
+     * El PATRÓN de la ruta que se está atendiendo, para el registro de errores.
+     *
+     * Es `/preinscripcion/fichas/{id}` y no `/preinscripcion/fichas/482`: el
+     * patrón agrupa los fallos de una misma ruta y, sobre todo, no escribe en el
+     * registro el identificador de la ficha de una familia concreta.
+     */
+    private ?string $despachada = null;
+
+    public function rutaDespachada(): ?string
+    {
+        return $this->despachada;
+    }
+
+    /**
      * Resuelve y ejecuta. Distingue "no existe" (404) de "existe pero con otro
      * método" (405) para que un error de cliente no se confunda con una ruta
      * mal escrita.
@@ -69,6 +83,7 @@ final class Router
             }
 
             $req->params = $params;
+            $this->despachada = $ruta['patron'];
 
             // El control de acceso vive aquí y no dentro de cada controlador:
             // así ninguna ruta puede quedarse sin guardia por olvido.

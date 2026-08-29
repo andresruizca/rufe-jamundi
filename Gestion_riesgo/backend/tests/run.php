@@ -3740,6 +3740,43 @@ prueba('un barrio se reconoce escrito de cualquier manera', function (): void {
     afirmar(! App\Rufe\CatalogoBarrios::reconocido('Barrio Que No Existe'), 'reconoció un barrio inventado');
 });
 
+grupo('Un error de producción tiene que poder diagnosticarse');
+
+prueba('el registro dice qué ruta falló, no solo dónde reventó', function () use ($raiz): void {
+    // Los once «Invalid parameter number» del 27 de agosto apuntaban todos a
+    // `Db.php:68`, que es donde se ejecuta CUALQUIER consulta. Once fallos en
+    // producción y ninguna forma de saber cuál de las ochenta y cinco rutas los
+    // produjo: el error quedó sin diagnóstico y sigue sin explicación.
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+    $manejador = substr($php, strpos($php, 'catch (Throwable $e)'));
+
+    afirmar(str_contains($manejador, 'REQUEST_METHOD'), 'el registro no dice con qué método se llamó');
+    afirmar(str_contains($manejador, 'rutaDespachada()'), 'el registro no dice qué ruta se estaba atendiendo');
+});
+
+prueba('el registro de errores NO escribe datos de nadie', function () use ($raiz): void {
+    // Un registro de errores se lee con mucho menos cuidado que una base de
+    // datos, y aquí cada petición lleva cédulas, teléfonos y direcciones de
+    // familias damnificadas. Lo que se anota es el PATRÓN de la ruta
+    // —/preinscripcion/fichas/{id}— no el identificador real.
+    $php = (string) file_get_contents($raiz.'/public/index.php');
+    $manejador = substr($php, strpos($php, 'catch (Throwable $e)'));
+
+    foreach (['REQUEST_BODY', 'php://input', '$_POST', '$_GET', 'QUERY_STRING'] as $prohibido) {
+        afirmar(
+            ! str_contains($manejador, $prohibido),
+            "el registro de errores escribe {$prohibido}: ahí van datos personales"
+        );
+    }
+
+    // Y el router entrega el patrón, no la ruta con el id dentro.
+    $router = (string) file_get_contents($raiz.'/src/Core/Router.php');
+    afirmar(
+        str_contains($router, "\$this->despachada = \$ruta['patron']"),
+        'el router guarda la ruta concreta en vez del patrón'
+    );
+});
+
 grupo('El login contra la fuerza bruta');
 
 prueba('probar contraseñas indefinidamente ya no es posible', function () use ($raiz): void {
