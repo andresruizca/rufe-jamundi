@@ -1,0 +1,1 @@
+var e=``+new URL(`../assets/logo-jamundi.JZ8i7rLA.svg`,import.meta.url).href;export{e as t};
