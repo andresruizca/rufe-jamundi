@@ -879,6 +879,31 @@ prueba('los códigos numéricos empiezan en 1 y son contiguos', function (): voi
     }
 });
 
+prueba('el formulario no ofrece "No informa" en género ni en etnia, pero el catálogo completo lo conserva', function (): void {
+    // El formato físico solo trae tres géneros y seis etnias. "No informa"
+    // existe para la carga del RUD —un censo en papel con el dato
+    // realmente ausente— y para que una ficha ya guardada con ese valor
+    // siga mostrando su etiqueta. En el formulario en vivo, con un
+    // funcionario delante, no hace falta ofrecerlo.
+    $api = Catalogos::paraApi();
+
+    afirmar(
+        ! in_array(Catalogos::GENERO_NO_INFORMA, array_column($api['generos'], 'codigo'), true),
+        'el formulario no debe ofrecer "No informa" en género'
+    );
+    afirmar(
+        ! in_array(Catalogos::ETNIA_NO_INFORMA, array_column($api['etnias'], 'codigo'), true),
+        'el formulario no debe ofrecer "No informa" en etnia'
+    );
+    afirmarIgual(3, count($api['generos']));
+    afirmarIgual(6, count($api['etnias']));
+
+    // El catálogo completo no pierde nada: son las 32 y 403 fichas ya
+    // guardadas con ese valor las que dependen de que siga aquí.
+    afirmarIgual('No informa', Catalogos::GENEROS[Catalogos::GENERO_NO_INFORMA]);
+    afirmarIgual('No informa', Catalogos::ETNIAS[Catalogos::ETNIA_NO_INFORMA]);
+});
+
 prueba('solo tres códigos describen ausencia de documento', function (): void {
     foreach ([6, 7, 8] as $codigo) {
         afirmar(! Catalogos::exigeNumeroDocumento($codigo), "el código {$codigo} no debería exigir número");

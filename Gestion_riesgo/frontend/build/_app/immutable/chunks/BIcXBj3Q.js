@@ -1,0 +1,1 @@
+import{o as e,s as t}from"./ClSPeXlH.js";import"./xihTtKlq.js";import{t as n}from"./BR2LtDPH.js";var r=new Set([`$$slots`,`$$events`,`$$legacy`]);function i(i,a){let o=e(a,r),s=[[`circle`,{cx:`12`,cy:`12`,r:`10`}],[`line`,{x1:`12`,x2:`12`,y1:`8`,y2:`12`}],[`line`,{x1:`12`,x2:`12.01`,y1:`16`,y2:`16`}]];n(i,t({name:`circle-alert`},()=>o,{get iconNode(){return s}}))}export{i as t};

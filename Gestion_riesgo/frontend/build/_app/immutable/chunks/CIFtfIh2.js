@@ -1,0 +1,1 @@
+import{o as e,s as t}from"./ClSPeXlH.js";import"./xihTtKlq.js";import{t as n}from"./BR2LtDPH.js";var r=new Set([`$$slots`,`$$events`,`$$legacy`]);function i(i,a){let o=e(a,r),s=[[`rect`,{width:`18`,height:`18`,x:`3`,y:`3`,rx:`2`}]];n(i,t({name:`square`},()=>o,{get iconNode(){return s}}))}export{i as t};
