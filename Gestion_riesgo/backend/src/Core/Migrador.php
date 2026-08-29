@@ -73,6 +73,9 @@ final class Migrador
         // La cara de atrás de la cédula. Va después de evidencias_03_tipos.sql,
         // que es quien dejó el ENUM con los cinco valores anteriores.
         'evidencias_04_cedula_reverso.sql',
+        // Avisos al aparato. Va al último: apunta a `usuarios`, que existe
+        // desde el principio, y no lo necesita nadie más.
+        'push_01.sql',
     ];
 
     /**

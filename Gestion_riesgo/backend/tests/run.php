@@ -2569,6 +2569,12 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
         // Información del sistema.
         'GET /acerca/sistema',
         'GET /acerca/actualizaciones',
+        // Los avisos de SU aparato. Cualquiera que entre puede pedirlos para sí
+        // mismo; a quién se le manda cada aviso lo decide el servidor por el
+        // rol, no la suscripción. Ninguna de las tres deja ver nada de nadie.
+        'GET /push/suscripciones',
+        'POST /push/suscripciones',
+        'POST /push/suscripciones/baja',
         // Su formato.
         'GET /inspeccion/catalogos',
         'GET /inspeccion/duplicados',
@@ -3234,6 +3240,116 @@ prueba('cada motivo trae qué decirle a la persona', function (): void {
     }
 });
 
+grupo('Avisos al aparato');
+
+prueba('la firma del token sale de 64 bytes, siempre', function (): void {
+    // El detalle que cuesta una tarde. `openssl_sign` devuelve la firma en DER,
+    // que lleva etiquetas y longitudes variables; la norma la quiere en crudo,
+    // R y S pegados de 32 bytes cada uno. Si se manda el DER tal cual, el
+    // servicio de push responde 401 SIN decir por qué y desde fuera parece que
+    // la clave está mal.
+    //
+    // Doscientas firmas porque el largo del DER varía: cuando R o S empiezan
+    // por un byte alto, DER mete un 0x00 delante y la estructura crece. Una
+    // sola firma de prueba puede pasar por casualidad.
+    $k = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+    afirmar($k !== false, 'este PHP no puede generar claves EC: los avisos no funcionarán');
+
+    openssl_pkey_export($k, $pem);
+
+    for ($i = 0; $i < 200; $i++) {
+        openssl_sign('aviso-'.$i, $der, $pem, OPENSSL_ALGO_SHA256);
+        $crudo = App\Push\Vapid::derACrudo($der);
+
+        afirmarIgual(64, strlen($crudo), "la firma {$i} no mide 64 bytes");
+    }
+});
+
+prueba('el base64 de la web no lleva relleno ni caracteres de URL', function (): void {
+    // `+`, `/` y `=` significan otras cosas dentro de una cabecera HTTP y de
+    // una URL. Un token con ellos lo rechaza el servicio de push.
+    $texto = App\Push\Vapid::base64url("\xfb\xff\xfe\x00\x01");
+
+    afirmar(! str_contains($texto, '+'), 'el token lleva un +');
+    afirmar(! str_contains($texto, '/'), 'el token lleva un /');
+    afirmar(! str_contains($texto, '='), 'el token lleva relleno');
+});
+
+prueba('el aviso viaja VACÍO', function () use ($raiz): void {
+    // Es la decisión de fondo de todo esto, no una limitación. Un aviso con
+    // contenido pasa por los servidores de Google o de Mozilla; el nombre de
+    // una familia damnificada no tiene por qué salir de la Alcaldía para que a
+    // alguien le suene el teléfono.
+    $php = (string) file_get_contents($raiz.'/src/Push/Aviso.php');
+
+    afirmar(str_contains($php, "CURLOPT_POSTFIELDS => ''"), 'el aviso dejó de ir vacío');
+    // Y sin cifrar, que es lo único coherente con ir vacío: si algún día se
+    // mete contenido, esta prueba obliga a implementar el cifrado de la norma
+    // en vez de mandarlo en claro por un servidor de terceros.
+    afirmar(! str_contains($php, 'Content-Encoding'), 'hay contenido en el aviso y no está cifrado');
+});
+
+prueba('una suscripción muerta se borra, no se reintenta para siempre', function () use ($raiz): void {
+    // 404 y 410 significan que el navegador tiró esa suscripción: desinstalaron
+    // la aplicación, borraron los datos del sitio. Dejarla es reintentar contra
+    // una puerta tapiada en cada solicitud que entre, durante meses.
+    $php = (string) file_get_contents($raiz.'/src/Push/Aviso.php');
+
+    afirmar(
+        str_contains($php, 'if ($codigo === 404 || $codigo === 410)'),
+        'las suscripciones muertas ya no se limpian'
+    );
+    afirmar(
+        str_contains($php, 'DELETE FROM push_suscripciones WHERE id = :id'),
+        'se detecta la suscripción muerta pero no se borra'
+    );
+});
+
+prueba('avisar no puede tumbar la solicitud de una familia', function () use ($raiz): void {
+    // Esto corre justo después de que alguien mande su solicitud. Si el
+    // servicio de push está caído, o tarda, lo último que puede pasar es que se
+    // pierda el trámite. La respuesta sale ANTES, y el fallo se traga.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PreinscripcionController.php');
+    $crear = metodoDe($php, 'public function crear(');
+
+    $respuesta = strpos($crear, "], 201);");
+    $avisar = strpos($crear, 'Aviso::aQuienesPuedan()');
+
+    afirmar($avisar !== false, 'ya no se avisa de las solicitudes nuevas');
+    afirmar($respuesta !== false && $avisar > $respuesta, 'se avisa ANTES de responderle al ciudadano');
+    afirmar(str_contains($crear, 'fastcgi_finish_request'), 'el ciudadano espera a que salgan los avisos');
+    afirmar(str_contains($crear, 'catch (\Throwable $e)'), 'un fallo del push podría tumbar la solicitud');
+});
+
+prueba('solo se avisa a quien puede atenderlas', function () use ($raiz): void {
+    // Un aviso a quien no puede hacer nada con él es ruido, y el ruido acaba en
+    // que alguien apaga los avisos y se pierde los que sí importan.
+    $php = (string) file_get_contents($raiz.'/src/Push/Aviso.php');
+
+    afirmar(
+        str_contains($php, 'array $roles = Auth::ESCRITURA'),
+        'los avisos dejaron de limitarse a quien puede atender una solicitud'
+    );
+    afirmar(str_contains($php, 'u.activo = 1'), 'se avisaría a usuarios desactivados');
+});
+
+prueba('sin la migración se dice, no se revienta', function () use ($raiz): void {
+    // El código llega con el despliegue; la migración la corre una persona
+    // desde Administración. Entre las dos cosas pasan minutos o días, y en ese
+    // hueco pedir la clave devolvía un 500 — que era mentira: no había ningún
+    // error, faltaba un paso. Un 500 falso es la forma más rápida de que nadie
+    // mire el registro de errores cuando haya uno de verdad.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PushController.php');
+
+    afirmar(str_contains($php, 'Vapid::disponible()'), 'ya no se comprueba si las tablas existen');
+    afirmar(str_contains($php, '503'), 'el hueco entre despliegue y migración vuelve a ser un 500');
+
+    // Y el envío calla: corre después de responderle al ciudadano y no hay
+    // nadie mirando esa petición.
+    $aviso = (string) file_get_contents($raiz.'/src/Push/Aviso.php');
+    afirmar(str_contains($aviso, 'if (! Vapid::disponible())'), 'el envío tronaría sin las tablas');
+});
+
 grupo('El recorrido: del censo a la ayuda');
 
 prueba('las cinco etapas van en el orden en que se recorren', function (): void {
@@ -3503,6 +3619,12 @@ prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function 
         // Información del sistema.
         'GET /acerca/sistema',
         'GET /acerca/actualizaciones',
+        // Los avisos de SU aparato. Cualquiera que entre puede pedirlos para sí
+        // mismo; a quién se le manda cada aviso lo decide el servidor por el
+        // rol, no la suscripción. Ninguna de las tres deja ver nada de nadie.
+        'GET /push/suscripciones',
+        'POST /push/suscripciones',
+        'POST /push/suscripciones/baja',
         // Su lista de llamadas.
         'GET /callcenter/resumen',
         'GET /callcenter/hogares',
@@ -4472,6 +4594,11 @@ prueba('solo estas rutas se sirven sin sesión', function () use ($raiz): void {
         'DELETE /preinscripcion/cargas/{carga}/archivos/{id}',
         'GET /health',
         'GET /preinscripcion/catalogos',
+        // La clave pública con la que el servidor firma sus avisos. Es pública
+        // por definición —sirve para COMPROBAR firmas, no para hacerlas— y el
+        // navegador la necesita antes de suscribirse, o sea antes de tener
+        // sesión en el service worker. No revela nada de nadie.
+        'GET /push/clave-publica',
         'POST /auth/login',
         'POST /preinscripcion',
         'POST /preinscripcion/cargas',

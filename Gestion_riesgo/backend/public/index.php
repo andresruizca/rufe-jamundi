@@ -19,6 +19,7 @@ use App\Controllers\InspeccionCapturaController;
 use App\Controllers\InspeccionController;
 use App\Controllers\MapaController;
 use App\Controllers\PreinscripcionController;
+use App\Controllers\PushController;
 use App\Controllers\RufeController;
 use App\Controllers\SinCensoController;
 use App\Controllers\SistemaController;
@@ -92,6 +93,7 @@ $auth = new AuthController;
 $usuarios = new UsuariosController;
 $callCenter = new CallCenterController;
 $acerca = new AcercaController;
+$push = new PushController;
 $rufeCaptura = new RufeCapturaController;
 $rufe = new RufeController;
 $sistema = new SistemaController;
@@ -121,6 +123,11 @@ $router->post('/auth/login', [$auth, 'login']);
 // pública que devuelva pre-inscripciones: consultar por radicado sería un
 // buscador de damnificados para quien probara combinaciones. La verificación de
 // cédula es la excepción y devuelve un booleano y nada más (ver Censo).
+// La clave pública del servidor de avisos. Sin sesión a propósito: el navegador
+// la necesita ANTES de suscribirse, y es pública por definición — sirve para
+// comprobar firmas, no para hacerlas.
+$router->get('/push/clave-publica', [$push, 'clavePublica']);
+
 $router->get('/preinscripcion/catalogos', [$preinscripcion, 'catalogos']);
 // Por POST y no por GET: una cédula en la barra de direcciones acaba en el
 // registro de accesos de Apache y en el historial del navegador.
@@ -154,6 +161,14 @@ $router->post('/sin-censo', [$sinCenso, 'crear']);
 $router->get('/auth/me', [$auth, 'me'], Auth::TODOS);
 $router->post('/auth/logout', [$auth, 'logout'], Auth::TODOS);
 $router->post('/auth/password', [$auth, 'cambiarPassword'], Auth::TODOS);
+
+// Avisos al aparato. Cualquiera que entre al sistema puede pedirlos para sí
+// mismo; a quién se le manda cada aviso lo decide el servidor por su rol.
+$router->get('/push/suscripciones', [$push, 'mios'], Auth::TODOS);
+$router->post('/push/suscripciones', [$push, 'suscribir'], Auth::TODOS);
+// POST y no DELETE porque lleva cuerpo —la dirección del aparato— y un DELETE
+// con cuerpo lo descartan algunos intermediarios sin avisar.
+$router->post('/push/suscripciones/baja', [$push, 'desuscribir'], Auth::TODOS);
 
 $router->get('/acerca/sistema', [$acerca, 'sistema'], Auth::TODOS);
 $router->get('/acerca/actualizaciones', [$acerca, 'actualizaciones'], Auth::TODOS);

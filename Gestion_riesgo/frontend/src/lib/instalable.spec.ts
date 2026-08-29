@@ -22,6 +22,7 @@ const manifiesto = JSON.parse(
 	background_color: string;
 	theme_color: string;
 	icons: { src: string; sizes: string; purpose?: string }[];
+	screenshots: { src: string; sizes: string; form_factor: string; label?: string }[];
 	shortcuts: { icons: { src: string }[] }[];
 };
 
@@ -58,6 +59,34 @@ describe('el manifiesto', () => {
 		// aplicación instalada: aparece la barra de direcciones y deja de
 		// parecer una aplicación desde el primer segundo.
 		expect(manifiesto.start_url.startsWith(manifiesto.scope)).toBe(true);
+	});
+
+	it('trae capturas de las dos formas de pantalla', () => {
+		// Sin ellas, Chrome en Android no ofrece la ficha de instalación
+		// completa: se conforma con la barrita de abajo, que mucha gente no ve.
+		// Y son capturas REALES de la aplicación en producción: una imagen de
+		// adorno en este campo engaña a quien está decidiendo si instalarla.
+		const formas = manifiesto.screenshots.map((c) => c.form_factor);
+
+		expect(formas).toContain('narrow');
+		expect(formas).toContain('wide');
+
+		for (const captura of manifiesto.screenshots) {
+			expect(captura.label, `${captura.src} sin descripción`).toBeTruthy();
+			expect(existsSync(join(estatico, captura.src)), `falta ${captura.src}`).toBe(true);
+		}
+	});
+
+	it('las capturas NO se guardan en el teléfono', () => {
+		// Pesan medio mega entre las dos y solo las mira el sistema operativo al
+		// ofrecer la instalación, una vez. Meterlas en el armazón sería cobrarle
+		// esos datos a cada censador para dibujar algo que ya vio.
+		const sw = readFileSync(join(raiz, 'src', 'service-worker.ts'), 'utf8');
+		const fuera = sw.slice(sw.indexOf('const FUERA = ['), sw.indexOf('const ARMAZON'));
+
+		for (const captura of manifiesto.screenshots) {
+			expect(fuera, `${captura.src} se descargaría en la instalación`).toContain(captura.src);
+		}
 	});
 
 	it('declara exactamente un icono enmascarable', () => {

@@ -13,6 +13,7 @@ use App\Core\Limite;
 use App\Core\Reintento;
 use App\Core\Request;
 use App\Core\Response;
+use App\Push\Aviso;
 use App\Preinscripcion\Censo;
 use App\Preinscripcion\Radicado;
 use App\Preinscripcion\Senales;
@@ -1143,6 +1144,30 @@ final class PreinscripcionController
             'ok'   => true,
             'data' => ['radicado' => $radicado, 'recibido_en' => date('c')],
         ], 201);
+
+        // ── Y avisar a quien pueda atenderla ─────────────────────────────
+        //
+        // DESPUÉS de responder, no antes. La familia que acaba de mandar su
+        // solicitud está mirando una pantalla que dice «enviando»: hacerle
+        // esperar a que tres servicios de push contesten sería cobrarle a ella
+        // una comodidad de la oficina. `fastcgi_finish_request` le entrega la
+        // respuesta y deja este proceso terminando por su cuenta.
+        //
+        // El aviso va VACÍO: ni su nombre, ni su cédula, ni su barrio. Ver
+        // `App\Push\Aviso`.
+        //
+        // Y no puede tumbar nada: si el push falla, la solicitud ya está
+        // guardada y respondida. Por eso el `try` se traga todo — es lo único
+        // de este método que puede permitirse fallar en silencio.
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+
+        try {
+            Aviso::aQuienesPuedan();
+        } catch (\Throwable $e) {
+            // Nada que hacer aquí: nadie está mirando ya esta petición.
+        }
     }
 
     /**

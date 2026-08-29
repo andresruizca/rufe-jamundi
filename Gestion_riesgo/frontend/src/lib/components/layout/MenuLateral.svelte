@@ -4,6 +4,7 @@
 	import { menuParaRol, esActivo, ETIQUETA_ROL, type Seccion } from '$lib/navigation';
 	import { sesion } from '$lib/stores/sesion.svelte';
 	import BotonInstalar from './BotonInstalar.svelte';
+	import BotonAvisos from './BotonAvisos.svelte';
 
 	type Props = {
 		rutaActual: string;
@@ -122,6 +123,10 @@
 			     mejores: deja de ser una pestaña que el navegador puede desalojar
 			     llevándose las fichas que aún no se han enviado. -->
 			<BotonInstalar />
+
+			<!-- Junto a «Instalar»: son las dos cosas que se deciden una vez, y
+			     las dos hablan del aparato y no del trabajo. -->
+			<BotonAvisos />
 
 			<button class="menu__salir" type="button" onclick={onSalir} tabindex={abierto ? 0 : -1}>
 				<LogOut size={16} aria-hidden="true" />

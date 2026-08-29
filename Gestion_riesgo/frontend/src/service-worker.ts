@@ -93,7 +93,14 @@ const FUERA = [
 	// para dibujar algo que ya está en su pantalla de inicio.
 	'/icono-512.png',
 	'/icono-maskable-512.png',
-	'/apple-touch-icon.png'
+	'/apple-touch-icon.png',
+
+	// Y las capturas del manifiesto, por lo mismo y más: pesan cerca de medio
+	// mega entre las dos y solo las mira el sistema operativo al ofrecer la
+	// instalación, una vez. Guardarlas sería cobrarle esos datos a cada
+	// censador para dibujar algo que él ya vio antes de instalar.
+	'/captura-movil.png',
+	'/captura-escritorio.png'
 ];
 
 const ARMAZON = [`${base}/`, ...build, ...files].filter(
@@ -387,6 +394,72 @@ function sinConexion(): Response {
 		{ status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
 	);
 }
+
+// ── Avisos al aparato ───────────────────────────────────────────────────────
+//
+// El aviso llega VACÍO, a propósito: ni un nombre, ni una cédula, ni un barrio.
+// Un aviso con contenido pasa por los servidores de Google o de Mozilla y,
+// aunque va cifrado, el dato de una familia damnificada no tiene por qué salir
+// de la Alcaldía para que a alguien le suene el teléfono. Esto es un golpe en
+// la puerta; el dato se lee dentro del sistema, con sesión iniciada.
+//
+// El texto vive aquí y no viaja, así que decir «hay una solicitud nueva» no
+// cuesta nada y no revela de quién.
+
+const AVISO_ETIQUETA = 'sgr-solicitud-nueva';
+
+sw.addEventListener('push', (evento) => {
+	const e = evento as ExtendableEvent;
+
+	// `userVisibleOnly` obliga a mostrar algo por cada aviso recibido: un
+	// navegador que detecte pushes silenciosos retira el permiso. Así que aquí
+	// SIEMPRE se dibuja una notificación, incluso si el aviso llegara raro.
+	e.waitUntil(
+		sw.registration.showNotification('Solicitud ciudadana nueva', {
+			body: 'Una familia acaba de pedir la inspección de su vivienda.',
+			icon: `${base}/icono-192.png`,
+			badge: `${base}/icono-192.png`,
+			// La misma etiqueta para todas: si entran cinco solicitudes mientras
+			// el teléfono está guardado, se ve UNA notificación y no cinco.
+			// Quien la abre las ve todas en la bandeja de todos modos.
+			tag: AVISO_ETIQUETA,
+			// Sin `renotify`: volver a sonar por cada una convertiría una tarde
+			// movida en un motivo para desactivar los avisos.
+			data: { ruta: `${base}/riesgo/preinscripciones` }
+		})
+	);
+});
+
+sw.addEventListener('notificationclick', (evento) => {
+	const e = evento as ExtendableEvent & {
+		notification: Notification & { data?: { ruta?: string } };
+	};
+
+	e.notification.close();
+
+	const ruta = e.notification.data?.ruta ?? `${base}/`;
+
+	e.waitUntil(
+		(async () => {
+			const abiertas = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
+			// Si el sistema ya está abierto se reutiliza esa ventana. Abrir una
+			// segunda pestaña del mismo sistema es la forma más rápida de que
+			// alguien pierda un formulario a medio llenar en la primera.
+			for (const cliente of abiertas) {
+				if (cliente.url.includes(ruta)) return cliente.focus();
+			}
+
+			for (const cliente of abiertas) {
+				await cliente.navigate?.(ruta);
+
+				return cliente.focus();
+			}
+
+			return sw.clients.openWindow(ruta);
+		})()
+	);
+});
 
 sw.addEventListener('sync', (evento) => {
 	const e = evento as ExtendableEvent & { tag: string };

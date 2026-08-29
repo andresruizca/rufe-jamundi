@@ -16,6 +16,22 @@
     { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
+  "screenshots": [
+    {
+      "src": "/captura-movil.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Formulario de pre-inscripción para la inspección de vivienda"
+    },
+    {
+      "src": "/captura-escritorio.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Entrada al Sistema de Gestión del Riesgo de Jamundí"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Registrar una ficha",
