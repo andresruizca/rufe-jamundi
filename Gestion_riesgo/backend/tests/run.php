@@ -3740,6 +3740,53 @@ prueba('un barrio se reconoce escrito de cualquier manera', function (): void {
     afirmar(! App\Rufe\CatalogoBarrios::reconocido('Barrio Que No Existe'), 'reconoció un barrio inventado');
 });
 
+grupo('El despliegue');
+
+prueba('el script sube el index.php aplanado, que es el paso que se olvida', function () use ($raiz): void {
+    // En producción el backend está APLANADO: Apache ejecuta /api/index.php, no
+    // /api/public/index.php. Subir el zip actualiza el segundo y deja el
+    // primero intacto: una ruta nueva responde 405 y parece un fallo del
+    // router. Pasó dos veces antes de que esto existiera.
+    $sh = $raiz.'/../scripts/desplegar.sh';
+
+    afirmar(is_file($sh), 'no existe scripts/desplegar.sh');
+
+    $texto = (string) file_get_contents($sh);
+
+    afirmar(
+        str_contains($texto, 'subir "$AQUI/backend/public/index.php" "${RAIZ}/api"'),
+        'el script no sube el index.php aplanado: el 405 volverá'
+    );
+
+    // Y va DESPUÉS del zip: al revés, la extracción lo pisaría con el viejo.
+    afirmar(
+        strpos($texto, 'extraer "${RAIZ}/api/api.zip"') < strpos($texto, 'subir "$AQUI/backend/public/index.php"'),
+        'el index.php aplanado se sube antes de extraer el zip, que lo vuelve a pisar'
+    );
+});
+
+prueba('el despliegue no ocurre con las pruebas en rojo', function () use ($raiz): void {
+    $texto = (string) file_get_contents($raiz.'/../scripts/desplegar.sh');
+
+    afirmar(str_contains($texto, 'set -euo pipefail'), 'el script sigue adelante después de un fallo');
+    afirmar(
+        strpos($texto, 'php tests/run.php') < strpos($texto, 'zip -qr "$TMP/api.zip"'),
+        'las pruebas tienen que correr ANTES de subir nada'
+    );
+});
+
+prueba('el token de cPanel nunca queda escrito en el repositorio', function () use ($raiz): void {
+    // Es el de la cuenta entera de la Alcaldía: correo, archivos, base de datos
+    // y los otros sitios que viven ahí.
+    $texto = (string) file_get_contents($raiz.'/../scripts/desplegar.sh');
+
+    afirmar(str_contains($texto, 'CPANEL_TOKEN'), 'el script no toma el token del entorno');
+    afirmar(
+        preg_match('/[A-Z0-9]{32}/', $texto) !== 1,
+        'hay algo con pinta de token escrito dentro del script de despliegue'
+    );
+});
+
 grupo('Un error de producción tiene que poder diagnosticarse');
 
 prueba('el registro dice qué ruta falló, no solo dónde reventó', function () use ($raiz): void {
