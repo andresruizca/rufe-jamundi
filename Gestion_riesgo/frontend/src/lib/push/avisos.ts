@@ -54,8 +54,11 @@ export async function estado(): Promise<EstadoAvisos> {
 	if (Notification.permission === 'default') return 'sin-pedir';
 
 	try {
-		const registro = await navigator.serviceWorker.ready;
-		const suscripcion = await registro.pushManager.getSubscription();
+		// Con tiempo límite: si no hay service worker activo, `ready` no falla,
+		// se queda esperando para siempre, y la pantalla nunca dibujaría el
+		// interruptor.
+		const registro = await registroListo();
+		const suscripcion = await registro?.pushManager.getSubscription();
 
 		return suscripcion ? 'activos' : 'sin-pedir';
 	} catch {
@@ -64,25 +67,81 @@ export async function estado(): Promise<EstadoAvisos> {
 }
 
 /**
+ * Cómo quedó la cosa, y qué decirle a la persona si no quedó.
+ *
+ * Antes esto devolvía solo el estado, y todo fallo se convertía en
+ * `'sin-pedir'` sin más. El botón volvía a apagarse solo, en silencio, que es
+ * exactamente lo que alguien lee como «está roto» — y no tenía forma de saber
+ * si le faltaba permiso, señal, o un paso en el servidor.
+ */
+export type Resultado = {
+	estado: EstadoAvisos;
+	/** Qué pasó, en palabras, cuando no quedó activado. */
+	aviso?: string;
+};
+
+/**
+ * Cuánto se espera al service worker antes de rendirse.
+ *
+ * `navigator.serviceWorker.ready` es una promesa que puede NO resolverse nunca
+ * —no lanzar: quedarse colgada— si no hay un service worker activo para esta
+ * pantalla. Un `await` sobre eso deja el botón girando para siempre, que es
+ * justo lo que pasaba.
+ */
+const ESPERA_SW_MS = 8000;
+
+async function registroListo(): Promise<ServiceWorkerRegistration | null> {
+	return Promise.race([
+		navigator.serviceWorker.ready,
+		new Promise<null>((listo) => setTimeout(() => listo(null), ESPERA_SW_MS))
+	]);
+}
+
+/**
  * Pedir permiso y registrar este aparato.
  *
- * Devuelve el estado en que quedó. No lanza: quien llama es un interruptor de
- * una pantalla, y una excepción ahí solo produciría una pantalla rota por algo
- * que es una comodidad.
+ * No lanza NUNCA. Quien llama es un interruptor de una pantalla: una excepción
+ * que se escape de aquí deja ese interruptor girando indefinidamente, sin nada
+ * en pantalla que explique por qué.
  */
-export async function activar(): Promise<EstadoAvisos> {
-	if (!sePuede()) return 'no-soportado';
+export async function activar(): Promise<Resultado> {
+	if (!sePuede()) {
+		return { estado: 'no-soportado' };
+	}
 
-	// El permiso se pide desde el gesto de la persona, no al cargar la página.
-	// Un navegador que ve la pregunta sin que nadie haya pulsado nada la
-	// rechaza solo, y algunos no vuelven a preguntar nunca más.
-	const permiso = await Notification.requestPermission();
+	let permiso: NotificationPermission;
 
-	if (permiso !== 'granted') return permiso === 'denied' ? 'bloqueados' : 'sin-pedir';
+	try {
+		// DENTRO del try, y no fuera como estaba. Safari viejo devuelve
+		// `undefined` y espera una función; algunos navegadores lanzan si la
+		// pantalla no está en un contexto seguro. Cualquiera de las dos cosas
+		// se escapaba de aquí y colgaba el botón.
+		permiso = await Notification.requestPermission();
+	} catch {
+		return { estado: 'sin-pedir', aviso: 'Este navegador no dejó pedir el permiso.' };
+	}
+
+	if (permiso === 'denied') {
+		return { estado: 'bloqueados' };
+	}
+
+	if (permiso !== 'granted') {
+		// Cerró la pregunta sin contestar. No es un error y no hay nada que
+		// decir: puede volver a intentarlo cuando quiera.
+		return { estado: 'sin-pedir' };
+	}
 
 	try {
 		const { clave } = await api.get<{ clave: string }>('/push/clave-publica');
-		const registro = await navigator.serviceWorker.ready;
+
+		const registro = await registroListo();
+
+		if (registro === null) {
+			return {
+				estado: 'sin-pedir',
+				aviso: 'La aplicación aún se está preparando. Recargue la página e intente de nuevo.'
+			};
+		}
 
 		// Si ya había una, se reutiliza: volver a suscribir con otra clave
 		// dejaría la anterior viva en el servicio de push y sin dueño aquí.
@@ -103,9 +162,16 @@ export async function activar(): Promise<EstadoAvisos> {
 			auth: datos.keys?.auth ?? ''
 		});
 
-		return 'activos';
-	} catch {
-		return 'sin-pedir';
+		return { estado: 'activos' };
+	} catch (e) {
+		// El mensaje del servidor se enseña tal cual cuando lo hay. El caso que
+		// de verdad ocurre: los avisos están en el código pero su migración
+		// todavía no se ha corrido, y el servidor lo dice con esas palabras.
+		// Callarlo dejaba un botón que se apaga solo sin explicar nada.
+		return {
+			estado: 'sin-pedir',
+			aviso: e instanceof Error && e.message !== '' ? e.message : 'No se pudieron activar los avisos.'
+		};
 	}
 }
 
@@ -116,22 +182,25 @@ export async function activar(): Promise<EstadoAvisos> {
  * revés, un fallo de red dejaría al servidor mandando avisos a una dirección
  * que ya no existe, y esa suscripción muerta se reintentaría durante semanas.
  */
-export async function desactivar(): Promise<EstadoAvisos> {
-	if (!sePuede()) return 'no-soportado';
+export async function desactivar(): Promise<Resultado> {
+	if (!sePuede()) {
+		return { estado: 'no-soportado' };
+	}
 
 	try {
-		const registro = await navigator.serviceWorker.ready;
-		const suscripcion = await registro.pushManager.getSubscription();
+		const registro = await registroListo();
+		const suscripcion = await registro?.pushManager.getSubscription();
 
 		if (suscripcion) {
 			await api.post('/push/suscripciones/baja', { endpoint: suscripcion.endpoint });
 			await suscripcion.unsubscribe();
 		}
 	} catch {
-		// Sin señal: el interruptor vuelve a su sitio y se reintenta luego.
+		// Sin señal: se reintenta cuando la haya. El estado de abajo dirá la
+		// verdad de todos modos, que es lo que el interruptor debe reflejar.
 	}
 
-	return estado();
+	return { estado: await estado() };
 }
 
 /**

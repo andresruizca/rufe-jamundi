@@ -77,3 +77,48 @@ describe('lo que el aviso NO lleva', () => {
 		expect(push).toContain('tag: AVISO_ETIQUETA');
 	});
 });
+
+
+describe('el botón no se puede quedar girando', () => {
+	const avisos = readFileSync(new URL('./avisos.ts', import.meta.url), 'utf-8');
+	const boton = readFileSync(
+		new URL('../components/layout/BotonAvisos.svelte', import.meta.url),
+		'utf-8'
+	);
+
+	it('pedir el permiso ocurre dentro de un try', () => {
+		// El fallo que esto cierra. `Notification.requestPermission()` estaba
+		// FUERA del try: Safari viejo devuelve `undefined` y espera una función,
+		// y algunos navegadores lanzan si la pantalla no está en contexto
+		// seguro. La excepción se escapaba de `activar()`, el botón nunca
+		// llegaba a apagar su reloj de arena y giraba indefinidamente.
+		const antes = avisos.slice(0, avisos.indexOf('Notification.requestPermission()'));
+		const abiertos = (antes.match(/\btry \{/g) ?? []).length;
+		const cerrados = (antes.match(/\} catch/g) ?? []).length;
+
+		expect(abiertos, 'requestPermission volvió a quedar fuera de un try').toBeGreaterThan(cerrados);
+	});
+
+	it('esperar al service worker tiene tiempo límite', () => {
+		// `navigator.serviceWorker.ready` no falla cuando no hay uno activo: se
+		// queda colgada para siempre. Un `await` sobre eso no lanza, así que ni
+		// un try lo salvaba: había que ponerle reloj.
+		expect(avisos).toContain('ESPERA_SW_MS');
+		expect(avisos).toContain('Promise.race');
+		expect(avisos).not.toContain('await navigator.serviceWorker.ready');
+	});
+
+	it('el reloj de arena se apaga pase lo que pase', () => {
+		expect(boton).toContain('} finally {');
+		expect(boton.slice(boton.indexOf('} finally {'))).toContain('trabajando = false');
+	});
+
+	it('y si no se pudo, se dice por qué', () => {
+		// Antes todo fallo se convertía en «sin-pedir» y el botón se apagaba
+		// solo, en silencio. Eso es indistinguible de «está roto» — y el caso
+		// que de verdad ocurre hoy es que al servidor le falta su migración, y
+		// lo dice con esas palabras.
+		expect(avisos).toContain('aviso?: string');
+		expect(boton).toContain('avisos__nota--fallo');
+	});
+});

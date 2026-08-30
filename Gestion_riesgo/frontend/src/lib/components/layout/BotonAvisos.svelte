@@ -19,6 +19,8 @@
 
 	let situacion = $state<EstadoAvisos | null>(null);
 	let trabajando = $state(false);
+	/** Por qué no quedó activado, cuando hay algo que decir. */
+	let aviso = $state('');
 
 	$effect(() => {
 		void estado().then((e) => (situacion = e));
@@ -28,8 +30,23 @@
 		if (trabajando || situacion === null) return;
 
 		trabajando = true;
-		situacion = situacion === 'activos' ? await desactivar() : await activar();
-		trabajando = false;
+		aviso = '';
+
+		// `finally`, y no una línea al final. Cualquier fallo que se escapara
+		// —y uno se escapaba: `Notification.requestPermission()` estaba fuera
+		// del try— dejaba este botón girando indefinidamente, sin nada en
+		// pantalla que dijera por qué. Un control que gira para siempre es peor
+		// que uno que dice «no pude».
+		try {
+			const r = situacion === 'activos' ? await desactivar() : await activar();
+
+			situacion = r.estado;
+			aviso = r.aviso ?? '';
+		} catch {
+			aviso = 'No se pudieron activar los avisos. Intente de nuevo.';
+		} finally {
+			trabajando = false;
+		}
 	}
 </script>
 
@@ -76,7 +93,13 @@
 			</span>
 		</button>
 
-		{#if situacion === 'activos'}
+		{#if aviso !== ''}
+			<!--
+				Por qué no quedó. Antes el botón se apagaba solo y en silencio,
+				que es exactamente lo que alguien lee como «está roto».
+			-->
+			<p class="avisos__nota avisos__nota--fallo" role="status">{aviso}</p>
+		{:else if situacion === 'activos'}
 			<!--
 				Lo que se ve en el aviso y lo que no. Quien enciende esto tiene
 				derecho a saber que no le va a aparecer el nombre de una familia
@@ -138,5 +161,12 @@
 		font-size: 0.72rem;
 		line-height: 1.4;
 		color: var(--color-muted);
+	}
+
+	/* DESPUÉS de `.avisos__nota`, y no antes: las dos son una clase, así que a
+	   igual especificidad gana la última del archivo. Puesta arriba, el gris de
+	   abajo se comía el color del aviso y el fallo se leía como una nota más. */
+	.avisos__nota--fallo {
+		color: var(--color-warning);
 	}
 </style>
