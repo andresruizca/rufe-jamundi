@@ -3350,6 +3350,31 @@ prueba('sin la migración se dice, no se revienta', function () use ($raiz): voi
     afirmar(str_contains($aviso, 'if (! Vapid::disponible())'), 'el envío tronaría sin las tablas');
 });
 
+prueba('poner la base al día no reescribe el código', function () use ($raiz): void {
+    // La distinción que motiva que exista `migrar()` al lado de `actualizar()`.
+    // `actualizar()` se baja un paquete de GitHub y reescribe backend y
+    // frontend enteros; es el martillo correcto para lo suyo y una barbaridad
+    // cuando lo único que falta es crear dos tablas. Peor: la rama por defecto
+    // de ese repositorio es hoy OTRO proyecto.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/SistemaController.php');
+    $migrar = metodoDe($php, 'public function migrar(');
+
+    afirmar(str_contains($migrar, 'Migrador::aplicar('), 'migrar() dejó de correr las migraciones');
+    afirmar(! str_contains($migrar, 'Actualizador'), 'migrar() volvió a reescribir el código del sitio');
+    afirmar(str_contains($migrar, 'Auditoria::registrar'), 'tocar el esquema dejó de quedar registrado');
+});
+
+prueba('el mensaje de los avisos manda al sitio que existe', function () use ($raiz): void {
+    // La primera versión decía «desde Administración» a secas y ahí no había
+    // ninguna pantalla que corriera migraciones: mandaba a buscar algo que no
+    // estaba. Un mensaje de error que apunta al sitio equivocado hace perder
+    // más tiempo que uno que no dice nada.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/PushController.php');
+
+    afirmar(str_contains($php, 'Base de datos'), 'el mensaje no dice a qué pantalla ir');
+    afirmar(str_contains($php, 'Poner la base al día'), 'el mensaje no dice qué pulsar');
+});
+
 grupo('El recorrido: del censo a la ayuda');
 
 prueba('las cinco etapas van en el orden en que se recorren', function (): void {

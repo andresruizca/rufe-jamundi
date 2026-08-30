@@ -33,6 +33,7 @@ import {
 	ClipboardCheck,
 	Inbox,
 	Video,
+	Database,
 	UserPlus
 } from '@lucide/svelte';
 import type { Component } from 'svelte';
@@ -384,6 +385,21 @@ export const NAV_ITEMS: NavItem[] = [
 		icon: Video,
 		roles: SOLO_ADMIN,
 		match: ['/admin/categorias-video']
+	},
+
+	// Poner la base al día después de un despliegue. El script de despliegue NO
+	// corre migraciones a propósito —reescribir el esquema de una base con
+	// datos de familias damnificadas sin poder mirar el resultado es peor que
+	// acordarse a mano—, así que hace falta un sitio donde acordarse.
+	{
+		id: 'admin-base',
+		type: 'item',
+		label: 'Base de datos',
+		title: 'Actualizar la base de datos',
+		href: '/admin/base-de-datos',
+		icon: Database,
+		roles: SOLO_ADMIN,
+		match: ['/admin/base-de-datos']
 	},
 
 	{

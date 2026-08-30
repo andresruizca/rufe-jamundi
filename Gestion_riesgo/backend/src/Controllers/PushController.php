@@ -51,9 +51,14 @@ final class PushController
     private static function exigirMontado(): void
     {
         if (! Vapid::disponible()) {
+            // La ruta EXACTA, no «desde Administración» a secas: la primera
+            // versión de este mensaje mandaba a una pantalla que no existía, y
+            // un mensaje de error que manda a un sitio equivocado hace perder
+            // más tiempo que uno que no dice nada.
             throw new HttpError(
-                'Los avisos todavía no están habilitados en este servidor. '
-                    .'Falta correr la actualización desde Administración.',
+                'Los avisos todavía no están habilitados. '
+                    .'Un administrador debe entrar en Administración › Base de datos '
+                    .'y pulsar «Poner la base al día».',
                 503
             );
         }

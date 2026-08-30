@@ -305,6 +305,10 @@ $router->get('/callcenter/guion', [$callCenter, 'guion'], Auth::CALL_CENTER);
 $router->put('/callcenter/guion', [$callCenter, 'guardarGuion'], $soloAdmin);
 
 $router->get('/sistema/actualizaciones', [$sistema, 'estado'], $soloAdmin);
+// Solo la base al día, sin tocar el código. Es lo que hace falta cuando el
+// despliegue ya trajo el código nuevo y falta crear sus tablas — que es lo
+// normal, porque el script de despliegue NO corre migraciones a propósito.
+$router->post('/sistema/migrar', [$sistema, 'migrar'], $soloAdmin);
 $router->post('/sistema/actualizar', [$sistema, 'actualizar'], $soloAdmin);
 $router->get('/usuarios', [$usuarios, 'listar'], $soloAdmin);
 $router->post('/usuarios', [$usuarios, 'crear'], $soloAdmin);
