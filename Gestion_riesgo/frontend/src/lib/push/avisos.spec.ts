@@ -119,10 +119,27 @@ describe('el botón no se puede quedar girando', () => {
 		// que de verdad ocurre hoy es que al servidor le falta su migración, y
 		// lo dice con esas palabras.
 		expect(avisos).toContain('aviso?: string');
-		expect(boton).toContain('avisos__nota--fallo');
+		expect(boton).toContain('panel__resultado');
 	});
 });
 
+
+describe('dónde vive el control', () => {
+	it('está en la barra superior, no escondido en el menú', () => {
+		// Estuvo abajo del todo en el menú lateral, que pasa cerrado casi todo
+		// el tiempo. Un control de notificaciones que hay que ir a buscar dentro
+		// de un cajón no lo encuentra nadie, y quien lo activó tampoco puede ver
+		// de un vistazo si sigue activado.
+		const barra = readFileSync(new URL('../../routes/+layout.svelte', import.meta.url), 'utf-8');
+		const menu = readFileSync(
+			new URL('../components/layout/MenuLateral.svelte', import.meta.url),
+			'utf-8'
+		);
+
+		expect(barra).toContain('<BotonAvisos />');
+		expect(menu).not.toContain('BotonAvisos');
+	});
+});
 
 describe('el interruptor dice en qué estado está', () => {
 	const boton = readFileSync(
@@ -131,10 +148,11 @@ describe('el interruptor dice en qué estado está', () => {
 	);
 
 	it('encendido dice que ESTÁ encendido', () => {
+		// Las etiquetas de antes se leían las dos como una invitación a pulsar.
 		// Las dos etiquetas de antes —«Avisarme de solicitudes nuevas» y
 		// «Avisar cuando entre una solicitud»— se leían las dos como una
 		// invitación a pulsar. Ni estando activado se sabía si lo estaba.
-		expect(boton).toContain('Avisos activados');
+		expect(boton).toContain('Activados en este aparato');
 	});
 
 	it('y se puede comprobar sin esperar a una solicitud real', () => {
@@ -143,5 +161,38 @@ describe('el interruptor dice en qué estado está', () => {
 		// sin que nada lo diga. Sin una prueba, la única forma de enterarse
 		// sería perderse un aviso de verdad.
 		expect(boton).toContain('Enviarme una prueba');
+	});
+});
+
+
+describe('el navegador y el servidor no pueden discrepar', () => {
+	const avisos = readFileSync(new URL('./avisos.ts', import.meta.url), 'utf-8');
+
+	it('lo que el navegador tiene suscrito se vuelve a apuntar en el servidor', () => {
+		// El fallo que esto cierra, visto en pantalla: el botón decía «Avisos
+		// activados» y justo debajo la prueba respondía «este aparato no tiene
+		// los avisos activados». Las dos frases a la vez, una encima de la otra.
+		//
+		// Pasa cuando el navegador se suscribió y el envío al servidor no llegó
+		// —sin señal a mitad, o el servidor sin su migración todavía— y también
+		// cuando el navegador rota la dirección por su cuenta.
+		const consulta = avisos.slice(
+			avisos.indexOf('export async function estado('),
+			avisos.indexOf('export async function activar(')
+		);
+
+		expect(consulta).toContain('await registrar(suscripcion)');
+	});
+
+	it('y volver a apuntarlo no duplica nada', () => {
+		// El servidor reconoce la suscripción por su dirección y actualiza en
+		// vez de insertar. Sin eso, llamarlo en cada carga de pantalla llenaría
+		// la tabla de filas repetidas y cada aviso saldría cinco veces.
+		const php = readFileSync(
+			new URL('../../../../backend/src/Controllers/PushController.php', import.meta.url),
+			'utf-8'
+		);
+
+		expect(php).toContain('ON DUPLICATE KEY UPDATE');
 	});
 });

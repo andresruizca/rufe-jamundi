@@ -428,7 +428,13 @@ h3 {
 	color: var(--color-primary);
 }
 
+/* La miga se queda con el hueco que sobra para que la campana del final no se
+   comprima: en un teléfono, un título largo la aplastaba hasta hacerla
+   ilegible. */
 .miga {
+	flex: 1 1 auto;
+	min-width: 0;
+
 	display: flex;
 	align-items: center;
 	gap: 0.45rem;

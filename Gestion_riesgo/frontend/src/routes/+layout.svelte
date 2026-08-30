@@ -25,6 +25,7 @@
 		porQueNoSaleSolo
 	} from '$lib/offline/plataforma';
 	import { aplicarActualizacion, vigilarActualizaciones } from '$lib/offline/actualizacion';
+	import BotonAvisos from '$lib/components/layout/BotonAvisos.svelte';
 
 	let { children } = $props();
 
@@ -332,6 +333,12 @@
 						</span>
 					{/each}
 				</nav>
+
+				<!-- La campana, al final de la barra. Estuvo en el menú lateral y
+				     ahí no la encontraba nadie: ese cajón pasa cerrado casi todo el
+				     tiempo, así que quien los activó tampoco podía ver de un vistazo
+				     si seguían activados. -->
+				<BotonAvisos />
 			</header>
 
 			{#if sesion.sinConexion}

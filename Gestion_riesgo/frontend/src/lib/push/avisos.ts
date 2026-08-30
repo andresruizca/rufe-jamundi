@@ -60,10 +60,47 @@ export async function estado(): Promise<EstadoAvisos> {
 		const registro = await registroListo();
 		const suscripcion = await registro?.pushManager.getSubscription();
 
-		return suscripcion ? 'activos' : 'sin-pedir';
+		if (!suscripcion) return 'sin-pedir';
+
+		// ── Y volver a apuntarlo en el servidor ──────────────────────────
+		//
+		// El navegador y el servidor pueden discrepar, y discrepaban: este
+		// aparato tenía su suscripción y el servidor no la conocía, así que la
+		// pantalla decía «Avisos activados» mientras la prueba respondía «este
+		// aparato no tiene los avisos activados». Las dos frases a la vez, una
+		// debajo de la otra.
+		//
+		// Pasa cuando el navegador se suscribió y el envío al servidor no llegó
+		// —sin señal a mitad, o el servidor sin su migración todavía— y también
+		// cuando el navegador rota la dirección por su cuenta.
+		//
+		// Se vuelve a mandar en vez de solo detectarlo: el registro es
+		// idempotente (`ON DUPLICATE KEY`), así que repetirlo no crea nada, y
+		// arreglarlo en silencio es mejor que enseñarle a alguien un aviso que
+		// no sabría qué hacer con él.
+		await registrar(suscripcion);
+
+		return 'activos';
 	} catch {
 		return 'sin-pedir';
 	}
+}
+
+/**
+ * Apuntar esta suscripción en el servidor.
+ *
+ * Idempotente por diseño: el servidor la reconoce por su dirección y actualiza
+ * en vez de duplicar. Por eso se puede llamar cada vez que la pantalla arranca
+ * sin miedo a llenar la tabla de filas repetidas.
+ */
+async function registrar(suscripcion: PushSubscription): Promise<void> {
+	const datos = suscripcion.toJSON();
+
+	await api.post('/push/suscripciones', {
+		endpoint: suscripcion.endpoint,
+		p256dh: datos.keys?.p256dh ?? '',
+		auth: datos.keys?.auth ?? ''
+	});
 }
 
 /**
@@ -154,13 +191,7 @@ export async function activar(): Promise<Resultado> {
 				applicationServerKey: deBase64Url(clave)
 			}));
 
-		const datos = suscripcion.toJSON();
-
-		await api.post('/push/suscripciones', {
-			endpoint: suscripcion.endpoint,
-			p256dh: datos.keys?.p256dh ?? '',
-			auth: datos.keys?.auth ?? ''
-		});
+		await registrar(suscripcion);
 
 		return { estado: 'activos' };
 	} catch (e) {
