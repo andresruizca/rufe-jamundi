@@ -9,6 +9,7 @@ use App\Core\Db;
 use App\Core\HttpError;
 use App\Core\Request;
 use App\Core\Response;
+use App\Push\Aviso;
 use App\Push\Vapid;
 
 /**
@@ -135,6 +136,31 @@ final class PushController
         );
 
         Response::ok(['suscrito' => false]);
+    }
+
+    /**
+     * Mandarse un aviso a uno mismo.
+     *
+     * Solo a los aparatos de quien lo pide: nunca a los de otro. Sirve para
+     * comprobar que esto llega de verdad sin esperar a que una familia mande
+     * su solicitud, y sin molestar a nadie más para averiguarlo.
+     */
+    public function probar(Request $req): void
+    {
+        $usuario = Auth::exigirUsuario($req);
+        self::exigirMontado();
+
+        $enviados = Aviso::aUsuario((int) $usuario['id']);
+
+        Response::ok([
+            'enviados' => $enviados,
+            // El servicio de push acepta el aviso y lo entrega cuando puede: un
+            // «enviados: 1» no garantiza que ya haya sonado. Decirlo evita que
+            // alguien concluya que está roto porque tardó cinco segundos.
+            'nota' => $enviados > 0
+                ? 'Enviado. Puede tardar unos segundos en aparecer.'
+                : 'Este aparato no tiene los avisos activados.',
+        ]);
     }
 
     /**

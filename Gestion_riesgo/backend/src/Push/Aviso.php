@@ -89,6 +89,38 @@ final class Aviso
         return $enviados;
     }
 
+    /**
+     * Avisar solo a los aparatos de una persona.
+     *
+     * Es para que alguien pueda comprobar que esto llega de verdad sin esperar
+     * a que una familia mande una solicitud — y sin molestar a los demás para
+     * averiguarlo. Un interruptor que dice «activado» y no se puede probar es
+     * un interruptor en el que nadie confía.
+     *
+     * @return int  a cuántos aparatos suyos se logró avisar
+     */
+    public static function aUsuario(int $usuarioId): int
+    {
+        if (! Vapid::disponible()) {
+            return 0;
+        }
+
+        $filas = Db::all(
+            'SELECT id, endpoint FROM push_suscripciones WHERE usuario_id = :usuario',
+            ['usuario' => $usuarioId]
+        );
+
+        $enviados = 0;
+
+        foreach ($filas as $f) {
+            if (self::aUno((int) $f['id'], (string) $f['endpoint'])) {
+                $enviados++;
+            }
+        }
+
+        return $enviados;
+    }
+
     /** Un aparato. `true` si el servicio de push lo aceptó. */
     private static function aUno(int $id, string $endpoint): bool
     {

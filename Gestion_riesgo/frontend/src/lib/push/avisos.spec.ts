@@ -122,3 +122,26 @@ describe('el botón no se puede quedar girando', () => {
 		expect(boton).toContain('avisos__nota--fallo');
 	});
 });
+
+
+describe('el interruptor dice en qué estado está', () => {
+	const boton = readFileSync(
+		new URL('../components/layout/BotonAvisos.svelte', import.meta.url),
+		'utf-8'
+	);
+
+	it('encendido dice que ESTÁ encendido', () => {
+		// Las dos etiquetas de antes —«Avisarme de solicitudes nuevas» y
+		// «Avisar cuando entre una solicitud»— se leían las dos como una
+		// invitación a pulsar. Ni estando activado se sabía si lo estaba.
+		expect(boton).toContain('Avisos activados');
+	});
+
+	it('y se puede comprobar sin esperar a una solicitud real', () => {
+		// Entre el permiso del navegador, la suscripción, la firma del servidor
+		// y el servicio de push hay cuatro sitios donde esto se queda callado
+		// sin que nada lo diga. Sin una prueba, la única forma de enterarse
+		// sería perderse un aviso de verdad.
+		expect(boton).toContain('Enviarme una prueba');
+	});
+});

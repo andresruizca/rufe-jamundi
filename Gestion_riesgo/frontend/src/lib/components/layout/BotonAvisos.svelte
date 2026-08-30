@@ -15,7 +15,7 @@
 	// intento de más el primer día deja a esa persona sin avisos para siempre.
 
 	import { Bell, BellOff, BellRing, LoaderCircle } from '@lucide/svelte';
-	import { activar, desactivar, estado, type EstadoAvisos } from '$lib/push/avisos';
+	import { activar, desactivar, estado, probar, type EstadoAvisos } from '$lib/push/avisos';
 
 	let situacion = $state<EstadoAvisos | null>(null);
 	let trabajando = $state(false);
@@ -25,6 +25,21 @@
 	$effect(() => {
 		void estado().then((e) => (situacion = e));
 	});
+
+	async function enviarPrueba() {
+		if (probando) return;
+
+		probando = true;
+		aviso = '';
+
+		try {
+			aviso = await probar();
+		} finally {
+			probando = false;
+		}
+	}
+
+	let probando = $state(false);
 
 	async function alternar() {
 		if (trabajando || situacion === null) return;
@@ -84,9 +99,15 @@
 				<Bell size={15} aria-hidden="true" />
 			{/if}
 
+			<!--
+				Encendido dice que ESTÁ encendido, no lo que haría al pulsarlo.
+				Las dos etiquetas de antes —«Avisarme…» y «Avisar cuando…»— se
+				leían las dos como una invitación a pulsar, así que ni estando
+				activado se sabía si lo estaba.
+			-->
 			<span>
 				{#if situacion === 'activos'}
-					Avisar cuando entre una solicitud
+					Avisos activados
 				{:else}
 					Avisarme de solicitudes nuevas
 				{/if}
@@ -108,6 +129,17 @@
 			<p class="avisos__nota">
 				El aviso no lleva datos de nadie: solo dice que hay algo nuevo.
 			</p>
+
+			<!--
+				Comprobarlo sin esperar a que una familia mande una solicitud.
+				Entre el permiso, la suscripción, la firma y el servicio de push
+				hay cuatro sitios donde esto se puede quedar callado sin que nada
+				lo diga; sin una prueba, la única forma de enterarse sería
+				perderse un aviso de verdad.
+			-->
+			<button type="button" class="avisos__probar" onclick={enviarPrueba} disabled={probando}>
+				{probando ? 'Enviando…' : 'Enviarme una prueba'}
+			</button>
 		{/if}
 	{/if}
 {/if}
@@ -168,5 +200,22 @@
 	   abajo se comía el color del aviso y el fallo se leía como una nota más. */
 	.avisos__nota--fallo {
 		color: var(--color-warning);
+	}
+
+	.avisos__probar {
+		margin: 0.15rem 0 0;
+		padding: 0.2rem 0.2rem;
+		border: none;
+		background: none;
+		color: var(--color-primary);
+		font: inherit;
+		font-size: 0.72rem;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.avisos__probar:disabled {
+		color: var(--color-muted);
+		cursor: progress;
 	}
 </style>

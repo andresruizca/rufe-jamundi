@@ -169,6 +169,9 @@ $router->post('/push/suscripciones', [$push, 'suscribir'], Auth::TODOS);
 // POST y no DELETE porque lleva cuerpo —la dirección del aparato— y un DELETE
 // con cuerpo lo descartan algunos intermediarios sin avisar.
 $router->post('/push/suscripciones/baja', [$push, 'desuscribir'], Auth::TODOS);
+// Mandarse un aviso a uno mismo, para comprobar que llega. Solo a los aparatos
+// de quien lo pide.
+$router->post('/push/prueba', [$push, 'probar'], Auth::TODOS);
 
 $router->get('/acerca/sistema', [$acerca, 'sistema'], Auth::TODOS);
 $router->get('/acerca/actualizaciones', [$acerca, 'actualizaciones'], Auth::TODOS);

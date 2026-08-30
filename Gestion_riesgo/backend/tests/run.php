@@ -2575,6 +2575,9 @@ prueba('el inspector llega EXACTAMENTE a estas rutas y a ninguna más', function
         'GET /push/suscripciones',
         'POST /push/suscripciones',
         'POST /push/suscripciones/baja',
+        // Mandarse un aviso a SÍ MISMO para comprobar que llega. Solo alcanza
+        // los aparatos de quien la pide: ver la prueba de `Aviso::aUsuario`.
+        'POST /push/prueba',
         // Su formato.
         'GET /inspeccion/catalogos',
         'GET /inspeccion/duplicados',
@@ -3375,6 +3378,27 @@ prueba('el mensaje de los avisos manda al sitio que existe', function () use ($r
     afirmar(str_contains($php, 'Poner la base al día'), 'el mensaje no dice qué pulsar');
 });
 
+prueba('la prueba solo llega a los aparatos de quien la pide', function () use ($raiz): void {
+    // Es un botón que cualquiera con sesión puede pulsar. Sin el filtro por
+    // usuario, sería un botón para hacerle sonar el teléfono a toda la
+    // Alcaldía cuantas veces quiera.
+    $php = (string) file_get_contents($raiz.'/src/Push/Aviso.php');
+    $metodo = metodoDe($php, 'public static function aUsuario(');
+
+    afirmar(
+        str_contains($metodo, 'WHERE usuario_id = :usuario'),
+        'la prueba dejó de limitarse a los aparatos de quien la pide'
+    );
+
+    $ctrl = (string) file_get_contents($raiz.'/src/Controllers/PushController.php');
+    $probar = metodoDe($ctrl, 'public function probar(');
+
+    afirmar(
+        str_contains($probar, "Aviso::aUsuario((int) \$usuario['id'])"),
+        'la prueba usa un identificador que no es el de la sesión'
+    );
+});
+
 grupo('El recorrido: del censo a la ayuda');
 
 prueba('las cinco etapas van en el orden en que se recorren', function (): void {
@@ -3650,6 +3674,9 @@ prueba('el operador llega EXACTAMENTE a estas rutas y a ninguna más', function 
         'GET /push/suscripciones',
         'POST /push/suscripciones',
         'POST /push/suscripciones/baja',
+        // Mandarse un aviso a SÍ MISMO para comprobar que llega. Solo alcanza
+        // los aparatos de quien la pide: ver la prueba de `Aviso::aUsuario`.
+        'POST /push/prueba',
         // Su lista de llamadas.
         'GET /callcenter/resumen',
         'GET /callcenter/hogares',

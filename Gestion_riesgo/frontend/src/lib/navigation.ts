@@ -394,6 +394,7 @@ export const NAV_ITEMS: NavItem[] = [
 	{
 		id: 'admin-base',
 		type: 'item',
+		parentId: 'grupo-admin',
 		label: 'Base de datos',
 		title: 'Actualizar la base de datos',
 		href: '/admin/base-de-datos',

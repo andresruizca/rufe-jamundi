@@ -224,3 +224,21 @@ export function deBase64Url(clave: string): Uint8Array<ArrayBuffer> {
 
 	return bytes;
 }
+
+/**
+ * Mandarse un aviso a uno mismo, para ver que llega.
+ *
+ * Un interruptor que dice «activado» y no se puede comprobar es un interruptor
+ * en el que nadie confía — y con razón: entre el permiso del navegador, la
+ * suscripción, la firma del servidor y el servicio de push hay cuatro sitios
+ * donde esto se puede quedar callado sin que nada lo diga.
+ */
+export async function probar(): Promise<string> {
+	try {
+		const r = await api.post<{ enviados: number; nota: string }>('/push/prueba');
+
+		return r.nota;
+	} catch (e) {
+		return e instanceof Error && e.message !== '' ? e.message : 'No se pudo enviar la prueba.';
+	}
+}
