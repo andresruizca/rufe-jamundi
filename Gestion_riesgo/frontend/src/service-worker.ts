@@ -58,11 +58,28 @@ const CACHE = `sgr-${version}`;
 /**
  * Caché aparte para las respuestas de la API que sí se pueden guardar.
  *
- * Hoy es UNA sola: los catálogos del formulario. Va separada del armazón para
- * que se vea de un vistazo qué datos vive el teléfono y para poder vaciarla sin
- * tocar la aplicación guardada.
+ * Va separada del armazón para que se vea de un vistazo qué datos vive el
+ * teléfono y para poder vaciarla —al cerrar sesión— sin tocar la aplicación
+ * guardada.
+ *
+ * ── Por qué el nombre NO lleva la versión del build ──────────────────────────
+ *
+ * Porque la llevaba, y eso vaciaba el trabajo de campo en cada despliegue.
+ *
+ * `activate` borra toda caché `sgr-*` que no sea la actual. Con el nombre atado
+ * a la versión, cada publicación estrenaba una caché vacía y se llevaba por
+ * delante la anterior: los catálogos del formulario, la bandeja, el censo que
+ * ese censador había abierto antes de subir a la vereda. Todo. Y en silencio.
+ *
+ * Quien lo sufre no ve un fallo, ve que «la aplicación no guarda nada»: se
+ * marcha con el teléfono cargado y en la vereda el formulario no se dibuja. Un
+ * día con tres despliegues es un día con tres veces esa sorpresa.
+ *
+ * El armazón SÍ tiene que versionarse —código nuevo, archivos nuevos—. Los
+ * datos no: son suyos, no del build. El sufijo de aquí solo se sube a mano si
+ * cambia el FORMATO de lo guardado, que es la única razón para tirarlos.
  */
-const CACHE_DATOS = `sgr-datos-${version}`;
+const CACHE_DATOS = 'sgr-datos-v1';
 
 /**
  * El armazón: lo que hay que tener guardado para que la aplicación arranque.
@@ -160,10 +177,15 @@ sw.addEventListener('activate', (evento) => {
 
 	e.waitUntil(
 		(async () => {
-			// Fuera las cachés de versiones anteriores.
+			// Fuera los ARMAZONES de versiones anteriores, y solo esos.
+			//
+			// `sgr-datos-*` se queda al margen a propósito: es lo que el censador
+			// se llevó a la vereda. Antes bastaba con que el nombre no fuera el
+			// actual para borrarlo, y como ese nombre llevaba la versión del
+			// build, cada despliegue le vaciaba el aparato.
 			await Promise.all(
 				(await caches.keys())
-					.filter((n) => n.startsWith('sgr-') && n !== CACHE && n !== CACHE_DATOS)
+					.filter((n) => n.startsWith('sgr-') && !n.startsWith('sgr-datos-') && n !== CACHE)
 					.map((n) => caches.delete(n))
 			);
 
@@ -215,14 +237,42 @@ sw.addEventListener('fetch', (evento) => {
 });
 
 /**
- * Cuánto vale una respuesta guardada.
+ * Cuánto vale una respuesta guardada. Dos plazos, y la diferencia importa.
  *
- * A las 24 h deja de servirse. Un dato de hace una semana sobre un hogar
- * damnificado —su estado, si ya se inspeccionó, si se le entregaron
- * materiales— es peor que no tener dato: se decide sobre una familia creyendo
- * saber algo que ya no es cierto.
+ * ── Los datos de familias: 24 h ──────────────────────────────────────────────
+ *
+ * Un dato de hace una semana sobre un hogar damnificado —su estado, si ya se
+ * inspeccionó, si se le entregaron materiales— es peor que no tener dato: se
+ * decide sobre una familia creyendo saber algo que ya no es cierto.
+ *
+ * ── Los catálogos: treinta días ──────────────────────────────────────────────
+ *
+ * Antes caducaban igual que lo anterior, y era un error de bulto. Un catálogo
+ * no es un dato de nadie: es la lista de corregimientos, de parentescos, de
+ * tipos de daño. No envejece de forma peligrosa —si acaso le falta una entrada
+ * nueva— y es lo ÚNICO que hace que el formulario se pueda dibujar.
+ *
+ * Con 24 h, el censador que carga el teléfono el lunes por la noche y sube a
+ * una vereda el miércoles encuentra el formato muerto: «Abra esta pantalla una
+ * vez con señal para descargar el formato», justo donde no hay señal. Eso no es
+ * prudencia con el dato ajeno, es dejar sin herramienta a quien fue a trabajar.
  */
 const VIGENCIA_MS = 24 * 60 * 60 * 1000;
+const VIGENCIA_CATALOGOS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Un catálogo no lleva dato de nadie, así que dura mucho más.
+ *
+ * Se reconoce por la ruta y no por una lista aparte: las tres terminan en
+ * `/catalogos`, y cualquiera que se añada mañana entra sola.
+ */
+function esCatalogo(clave: string): boolean {
+	return clave.split('?')[0].endsWith('/catalogos');
+}
+
+function vigenciaDe(clave: string): number {
+	return esCatalogo(clave) ? VIGENCIA_CATALOGOS_MS : VIGENCIA_MS;
+}
 
 /** Cuándo se guardó. La lee la página para poder decirlo en pantalla. */
 const CABECERA_FECHA = 'X-SGR-Guardado';
@@ -264,7 +314,7 @@ async function responderConsulta(peticion: Request, clave: string): Promise<Resp
 
 		if (guardado) {
 			const cuando = guardado.headers.get(CABECERA_FECHA);
-			const vieja = cuando !== null && Date.now() - Date.parse(cuando) > VIGENCIA_MS;
+			const vieja = cuando !== null && Date.now() - Date.parse(cuando) > vigenciaDe(clave);
 
 			// Sin fecha es de una versión anterior del Service Worker: se sirve, que
 			// es lo que la persona espera, pero no se puede decir de cuándo.
