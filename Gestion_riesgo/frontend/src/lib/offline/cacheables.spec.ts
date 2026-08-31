@@ -5,7 +5,6 @@
 // decisión: lo que aquí se rechace no puede acabar en un aparato prestado.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { API_CACHEABLE, seGuardaDeLaApi } from './cacheables';
 
 describe('lo que SÍ se guarda', () => {
@@ -125,50 +124,5 @@ describe('las rutas que el sistema usa de verdad están cubiertas', () => {
 		expect(seGuardaDeLaApi('/api/preinscripcion/fichas/3/fotos/7')).toBe(false);
 		expect(seGuardaDeLaApi('/api/rufe/reportes/3/evidencias/9')).toBe(false);
 		expect(seGuardaDeLaApi('/api/auth/login')).toBe(false);
-	});
-});
-
-
-describe('lo guardado sobrevive a un despliegue', () => {
-	const sw = readFileSync(new URL('../../service-worker.ts', import.meta.url), 'utf-8');
-
-	it('la caché de datos NO lleva la versión del build', () => {
-		// El fallo que esto cierra, y explica el «la aplicación no guarda nada»:
-		// el nombre era `sgr-datos-${version}`, y `activate` borra toda caché
-		// `sgr-*` que no sea la actual. Cada publicación estrenaba una caché
-		// vacía y se llevaba la anterior por delante: los catálogos del
-		// formulario, la bandeja, el censo que ese censador abrió antes de subir
-		// a la vereda. En silencio, y tres veces en un día de tres despliegues.
-		expect(sw).toContain("const CACHE_DATOS = 'sgr-datos-v1'");
-		expect(sw).not.toContain('sgr-datos-${version}');
-	});
-
-	it('y la purga de armazones viejos no se la lleva', () => {
-		const activate = sw.slice(sw.indexOf("sw.addEventListener('activate'"));
-
-		expect(activate.slice(0, activate.indexOf("sw.addEventListener('fetch'"))).toContain(
-			"!n.startsWith('sgr-datos-')"
-		);
-	});
-});
-
-describe('cuánto dura lo guardado', () => {
-	const sw = readFileSync(new URL('../../service-worker.ts', import.meta.url), 'utf-8');
-
-	it('un catálogo dura mucho más que un dato de familia', () => {
-		// Un catálogo no es dato de nadie: es la lista de corregimientos, de
-		// parentescos, de tipos de daño. Y es lo ÚNICO que hace que el formulario
-		// se pueda dibujar. Con las mismas 24 h que un hogar damnificado, el
-		// censador que sube el miércoles con el teléfono cargado el lunes
-		// encuentra el formato muerto justo donde no hay señal.
-		expect(sw).toContain('VIGENCIA_CATALOGOS_MS');
-		expect(sw).toContain('function vigenciaDe(');
-		expect(sw).toContain('vigenciaDe(clave)');
-	});
-
-	it('pero el dato de una familia sigue caducando a las 24 h', () => {
-		// Lo otro no se toca: decidir sobre una familia con un dato de la semana
-		// pasada es peor que no tener dato.
-		expect(sw).toContain('const VIGENCIA_MS = 24 * 60 * 60 * 1000;');
 	});
 });

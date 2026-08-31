@@ -58,28 +58,11 @@ const CACHE = `sgr-${version}`;
 /**
  * Caché aparte para las respuestas de la API que sí se pueden guardar.
  *
- * Va separada del armazón para que se vea de un vistazo qué datos vive el
- * teléfono y para poder vaciarla —al cerrar sesión— sin tocar la aplicación
- * guardada.
- *
- * ── Por qué el nombre NO lleva la versión del build ──────────────────────────
- *
- * Porque la llevaba, y eso vaciaba el trabajo de campo en cada despliegue.
- *
- * `activate` borra toda caché `sgr-*` que no sea la actual. Con el nombre atado
- * a la versión, cada publicación estrenaba una caché vacía y se llevaba por
- * delante la anterior: los catálogos del formulario, la bandeja, el censo que
- * ese censador había abierto antes de subir a la vereda. Todo. Y en silencio.
- *
- * Quien lo sufre no ve un fallo, ve que «la aplicación no guarda nada»: se
- * marcha con el teléfono cargado y en la vereda el formulario no se dibuja. Un
- * día con tres despliegues es un día con tres veces esa sorpresa.
- *
- * El armazón SÍ tiene que versionarse —código nuevo, archivos nuevos—. Los
- * datos no: son suyos, no del build. El sufijo de aquí solo se sube a mano si
- * cambia el FORMATO de lo guardado, que es la única razón para tirarlos.
+ * Hoy es UNA sola: los catálogos del formulario. Va separada del armazón para
+ * que se vea de un vistazo qué datos vive el teléfono y para poder vaciarla sin
+ * tocar la aplicación guardada.
  */
-const CACHE_DATOS = 'sgr-datos-v1';
+const CACHE_DATOS = `sgr-datos-${version}`;
 
 /**
  * El armazón: lo que hay que tener guardado para que la aplicación arranque.
@@ -145,26 +128,29 @@ sw.addEventListener('install', (evento) => {
 				})
 			);
 
-			// ── Por qué SÍ se activa de inmediato ────────────────────────
+			// ── Por qué YA NO se activa de inmediato ─────────────────────
 			//
-			// Estuvo esperando a que la persona aceptara, y fue un error que
-			// costó caro: la versión anterior seguía siendo la activa, así que
-			// CADA pestaña nueva —aunque hubiera señal— recibía de la caché el
-			// armazón viejo. El sistema retrocedía en el tiempo para quien no
-			// pulsara «Actualizar», y lo que se había desplegado no lo veía
-			// nadie. Andrés lo vio como «esto antes se veía así y ahora ya no».
+			// Antes había aquí un `skipWaiting()` sin condiciones, y eso rompía
+			// las pestañas abiertas. La aplicación carga cada pantalla en un
+			// archivo aparte y con el contenido en el nombre; al activarse la
+			// versión nueva se borran las cachés viejas, y la pestaña que
+			// seguía ejecutando la versión anterior pedía un archivo con el
+			// nombre de antes: ya no está ni en la caché ni en el servidor.
+			// Resultado, pantalla en blanco al pulsar cualquier enlace.
 			//
-			// Se esperaba por un motivo real: al activarse se borraban las
-			// cachés anteriores, y la pestaña que seguía ejecutando la versión
-			// vieja pedía un archivo con el nombre de antes —cada pantalla va en
-			// un archivo con el contenido en el nombre— que ya no estaba ni en
-			// la caché ni en el servidor. Pantalla en blanco al pulsar un enlace.
+			// Ahora la versión nueva espera, la pantalla avisa, y solo se
+			// activa cuando la persona acepta (ver `aplicar-actualizacion`).
 			//
-			// Pero ese motivo se ataca mejor donde nace: `activate` ya no borra
-			// el armazón anterior, lo conserva una generación. La pestaña vieja
-			// sigue encontrando sus archivos, y la nueva estrena lo nuevo. Las
-			// dos cosas a la vez, sin pedirle nada a nadie.
-			await sw.skipWaiting();
+			// Y no retrasa el envío de nada: la versión ANTERIOR sigue viva y
+			// activa mientras tanto, con su cola y su `sync` funcionando. Lo
+			// que espera es el cambio, no el trabajo.
+			//
+			// La excepción es la primera instalación: ahí no hay ninguna
+			// pestaña que romper ni nada anterior que respetar, y hacerla
+			// esperar dejaría la primera visita sin aplicación guardada.
+			if (sw.registration.active === null) {
+				await sw.skipWaiting();
+			}
 		})()
 	);
 });
@@ -174,31 +160,11 @@ sw.addEventListener('activate', (evento) => {
 
 	e.waitUntil(
 		(async () => {
-			// ── Qué se borra, y qué se conserva ──────────────────────────
-			//
-			// `sgr-datos-*` NUNCA se toca aquí: es lo que el censador se llevó a
-			// la vereda. Antes bastaba con que el nombre no fuera el actual para
-			// borrarlo, y como ese nombre llevaba la versión del build, cada
-			// despliegue le vaciaba el aparato.
-			//
-			// Y del armazón se conserva también el ANTERIOR, uno solo. Esa es la
-			// pieza que permite estrenar la versión nueva de inmediato sin
-			// romperle la pantalla a quien tiene la vieja abierta: sus archivos
-			// —cada pantalla va en uno, con el contenido en el nombre— siguen
-			// estando donde los busca. Sin esto habría que elegir entre romper
-			// una pestaña abierta o dejar a todo el mundo en una versión vieja,
-			// y las dos ya se probaron.
-			//
-			// `caches.keys()` devuelve en orden de creación, así que el último de
-			// la lista antes del actual es el inmediatamente anterior.
-			const armazones = (await caches.keys()).filter(
-				(n) => n.startsWith('sgr-') && !n.startsWith('sgr-datos-')
-			);
-
-			const conservar = new Set([CACHE, ...armazones.filter((n) => n !== CACHE).slice(-1)]);
-
+			// Fuera las cachés de versiones anteriores.
 			await Promise.all(
-				armazones.filter((n) => !conservar.has(n)).map((n) => caches.delete(n))
+				(await caches.keys())
+					.filter((n) => n.startsWith('sgr-') && n !== CACHE && n !== CACHE_DATOS)
+					.map((n) => caches.delete(n))
 			);
 
 			await sw.clients.claim();
@@ -249,42 +215,14 @@ sw.addEventListener('fetch', (evento) => {
 });
 
 /**
- * Cuánto vale una respuesta guardada. Dos plazos, y la diferencia importa.
+ * Cuánto vale una respuesta guardada.
  *
- * ── Los datos de familias: 24 h ──────────────────────────────────────────────
- *
- * Un dato de hace una semana sobre un hogar damnificado —su estado, si ya se
- * inspeccionó, si se le entregaron materiales— es peor que no tener dato: se
- * decide sobre una familia creyendo saber algo que ya no es cierto.
- *
- * ── Los catálogos: treinta días ──────────────────────────────────────────────
- *
- * Antes caducaban igual que lo anterior, y era un error de bulto. Un catálogo
- * no es un dato de nadie: es la lista de corregimientos, de parentescos, de
- * tipos de daño. No envejece de forma peligrosa —si acaso le falta una entrada
- * nueva— y es lo ÚNICO que hace que el formulario se pueda dibujar.
- *
- * Con 24 h, el censador que carga el teléfono el lunes por la noche y sube a
- * una vereda el miércoles encuentra el formato muerto: «Abra esta pantalla una
- * vez con señal para descargar el formato», justo donde no hay señal. Eso no es
- * prudencia con el dato ajeno, es dejar sin herramienta a quien fue a trabajar.
+ * A las 24 h deja de servirse. Un dato de hace una semana sobre un hogar
+ * damnificado —su estado, si ya se inspeccionó, si se le entregaron
+ * materiales— es peor que no tener dato: se decide sobre una familia creyendo
+ * saber algo que ya no es cierto.
  */
 const VIGENCIA_MS = 24 * 60 * 60 * 1000;
-const VIGENCIA_CATALOGOS_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * Un catálogo no lleva dato de nadie, así que dura mucho más.
- *
- * Se reconoce por la ruta y no por una lista aparte: las tres terminan en
- * `/catalogos`, y cualquiera que se añada mañana entra sola.
- */
-function esCatalogo(clave: string): boolean {
-	return clave.split('?')[0].endsWith('/catalogos');
-}
-
-function vigenciaDe(clave: string): number {
-	return esCatalogo(clave) ? VIGENCIA_CATALOGOS_MS : VIGENCIA_MS;
-}
 
 /** Cuándo se guardó. La lee la página para poder decirlo en pantalla. */
 const CABECERA_FECHA = 'X-SGR-Guardado';
@@ -326,7 +264,7 @@ async function responderConsulta(peticion: Request, clave: string): Promise<Resp
 
 		if (guardado) {
 			const cuando = guardado.headers.get(CABECERA_FECHA);
-			const vieja = cuando !== null && Date.now() - Date.parse(cuando) > vigenciaDe(clave);
+			const vieja = cuando !== null && Date.now() - Date.parse(cuando) > VIGENCIA_MS;
 
 			// Sin fecha es de una versión anterior del Service Worker: se sirve, que
 			// es lo que la persona espera, pero no se puede decir de cuándo.
