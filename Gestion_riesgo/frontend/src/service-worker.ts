@@ -145,29 +145,26 @@ sw.addEventListener('install', (evento) => {
 				})
 			);
 
-			// ── Por qué YA NO se activa de inmediato ─────────────────────
+			// ── Por qué SÍ se activa de inmediato ────────────────────────
 			//
-			// Antes había aquí un `skipWaiting()` sin condiciones, y eso rompía
-			// las pestañas abiertas. La aplicación carga cada pantalla en un
-			// archivo aparte y con el contenido en el nombre; al activarse la
-			// versión nueva se borran las cachés viejas, y la pestaña que
-			// seguía ejecutando la versión anterior pedía un archivo con el
-			// nombre de antes: ya no está ni en la caché ni en el servidor.
-			// Resultado, pantalla en blanco al pulsar cualquier enlace.
+			// Estuvo esperando a que la persona aceptara, y fue un error que
+			// costó caro: la versión anterior seguía siendo la activa, así que
+			// CADA pestaña nueva —aunque hubiera señal— recibía de la caché el
+			// armazón viejo. El sistema retrocedía en el tiempo para quien no
+			// pulsara «Actualizar», y lo que se había desplegado no lo veía
+			// nadie. Andrés lo vio como «esto antes se veía así y ahora ya no».
 			//
-			// Ahora la versión nueva espera, la pantalla avisa, y solo se
-			// activa cuando la persona acepta (ver `aplicar-actualizacion`).
+			// Se esperaba por un motivo real: al activarse se borraban las
+			// cachés anteriores, y la pestaña que seguía ejecutando la versión
+			// vieja pedía un archivo con el nombre de antes —cada pantalla va en
+			// un archivo con el contenido en el nombre— que ya no estaba ni en
+			// la caché ni en el servidor. Pantalla en blanco al pulsar un enlace.
 			//
-			// Y no retrasa el envío de nada: la versión ANTERIOR sigue viva y
-			// activa mientras tanto, con su cola y su `sync` funcionando. Lo
-			// que espera es el cambio, no el trabajo.
-			//
-			// La excepción es la primera instalación: ahí no hay ninguna
-			// pestaña que romper ni nada anterior que respetar, y hacerla
-			// esperar dejaría la primera visita sin aplicación guardada.
-			if (sw.registration.active === null) {
-				await sw.skipWaiting();
-			}
+			// Pero ese motivo se ataca mejor donde nace: `activate` ya no borra
+			// el armazón anterior, lo conserva una generación. La pestaña vieja
+			// sigue encontrando sus archivos, y la nueva estrena lo nuevo. Las
+			// dos cosas a la vez, sin pedirle nada a nadie.
+			await sw.skipWaiting();
 		})()
 	);
 });
@@ -177,16 +174,31 @@ sw.addEventListener('activate', (evento) => {
 
 	e.waitUntil(
 		(async () => {
-			// Fuera los ARMAZONES de versiones anteriores, y solo esos.
+			// ── Qué se borra, y qué se conserva ──────────────────────────
 			//
-			// `sgr-datos-*` se queda al margen a propósito: es lo que el censador
-			// se llevó a la vereda. Antes bastaba con que el nombre no fuera el
-			// actual para borrarlo, y como ese nombre llevaba la versión del
-			// build, cada despliegue le vaciaba el aparato.
+			// `sgr-datos-*` NUNCA se toca aquí: es lo que el censador se llevó a
+			// la vereda. Antes bastaba con que el nombre no fuera el actual para
+			// borrarlo, y como ese nombre llevaba la versión del build, cada
+			// despliegue le vaciaba el aparato.
+			//
+			// Y del armazón se conserva también el ANTERIOR, uno solo. Esa es la
+			// pieza que permite estrenar la versión nueva de inmediato sin
+			// romperle la pantalla a quien tiene la vieja abierta: sus archivos
+			// —cada pantalla va en uno, con el contenido en el nombre— siguen
+			// estando donde los busca. Sin esto habría que elegir entre romper
+			// una pestaña abierta o dejar a todo el mundo en una versión vieja,
+			// y las dos ya se probaron.
+			//
+			// `caches.keys()` devuelve en orden de creación, así que el último de
+			// la lista antes del actual es el inmediatamente anterior.
+			const armazones = (await caches.keys()).filter(
+				(n) => n.startsWith('sgr-') && !n.startsWith('sgr-datos-')
+			);
+
+			const conservar = new Set([CACHE, ...armazones.filter((n) => n !== CACHE).slice(-1)]);
+
 			await Promise.all(
-				(await caches.keys())
-					.filter((n) => n.startsWith('sgr-') && !n.startsWith('sgr-datos-') && n !== CACHE)
-					.map((n) => caches.delete(n))
+				armazones.filter((n) => !conservar.has(n)).map((n) => caches.delete(n))
 			);
 
 			await sw.clients.claim();

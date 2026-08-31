@@ -30,27 +30,41 @@ describe('esActualizacion', () => {
 describe('cómo llega una versión nueva al aparato', () => {
 	const sw = readFileSync(new URL('../../service-worker.ts', import.meta.url), 'utf-8');
 
-	it('la versión nueva NO se activa sola sobre una pestaña abierta', () => {
-		// Es el fallo que esto cierra. Al activarse se borran las cachés de la
-		// versión anterior, y la pestaña que seguía ejecutándola pedía archivos
-		// con el nombre de antes —cada pantalla va en un archivo con el
-		// contenido en el nombre—: ya no estaban ni en la caché ni en el
-		// servidor, porque el despliegue los reemplazó. Pantalla en blanco al
-		// pulsar cualquier enlace, y justo a quien deja la pantalla puesta toda
-		// la jornada, que es la operadora del call center.
-		expect(sw).toContain('if (sw.registration.active === null) {');
-		expect(sw).toContain("evento.data?.tipo === 'aplicar-actualizacion'");
+	it('la versión nueva se estrena de inmediato', () => {
+		// Estuvo esperando a que la persona pulsara «Actualizar», y fue un error
+		// que costó caro: la versión anterior seguía siendo la ACTIVA, así que
+		// cada pestaña nueva —aunque hubiera señal— recibía de la caché el
+		// armazón viejo. El sistema retrocedía en el tiempo para quien no
+		// pulsara, y lo que se desplegaba no lo veía nadie.
+		expect(sw).toContain('await sw.skipWaiting();');
+		expect(sw).not.toContain('if (sw.registration.active === null) {');
 	});
 
-	it('salvo en la primera instalación, que no rompe nada', () => {
-		// Ahí no hay pestaña anterior que respetar, y hacerla esperar dejaría la
-		// primera visita sin aplicación guardada: quien la instala en la
-		// alcaldía y se va a una vereda se quedaría sin nada.
-		const install = sw.slice(sw.indexOf("sw.addEventListener('install'"));
-
-		expect(install.slice(0, install.indexOf("sw.addEventListener('activate'"))).toContain(
-			'sw.registration.active === null'
+	it('y no rompe la pestaña que sigue en la versión vieja', () => {
+		// Ese era el motivo de la espera, y es real: al activarse se borraban
+		// las cachés anteriores, y la pestaña que seguía en la versión vieja
+		// pedía un archivo con el nombre de antes —cada pantalla va en uno, con
+		// el contenido en el nombre— que ya no estaba. Pantalla en blanco.
+		//
+		// Se ataca donde nace: se conserva el armazón anterior una generación.
+		// Sin esto habría que elegir entre romper una pestaña abierta o dejar a
+		// todo el mundo en una versión vieja, y las dos ya se probaron.
+		const activate = sw.slice(
+			sw.indexOf("sw.addEventListener('activate'"),
+			sw.indexOf("sw.addEventListener('fetch'")
 		);
+
+		expect(activate).toContain('const conservar = new Set([CACHE');
+		expect(activate).toContain('.slice(-1)');
+	});
+
+	it('y sigue sin tocar lo que el censador se llevó a la vereda', () => {
+		const activate = sw.slice(
+			sw.indexOf("sw.addEventListener('activate'"),
+			sw.indexOf("sw.addEventListener('fetch'")
+		);
+
+		expect(activate).toContain("!n.startsWith('sgr-datos-')");
 	});
 
 	it('navegar no espera a la red para siempre', () => {
