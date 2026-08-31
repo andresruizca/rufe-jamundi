@@ -160,6 +160,33 @@
 	}
 
 	/** 3183333510 → 318 333 3510. Diez cifras seguidas se marcan mal. */
+	/**
+	 * 16844290 → 16.844.290. Como se dicta y como se lee en la propia cédula.
+	 *
+	 * Solo si son todas cifras: hay documentos que no lo son —pasaportes,
+	 * cédulas de extranjería— y meterles puntos los volvería ilegibles.
+	 */
+	function conPuntos(documento: string): string {
+		if (!/^\d+$/.test(documento)) return documento;
+
+		return documento.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+	}
+
+	let copiadaCedula = $state(false);
+
+	async function copiarCedula() {
+		if (!hogar.documento) return;
+
+		try {
+			await navigator.clipboard.writeText(hogar.documento);
+			copiadaCedula = true;
+			setTimeout(() => (copiadaCedula = false), 1500);
+		} catch {
+			// Sin permiso de portapapeles. El número está en pantalla y se puede
+			// seleccionar a mano: no hace falta decir nada.
+		}
+	}
+
 	function agrupar(telefono: string): string {
 		const d = telefono.replace(/\D+/g, '');
 
@@ -394,6 +421,31 @@
 			{hogar.nombre ?? 'La ficha no registró jefe de hogar'}
 		</h2>
 		<p class="identidad__lugar">{hogar.lugar}</p>
+
+		<!--
+			La cédula, para dictarla.
+
+			El formulario ciudadano ABRE pidiéndola: sin ella la persona no pasa
+			de la primera pantalla. La operadora la estaba buscando en otra
+			pestaña —o colgando— con la familia al teléfono.
+
+			Con puntos porque así se dicta y así la lee quien la tiene delante:
+			«dieciséis punto ochocientos cuarenta y cuatro punto…».
+		-->
+		{#if hogar.documento}
+			<p class="identidad__cedula">
+				<span class="identidad__cedula-rotulo">C.C.</span>
+				<span class="identidad__cedula-numero">{conPuntos(hogar.documento)}</span>
+				<button
+					type="button"
+					class="identidad__copiar"
+					onclick={copiarCedula}
+					aria-label="Copiar el número de cédula"
+				>
+					{copiadaCedula ? 'Copiada' : 'Copiar'}
+				</button>
+			</p>
+		{/if}
 
 		{#if hogar.telefono}
 			<div class="telefono">
@@ -876,9 +928,55 @@
 		color: var(--color-muted);
 	}
 
+	.identidad__cedula {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		margin: 0.15rem 0 0;
+	}
+
+	.identidad__cedula-rotulo {
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		color: var(--color-muted);
+	}
+
+	.identidad__cedula-numero {
+		font-size: 1.05rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		font-variant-numeric: tabular-nums;
+		/* Doble clic selecciona el número entero: se dicta, y también se pega
+		   en el formulario cuando la operadora acompaña a alguien paso a paso. */
+		user-select: all;
+	}
+
+	.identidad__copiar {
+		padding: 0.1rem 0.35rem;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		background: none;
+		color: var(--color-muted);
+		font: inherit;
+		font-size: 0.7rem;
+		cursor: pointer;
+	}
+
+	.identidad__copiar:hover,
+	.identidad__copiar:focus-visible {
+		border-color: var(--color-border-strong);
+		color: var(--color-text);
+	}
+
 	.telefono {
 		display: inline-flex;
 		align-items: center;
+		/* Que envuelvan los BOTONES, no el número: al estrecharse la columna, el
+		   teléfono se partía en dos renglones —«312 281 / 8497»— y un número de
+		   teléfono partido se marca mal. Ahora bajan los botones y el número se
+		   queda entero. */
+		flex-wrap: wrap;
 		gap: 0.7rem;
 		padding: 0.4rem 0.45rem 0.4rem 0.9rem;
 		border: 1px solid var(--color-border-strong);
@@ -888,7 +986,11 @@
 	}
 
 	.telefono__numero {
-		font-size: 1.6rem;
+		/* Más pequeño que antes (1.6rem) para que quepa de una sola vez en la
+		   columna. Sigue siendo lo más grande del bloque: es lo que la operadora
+		   marca mirando la pantalla y tecleando en el teléfono IP. */
+		font-size: 1.3rem;
+		white-space: nowrap;
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		font-variant-numeric: tabular-nums;

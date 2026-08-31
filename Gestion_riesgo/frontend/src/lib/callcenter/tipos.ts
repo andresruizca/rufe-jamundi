@@ -67,6 +67,18 @@ export type HogarParaLlamar = {
 	radicado: string;
 	/** `null` cuando la ficha no registró jefe de hogar. Se dice, no se inventa. */
 	nombre: string | null;
+	/**
+	 * La cédula del jefe de hogar, para dictársela.
+	 *
+	 * El formulario ciudadano ABRE pidiéndola: sin ella la persona no pasa de
+	 * la primera pantalla. La operadora la estaba buscando en otra pestaña —o
+	 * colgando— mientras la tenía al teléfono.
+	 *
+	 * `null` si la ficha no la trae. Se dice, no se inventa: una cédula
+	 * equivocada dictada por teléfono manda a esa familia a un formulario que
+	 * la va a rechazar.
+	 */
+	documento: string | null;
 	telefono: string | null;
 	zona: string;
 	lugar: string;

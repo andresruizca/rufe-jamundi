@@ -81,7 +81,10 @@ describe('varias inspecciones a la vez', () => {
 		guardarBorrador(borrador('b'), AHORA);
 		guardarBorrador(borrador('c'), AHORA);
 
-		descartarBorrador('b');
+		// Con la fecha fija, como todo lo demás de este archivo. Sin ella,
+		// `descartar` miraba el reloj real y esta prueba empezaba a fallar sola
+		// el día que estos borradores caducaban de verdad.
+		descartarBorrador('b', AHORA + 1);
 
 		expect(leerBorradores(AHORA + 1).map((x) => x.clave).sort()).toEqual(['a', 'c']);
 	});

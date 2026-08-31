@@ -348,6 +348,11 @@ final class CallCenterController
                     r.fecha_evento, r.contacto_telefono,
                     jefe.nombres AS jefe_nombres, jefe.apellidos AS jefe_apellidos,
                     jefe.telefono AS jefe_telefono,
+                    -- La cédula del jefe de hogar. La operadora la necesita para
+                    -- dictársela: el formulario ciudadano ABRE pidiéndola, y sin
+                    -- ella la persona no pasa de la primera pantalla. Se la
+                    -- estaban buscando en otra pestaña, o colgando.
+                    jefe.numero_documento AS jefe_documento,
                     pre.radicado AS preinscripcion_radicado,
                     pre.creado_en AS preinscripcion_en,
                     pre.estado AS preinscripcion_estado,
@@ -1095,6 +1100,12 @@ final class CallCenterController
             // Sin jefe de hogar registrado la ficha sigue existiendo; se dice,
             // no se inventa un nombre.
             'nombre'   => $nombre !== '' ? $nombre : null,
+            // Igual que el nombre: si la ficha no la trae, se dice, no se
+            // inventa. Una cédula equivocada dictada por teléfono manda a esa
+            // familia a un formulario que la va a rechazar.
+            'documento' => trim((string) ($f['jefe_documento'] ?? '')) !== ''
+                ? (string) $f['jefe_documento']
+                : null,
             'telefono' => $telefono !== '' ? $telefono : null,
             'zona'     => $f['zona'],
             'lugar'    => trim(implode(' · ', array_filter([

@@ -92,7 +92,7 @@ export type Almacen<D> = {
    * llama tiene que encargarse. Se dice aquí porque olvidarlo deja megabytes
    * de fotos de casas ajenas en un aparato que se presta.
    */
-	descartar(clave: string): void;
+	descartar(clave: string, ahora?: number): void;
 	/** Cuánto dura un borrador nuevo, en milisegundos. */
 	vigenciaMs: number;
 };
@@ -203,9 +203,15 @@ export function crearAlmacen<D>(o: OpcionesAlmacen): Almacen<D> {
 		guardar(b, ahora = Date.now()) {
 			return escribir([b, ...leer(ahora).filter((x) => x.clave !== b.clave)]);
 		},
-		descartar(clave) {
+		descartar(clave, ahora = Date.now()) {
 			if (!browser) return;
-			escribir(leer().filter((b) => b.clave !== clave));
+
+			// `ahora` como en todos los demás. Era el único método que no lo
+			// aceptaba, y eso lo dejaba atado al reloj real: una prueba con fecha
+			// fija empezaba a fallar sola el día que sus borradores caducaban de
+			// verdad, semanas después de escribirla y sin que nadie hubiera
+			// tocado el código. Pasó.
+			escribir(leer(ahora).filter((b) => b.clave !== clave));
 		},
 		vigenciaMs,
 	};

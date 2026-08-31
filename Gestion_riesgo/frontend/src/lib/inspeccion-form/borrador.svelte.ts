@@ -56,7 +56,8 @@ export const guardarBorrador = (b: BorradorGuardado, ahora?: number): boolean =>
  * tiene que encargarse. Se deja escrito porque olvidarlo deja megabytes de
  * fotos de casas ajenas en un aparato que se presta.
  */
-export const descartarBorrador = (clave: string): void => almacen.descartar(clave);
+export const descartarBorrador = (clave: string, ahora = Date.now()): void =>
+	almacen.descartar(clave, ahora);
 
 export { uid, haceCuanto };
 

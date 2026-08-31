@@ -3487,6 +3487,28 @@ prueba('el umbral de «demorada» es el mismo que el de la bandeja', function ()
     );
 });
 
+prueba('la operadora ve la cédula que le va a dictar', function () use ($raiz): void {
+    // El formulario ciudadano ABRE pidiendo la cédula: sin ella la persona no
+    // pasa de la primera pantalla. La operadora la estaba buscando en otra
+    // pestaña —o colgando— con la familia esperando al teléfono.
+    $php = (string) file_get_contents($raiz.'/src/Controllers/CallCenterController.php');
+
+    afirmar(
+        str_contains($php, 'jefe.numero_documento AS jefe_documento'),
+        'la lista dejó de traer la cédula del jefe de hogar'
+    );
+
+    $presentar = metodoDe($php, 'private function presentar(');
+
+    afirmar(str_contains($presentar, "'documento'"), 'la cédula no llega a la pantalla');
+    // Nula si la ficha no la trae, igual que el nombre: una cédula inventada y
+    // dictada por teléfono manda a esa familia a un formulario que la rechaza.
+    afirmar(
+        str_contains($presentar, "\$f['jefe_documento'] ?? ''") && str_contains($presentar, ': null'),
+        'una ficha sin cédula devolvería una cadena vacía en vez de decir que no la hay'
+    );
+});
+
 grupo('Call center: las tarjetas que abren su propia lista');
 
 prueba('cada cifra del resumen tiene una cola que la contiene', function (): void {

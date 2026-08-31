@@ -15,6 +15,7 @@ function hogar(extra: Partial<HogarParaLlamar> = {}): HogarParaLlamar {
 		id: 1,
 		radicado: 'RUFE-2026-000001',
 		nombre: 'Rosa Elena Mina',
+		documento: '31982114',
 		telefono: '3157729890',
 		zona: 'URBANO',
 		lugar: 'Belalcázar',
