@@ -208,7 +208,7 @@ final class Actualizador
         if ($archivos === []) {
             return $this->registrar($destino, $remoto, 'OMITIDO', $actor, [
                 'detalle' => $destino === 'FRONTEND'
-                    ? 'El repositorio no publica frontend/build. Sin Node en el servidor no hay nada que copiar: publique el compilado o despliegue el frontend a mano.'
+                    ? 'El frontend ya no se despliega por aquí: se compila al publicar, con scripts/desplegar.sh. Este botón actualiza el backend; para el frontend use ese script.'
                     : 'El paquete descargado no trae archivos para este destino.',
                 'version_anterior' => $anterior,
             ]);
